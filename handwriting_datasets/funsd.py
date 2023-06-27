@@ -11,7 +11,6 @@ import pathlib as pl
 import numpy as np
 from typing import Any, Callable, Optional, Tuple
 from PIL import Image
-import subprocess
 
 import torchvision.datasets
 from torchvision.datasets.vision import VisionDataset
@@ -19,11 +18,10 @@ import pathlib
 import zipfile
 import sys
 import json
-import hashlib
 import lm_util
 import uuid
 import random
-
+import utils
 
 class FunsdDataset(VisionDataset):
     """
@@ -246,9 +244,13 @@ class FunsdDataset(VisionDataset):
         return ((img, img_width, img_height), (transcription, transcription_length))
 
 
-    def download_and_extract(self, root: str, base_folder_path: pl.Path, fl_meta: dict) -> None:
+    def download_and_extract(
+            self, root: str,
+            base_folder_path: pl.Path,
+            fl_meta: dict, extract=True) -> None:
         """
-        TODO: factor out in utility module ??
+        Download the archive and extract it. If a valid archive already exists in the root location,
+        extract only.
 
         Args:
             root: where to save the archive
@@ -259,10 +261,13 @@ class FunsdDataset(VisionDataset):
         print(output_file_path)
         if 'md5' not in fl_meta or not self.is_valid_archive(output_file_path, fl_meta['md5']):
             #gdown.download( fl_meta['url'], str(output_file_path), quiet=True, resume=True )
-            self.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=fl_meta['origin']=='google') 
+            self.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google')) 
 
         if not base_folder_path.exists() or not base_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
+
+        if not extract:
+            return
 
         with zipfile.ZipFile(output_file_path, 'r' ) as archive:
             print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
@@ -285,7 +290,7 @@ class FunsdDataset(VisionDataset):
         if not pl.Path( root ).exists() or not pl.Path( root ).is_dir():
             print(f'Saving path {root} does not exist! Download for {url} aborted.')
             return
-        ## for downloading large from Google drive 
+        ## for downloading large files from Google drive 
         if google:
             gdown.download( url, str(pl.Path(root, filename)), resume=True )
         else:
@@ -298,7 +303,6 @@ class FunsdDataset(VisionDataset):
     def is_valid_archive(self, file_path: pl.Path, md5: str) -> bool:
         if not file_path.exists():
             return False
-        print(file_path)
         return hashlib.md5( open(file_path, 'rb').read()).hexdigest() == md5
 
 

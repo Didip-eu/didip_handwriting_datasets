@@ -12,16 +12,13 @@ import pathlib as pl
 import numpy as np
 from typing import Any, Callable, Optional, Tuple
 from PIL import Image
-import subprocess
 import defusedxml.ElementTree as ET
 
 import torchvision.datasets
 from torchvision.datasets.vision import VisionDataset
-import gdown
 import pathlib
 import tarfile
 import zipfile
-import hashlib
 import sys
 import json
 import lm_util
@@ -402,35 +399,6 @@ class IAMDataset(VisionDataset):
             with zipfile.ZipFile(output_file_path, 'r' ) as archive:
                 print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
                 archive.extractall( base_folder_path )
-
-
-    def resumable_download( self, url, root: str, filename: str, google=False) -> None:
-        """
-        TODO: factor out in utility module
-
-        Args:
-            url: URL to download (may not contain a filename)
-            root: saving directory
-            filename: name to use for saving the file
-            google: URL is a Google drive shared link
-        """
-        if not pl.Path( root ).exists() or not pl.Path( root ).is_dir():
-            print(f'Saving path {root} does not exist! Download for {url} aborted.')
-            return
-        ## for downloading large from Google drive
-        if google:
-            gdown.download( url, str(pl.Path(root, filename)), resume=True )
-        else:
-            print(f"Downloading {url} ({filename}) ...")
-            cmd = 'wget --directory-prefix={} -c {}'.format( root, url )
-            subprocess.run( cmd, shell=True, check=True)
-        print(f"Done with {root}/{filename}")
-
-
-    def is_valid_archive(self, file_path: pl.Path, md5: str) -> bool:
-        if not file_path.exists():
-            return False
-        return hashlib.md5( open(file_path, 'rb').read()).hexdigest() == md5
 
 
 def vgsl_collate(batch_list: list) -> tuple:

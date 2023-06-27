@@ -12,5 +12,5 @@ setuptools.setup(
         description="Torch dataset classes",
         long_description=long_description,
         long_description_content_type="text/markdown",
-        packages=["iam", "funsd"]
+        packages=["handwriting_datasets"]
 )
