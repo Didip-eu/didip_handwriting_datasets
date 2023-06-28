@@ -13,6 +13,7 @@ import numpy as np
 from typing import Any, Callable, Optional, Tuple
 from PIL import Image
 import defusedxml.ElementTree as ET
+from . import download_utils as du
 
 import torchvision.datasets
 from torchvision.datasets.vision import VisionDataset
@@ -23,7 +24,7 @@ import sys
 import json
 import lm_util
 import argparse
-import unittest
+
 
 
 class IAMDataset(VisionDataset):
@@ -379,10 +380,11 @@ class IAMDataset(VisionDataset):
             fl_meta: a dict with file meta-info (keys: url, filename, md5, origin, desc)
         """
         output_file_path = pl.Path(root, fl_meta['filename'])
-        print(output_file_path)
-        if 'md5' not in fl_meta or not self.is_valid_archive(output_file_path, fl_meta['md5']):
+        
+        #print( fl_meta, type(fl_meta['md5']) )
+        if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
             #gdown.download( fl_meta['url'], str(output_file_path), quiet=True, resume=True )
-            self.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
+            du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
 
         if not base_folder_path.exists() or not base_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
@@ -456,40 +458,16 @@ def get_loader(dataset,batch_size=10,shuffle=True,num_workers=4):
     return data_loader
 
 
-class IAMDatasetTest( unittest.TestCase):
-
-    def test_dataset_construction_for_lines_train(self): 
-        iam_data = IAMDataset('.', subset='train', task='lines', extract=False)
-        self.assertEqual(len(iam_data.get_sample_dictionary()), 6161)
-
-    def test_dataset_construction_for_lines_validation1(self): 
-        iam_data = IAMDataset('.', subset='validation1', task='lines', extract=False)
-        self.assertEqual(len(iam_data.get_sample_dictionary()), 900)
-    
-    def test_dataset_construction_for_lines_validation2(self): 
-        iam_data = IAMDataset('.', subset='validation2', task='lines', extract=False)
-        self.assertEqual(len(iam_data.get_sample_dictionary()), 940)
-    
-    def test_dataset_construction_for_words(self): 
-        iam_data = IAMDataset('.', subset='train', task='words', extract=False)
-        self.assertEqual(len(iam_data.get_sample_dictionary()), 53839)
-        
-
 if __name__ == "__main__":
 
-    unittest.main()
+    parser = argparse.ArgumentParser()
 
-    sys.exit()
+    parser.add_argument("-r", "--root", help="Root directory", default=".", type=str)
+    parser.add_argument("-t", "--task", help="Task", choices=['lines', 'words'], default="lines", type=str)
+    parser.add_argument("-s", "--subset", help="data subset", choices=['train', 'validation1', 'validation2'], default="train", type=str)
+    args = parser.parse_args()
 
+    iam_data = IAMDataset(args.root, subset=args.subset, task=args.task, extract=False)
+    data_loader = torch.utils.data.DataLoader( iam_data, batch_size=4, shuffle=True, collate_fn=vgsl_collate )
+    #print(list(data_loader))
 
-#    parser = argparse.ArgumentParser()
-#
-#    parser.add_argument("-r", "--root", help="Root directory", default=".", type=str)
-#    parser.add_argument("-t", "--task", help="Task", choices=['lines', 'words'], default="lines", type=str)
-#    parser.add_argument("-s", "--subset", help="data subset", choices=['train', 'validation1', 'validation2'], default="train", type=str)
-#    args = parser.parse_args()
-#
-#    iam_data = IAMDataset(args.root, subset=args.subset, task=args.task)
-#    data_loader = torch.utils.data.DataLoader( iam_data, batch_size=4, shuffle=True, collate_fn=vgsl_collate )
-#    #print(list(data_loader))
-#
