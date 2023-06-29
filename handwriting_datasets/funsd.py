@@ -11,6 +11,7 @@ import pathlib as pl
 import numpy as np
 from typing import Any, Callable, Optional, Tuple
 from PIL import Image
+from . import download_utils as du
 
 import torchvision.datasets
 from torchvision.datasets.vision import VisionDataset
@@ -21,7 +22,7 @@ import json
 import lm_util
 import uuid
 import random
-import utils
+
 
 class FunsdDataset(VisionDataset):
     """
@@ -83,10 +84,19 @@ class FunsdDataset(VisionDataset):
 
 
 
-    def __init__( self, root: str, subset="train", transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, image_loader=torchvision.datasets.folder.default_loader, min_gt_length=-1, max_gt_length=-1) -> None:
+    def __init__( 
+                self, root: str,
+                subset="train", 
+                transform: Optional[Callable] = None, 
+                target_transform: Optional[Callable] = None, 
+                image_loader=torchvision.datasets.folder.default_loader, 
+                min_gt_length=-1, max_gt_length=-1,
+                extract=True,
+                ) -> None:
         """
         Args:
             subset: subset to build, i.e. one of ["train" (default), "validate", "test"]
+            extract: if False, assume that archives have already been extracted in the work directory
         """
 
         super().__init__(root, transform=transform, target_transform=target_transform)
@@ -97,16 +107,17 @@ class FunsdDataset(VisionDataset):
 
         self.base_folder_path = pl.Path( root, self.base_folder )
 
+        self.word_2_transcription = {}
+
         if not self.base_folder_path.exists() or not self.base_folder_path.is_dir():
             self.base_folder_path.mkdir(parents=True)
 
-        self.download_and_extract( self.root, self.base_folder_path, self.datafile )
+        self.download_and_extract( self.root, self.base_folder_path, self.datafile, extract )
 
         # Construct ground truth data and character encoding
         # Optional: write corresponding files (*.json and .tsv, respectively)
 
         # building training set (words)
-        word_2_transcription = {}
         training_annotation_paths = [ p for p in self.base_folder_path.joinpath( self.training_data_folder, "annotations").iterdir() ]
         testing_annotation_paths = [ p for p in self.base_folder_path.joinpath( self.testing_data_folder, "annotations").iterdir() ]
 
@@ -117,19 +128,19 @@ class FunsdDataset(VisionDataset):
 
         if subset == 'train':
             images_path = self.base_folder_path.joinpath( self.training_data_folder, "images")
-            word_2_transcription = self.generate_word_items( images_path, training_annotation_paths )
+            self.word_2_transcription = self.generate_word_items( images_path, training_annotation_paths )
         else:
             # split original test set in two
             validation_paths, testing_paths = self.split_set( testing_annotation_paths, 0.5 )
             images_path = self.base_folder_path.joinpath( self.testing_data_folder, "images")
             if subset == "test": 
-                word_2_transcription = self.generate_word_items(images_path, testing_paths )
+                self.word_2_transcription = self.generate_word_items(images_path, testing_paths )
             elif subset == "validate":
-                word_2_transcription = self.generate_word_items(images_path, validation_paths )
+                self.word_2_transcription = self.generate_word_items(images_path, validation_paths )
 
 
         # building encoder
-        self.items = tuple( word_2_transcription.items() )
+        self.items = tuple( self.word_2_transcription.items() )
         print(f"Set = '{subset}' with {len(self.items)} words")
 
         self.encoder = lm_util.Encoder(code_2_utf=code_2_utf)
@@ -142,21 +153,33 @@ class FunsdDataset(VisionDataset):
         elif max_gt_length>=0:
                 self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)<=max_gt_length}
 
-        with open(self.base_folder_path.joinpath( "gt.json" ), "w", encoding="utf-8") as cmf:
-            json.dump( word_2_transcription, cmf, indent=0)
+        #with open(self.base_folder_path.joinpath( "gt.json" ), "w", encoding="utf-8") as cmf:
+        #    json.dump( self.word_2_transcription, cmf, indent=0)
 
-        with open(self.base_folder_path.joinpath("charset.tsv"), "w") as charset_file:
-            print( self.encoder.get_tsv_string(), file=charset_file)
+        #with open(self.base_folder_path.joinpath("charset.tsv"), "w") as charset_file:
+        #    print( self.encoder.get_tsv_string(), file=charset_file)
 
         if transform is None:
             self.transform = torchvision.transforms.ToTensor()
 
         self.image_loader = image_loader
 
+    def get_sample_dictionary(self) -> list[dict[str,str]]:
+        """
+        Return a sequence of pairs image/text (for Kraken).
+
+        Returns: 
+            A sequence where each sample is represented as a dictionary of the form::
+
+            {'image': 'image_path', 'text': 'ground_truth_text'}.
+        """
+        return [ { 'image': k, 'text': v } for (k,v) in self.items ]
+
 
     def split_set(self, annotations_paths: list, cut: float) -> tuple:
         """
         Split a set of forms.
+        TODO: returns different subsets for each run, in spite of seed
         
         Args:
             annotations_paths: list of paths to XML form descriptions ('annotations')
@@ -165,17 +188,22 @@ class FunsdDataset(VisionDataset):
         Returns:
             2 disjoint tuples of files paths
         """
-        original_set = set(annotations_paths)
-        print("Original set forms (testing) has {} elements".format( len(original_set)))
-        subset_count = int( cut * len(original_set))
+        # use dict (=implicitly ordered) instead of sets to ensure deterministic
+        # behaviour of random sampling
+        print("Original set forms (testing) has {} elements".format( len(annotations_paths)))
+        subset_count = int( cut * len(annotations_paths))
+
         
         random.seed(1)
-        new_set = set(random.sample( original_set, len(original_set)-subset_count))
-        original_set -= new_set
 
-        print("Subset #1 has {} forms; subset #2 has {} forms.".format( len(original_set), len(new_set)))
+        new_paths = random.sample( annotations_paths, len(annotations_paths)-subset_count )
 
-        return (tuple(original_set), tuple(new_set))
+        #original_set -= new_set
+        annotations_paths = [ p for p in annotations_paths if p not in { p:None for p in new_paths } ]
+
+        print("Subset #1 has {} forms; subset #2 has {} forms.".format( len(annotations_paths), len(new_paths)))
+
+        return (tuple(annotations_paths), tuple(new_paths))
 
     def get_charset(self, annotations_subset: list) -> dict:
         
@@ -244,30 +272,24 @@ class FunsdDataset(VisionDataset):
         return ((img, img_width, img_height), (transcription, transcription_length))
 
 
-    def download_and_extract(
-            self, root: str,
-            base_folder_path: pl.Path,
-            fl_meta: dict, extract=True) -> None:
+    def download_and_extract(self, root: str, base_folder_path: pl.Path, fl_meta: dict, extract: bool=True) -> None:
         """
-        Download the archive and extract it. If a valid archive already exists in the root location,
-        extract only.
+        TODO: factor out in utility module ??
 
         Args:
             root: where to save the archive
             base_folder: where to extract (any valid path)
             fl_meta: a dict with file meta-info (keys: url, filename, md5, origin, desc)
+            extract: if False, skip the extraction step
         """
         output_file_path = pl.Path(root, fl_meta['filename'])
         print(output_file_path)
-        if 'md5' not in fl_meta or not self.is_valid_archive(output_file_path, fl_meta['md5']):
+        if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
             #gdown.download( fl_meta['url'], str(output_file_path), quiet=True, resume=True )
-            self.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google')) 
+            du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=fl_meta['origin']=='google') 
 
         if not base_folder_path.exists() or not base_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
-
-        if not extract:
-            return
 
         with zipfile.ZipFile(output_file_path, 'r' ) as archive:
             print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
@@ -275,35 +297,6 @@ class FunsdDataset(VisionDataset):
             keep = [ member for member in archive.namelist() if not member.startswith('__MACOSX') ]
             print(base_folder_path)
             archive.extractall( base_folder_path, keep)
-
-
-    def resumable_download(self, url: str, root: str, filename: str, google=False) -> None:
-        """
-        TODO: factor out in utility module
-
-        Args:
-            url: URL to download (may not contain a filename)
-            root: saving directory
-            filename: name to use for saving the file
-            google: URL is a Google drive shared link
-        """
-        if not pl.Path( root ).exists() or not pl.Path( root ).is_dir():
-            print(f'Saving path {root} does not exist! Download for {url} aborted.')
-            return
-        ## for downloading large files from Google drive 
-        if google:
-            gdown.download( url, str(pl.Path(root, filename)), resume=True )
-        else:
-            print(f"Downloading {url} ({filename}) ...")
-            cmd = 'wget --directory-prefix={} -c {}'.format( root, url )
-            subprocess.run( cmd, shell=True, check=True)
-        print(f"Done with {root}/{filename}")
-
-
-    def is_valid_archive(self, file_path: pl.Path, md5: str) -> bool:
-        if not file_path.exists():
-            return False
-        return hashlib.md5( open(file_path, 'rb').read()).hexdigest() == md5
 
 
 def get_loader(dataset,batch_size=10,shuffle=True,num_workers=4):
