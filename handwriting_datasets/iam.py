@@ -83,13 +83,16 @@ class IAMDataset(VisionDataset):
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None, 
                 image_loader=torchvision.datasets.folder.default_loader, 
-                min_gt_length=-1, max_gt_length=-1, task="lines", extract=True) -> None:
+                min_gt_length=-1, max_gt_length=-1,
+                task="lines",
+                extract=True) -> None:
         """
         Args:
             root: location where base folder is created (all tarballs are downloaded in the root,
                   then extracted in the base folder below) - default: current/project directory
             subset: one of ["train" (default), "validate1", "validate2", "test"]
             task: "lines" (as provided by the authors), or "words" (derived from the line sets, for experimental purpose)
+            extract: if False, assume that archives have already been extracted in the work directory
         """
 
         super().__init__(root, transform=transform, target_transform=target_transform)
