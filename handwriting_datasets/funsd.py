@@ -22,6 +22,7 @@ import json
 import lm_util
 import uuid
 import random
+from typing import List, Tuple, Dict
 
 
 class FunsdDataset(VisionDataset):
@@ -164,7 +165,7 @@ class FunsdDataset(VisionDataset):
 
         self.image_loader = image_loader
 
-    def get_sample_dictionary(self) -> list[dict[str,str]]:
+    def get_sample_dictionary(self) -> List[Dict[str,str]]:
         """
         Return a sequence of pairs image/text (for Kraken).
 
@@ -176,7 +177,7 @@ class FunsdDataset(VisionDataset):
         return [ { 'image': k, 'text': v } for (k,v) in self.items ]
 
 
-    def split_set(self, annotations_paths: list, cut: float) -> tuple[tuple, tuple]:
+    def split_set(self, annotations_paths: list, cut: float) -> Tuple[tuple, tuple]:
         """
         Split a set of forms.
             annotations_paths: list of paths to XML form descriptions ('annotations')
@@ -202,7 +203,7 @@ class FunsdDataset(VisionDataset):
 
         return (tuple(annotations_paths), tuple(new_paths))
 
-    def get_charset(self, annotations_subset: list) -> dict[int, int]:
+    def get_charset(self, annotations_subset: list) -> Dict[int, int]:
         
         charset = set()
 
@@ -220,7 +221,7 @@ class FunsdDataset(VisionDataset):
         return { idx: c for idx, c in enumerate(sorted(charset)) }
 
 
-    def generate_word_items(self, images_path: pl.Path, annotations_subset: list ) -> dict[str,str]:
+    def generate_word_items(self, images_path: pl.Path, annotations_subset: list ) -> Dict[str,str]:
         
         #data_path = pl.Path( self.root, self.base_folder_path, subset_folder_name )
         #annotations_path = data_path.joinpath("annotations")

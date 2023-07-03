@@ -24,6 +24,7 @@ import sys
 import json
 import lm_util
 import argparse
+from typing import List, Dict, Tuple
 
 
 
@@ -232,7 +233,7 @@ class IAMDataset(VisionDataset):
         print('[Derived from {}] - words: {} writers: {}'.format(lineset_file_path.name, len(word_set), len(writer_set)))
         return list(word_set)
 
-    def get_sample_dictionary(self) -> list[dict[str,str]]:
+    def get_sample_dictionary(self) -> List[Dict[str,str]]:
         """
         Return a sequence of pairs image/text (for Kraken).
 
@@ -284,7 +285,7 @@ class IAMDataset(VisionDataset):
         return input_list
 
 
-    def line_to_transcription( self, file_path: pl.Path ) -> (dict, dict):
+    def line_to_transcription( self, file_path: pl.Path ) -> Tuple[dict, dict]:
         """
         Map line ids to their transcriptions and chars to integer codes.
 
@@ -313,7 +314,7 @@ class IAMDataset(VisionDataset):
         return (l2t, code_2_utf)
 
 
-    def word_to_transcription( self, file_path: pl.Path ) -> (dict, dict):
+    def word_to_transcription( self, file_path: pl.Path ) -> Tuple[dict, dict]:
         """
         Map word ids to their transcriptions and chars to integer codes.
 
@@ -342,7 +343,7 @@ class IAMDataset(VisionDataset):
         return (l2t, code_2_utf)
 
 
-    def object_image_to_transcription(self, object_list: list ) -> dict:
+    def object_image_to_transcription(self, object_list: list ) -> Dict[str, str]:
         """
         Map object images to their transcriptions.
 

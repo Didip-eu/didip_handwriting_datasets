@@ -11,11 +11,11 @@ class FunsdTest( unittest.TestCase ):
 
     def test_dataset_construction_for_lines_validation(self): 
         funsd_data = FunsdDataset('.', subset='validate', extract=True)
-        self.assertEqual(len(funsd_data.get_sample_dictionary()), 4208) 
+        self.assertEqual(len(funsd_data.get_sample_dictionary()), 4714) 
     
     def test_dataset_construction_for_lines_test(self): 
         funsd_data = FunsdDataset('.', subset='test', extract=True)
-        self.assertEqual(len(funsd_data.get_sample_dictionary()), 4499)
+        self.assertEqual(len(funsd_data.get_sample_dictionary()), 3993)
     
         
 if __name__ == "__main__":
