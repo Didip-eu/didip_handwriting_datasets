@@ -176,12 +176,9 @@ class FunsdDataset(VisionDataset):
         return [ { 'image': k, 'text': v } for (k,v) in self.items ]
 
 
-    def split_set(self, annotations_paths: list, cut: float) -> tuple:
+    def split_set(self, annotations_paths: list, cut: float) -> tuple[tuple, tuple]:
         """
         Split a set of forms.
-        TODO: returns different subsets for each run, in spite of seed
-        
-        Args:
             annotations_paths: list of paths to XML form descriptions ('annotations')
             cut: (between 0 and 1) proportion of elements in the first set
 
@@ -205,7 +202,7 @@ class FunsdDataset(VisionDataset):
 
         return (tuple(annotations_paths), tuple(new_paths))
 
-    def get_charset(self, annotations_subset: list) -> dict:
+    def get_charset(self, annotations_subset: list) -> dict[int, int]:
         
         charset = set()
 
@@ -223,7 +220,7 @@ class FunsdDataset(VisionDataset):
         return { idx: c for idx, c in enumerate(sorted(charset)) }
 
 
-    def generate_word_items(self, images_path: pl.Path, annotations_subset: list ) -> dict:
+    def generate_word_items(self, images_path: pl.Path, annotations_subset: list ) -> dict[str,str]:
         
         #data_path = pl.Path( self.root, self.base_folder_path, subset_folder_name )
         #annotations_path = data_path.joinpath("annotations")
