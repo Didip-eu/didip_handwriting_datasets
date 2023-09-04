@@ -258,7 +258,7 @@ class IAMDataset(VisionDataset):
         for file in kraken_gt_folder.glob("*"):
             file.unlink()
 
-        for (k,v) in self.items[:5]:
+        for (k,v) in self.items:
             image_file = pl.Path(k)
             basename = image_file.name
             local_link = pl.Path(kraken_gt_folder, basename)
