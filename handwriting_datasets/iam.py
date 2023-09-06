@@ -206,6 +206,10 @@ class IAMDataset(VisionDataset):
         img = self.transform( pil_image )
         _, img_height, img_width = img.size()
 
+        # Text transform
+        if self.target_transform:
+            transcription = self.target_transform( transcription )
+
         transcription = self.encoder.encode(transcription).reshape([1,-1]) # <-> transpose
         transcription_length = torch.LongTensor([ transcription.shape[1] ])
         transcription = torch.LongTensor( transcription )
@@ -245,7 +249,7 @@ class IAMDataset(VisionDataset):
 
             {'image': 'image_path', 'text': 'ground_truth_text'}.
         """
-        return [ { 'image': k, 'text': v, 'preparse': True} for (k,v) in self.items ]
+        return [ { 'image': k, 'text': self.target_transform(v) if self.target_transform else v, 'preparse': True} for (k,v) in self.items ]
 
 
     def extract_for_kraken(self):
@@ -266,7 +270,7 @@ class IAMDataset(VisionDataset):
             local_link.unlink(missing_ok=True)
             local_link.symlink_to( pl.Path("..", image_file ))
             with open( local_link.with_suffix(".gt.txt"), "w") as gt_file:
-                gt_file.write( v )
+                gt_file.write( self.target_transform(v) if self.target_transform else v )
 
 
     def get_word_metadata(self, base_folder_path: pl.Path) -> dict:
