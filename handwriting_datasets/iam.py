@@ -252,12 +252,15 @@ class IAMDataset(VisionDataset):
         return [ { 'image': k, 'text': self.target_transform(v) if self.target_transform else v, 'preparse': True} for (k,v) in self.items ]
 
 
-    def extract_for_kraken(self):
+    def extract_for_kraken(self, subfolder: str) -> int:
         """
         For Kraken only: extract image/text pairs in a single directory where each pair
         shares a prefix, with "*.gt.txt" files containing the transcritions.
+
+        Returns:
+            int: number of items in the dataset
         """
-        kraken_gt_folder = pl.Path( self.root + "/iam_kraken")
+        kraken_gt_folder = pl.Path( self.root,  subfolder)
         kraken_gt_folder.mkdir(exist_ok=True)
         for file in kraken_gt_folder.glob("*"):
             file.unlink()
@@ -266,11 +269,13 @@ class IAMDataset(VisionDataset):
             image_file = pl.Path(k)
             basename = image_file.name
             local_link = pl.Path(kraken_gt_folder, basename)
-            print(image_file, basename, local_link)
+            #print(image_file, basename, local_link)
             local_link.unlink(missing_ok=True)
             local_link.symlink_to( pl.Path("..", image_file ))
             with open( local_link.with_suffix(".gt.txt"), "w") as gt_file:
                 gt_file.write( self.target_transform(v) if self.target_transform else v )
+
+        return len(self.items)
 
 
     def get_word_metadata(self, base_folder_path: pl.Path) -> dict:
