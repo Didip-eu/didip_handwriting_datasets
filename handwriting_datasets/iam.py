@@ -78,14 +78,15 @@ class IAMDataset(VisionDataset):
     base_folder='IAMHandwritingDataset' # where files are extracted (relative to root)
 
 
-    def __init__( 
+    def __init__(
                 self, root: str='.',
-                subset="train",
+                subset: str ="train",
                 transform: Optional[Callable] = None,
-                target_transform: Optional[Callable] = None, 
-                image_loader=torchvision.datasets.folder.default_loader, 
-                min_gt_length=-1, max_gt_length=-1,
-                task="lines",
+                target_transform: Optional[Callable] = None,
+                image_loader=torchvision.datasets.folder.default_loader,
+                min_gt_length: int = -1, max_gt_length: int = -1,
+                task: str = "lines",
+                limit: int = 0,
                 extract=True) -> None:
         """
         Args:
@@ -93,6 +94,7 @@ class IAMDataset(VisionDataset):
                   then extracted in the base folder below) - default: current/project directory
             subset: one of ["train" (default), "validate1", "validate2", "test"]
             task: "lines" (as provided by the authors), or "words" (derived from the line sets, for experimental purpose)
+            limit: construct a mini-dataset of lines, with indicated number of lines (for testing purpose)
             extract: if False, assume that archives have already been extracted in the work directory
         """
 
@@ -127,27 +129,27 @@ class IAMDataset(VisionDataset):
         # a01-000u-00
         # a01-000u-01
         # ...
-        subset_2_input_file = { 
+        subset_2_input_file = {
                 'train': 'trainset.txt',
-                'validation1': 'validationset1.txt', 
-                'validation2': 'validationset2.txt', 
+                'validation1': 'validationset1.txt',
+                'validation2': 'validationset2.txt',
                 'test': 'testset.txt' }
 
 
         self.object_to_transcription = {}
         code_2_utf = {}
 
-
-        if task == "lines":
+        if task == "lines" or limit:
             self.object_2_transcription, code_2_utf = self.line_to_transcription( self.base_folder_path.joinpath( line_descriptions ))
             # input file of line ids is used without further ado
-            input_list = self.list_from_file( pl.Path(self.base_folder_path).joinpath( subset_2_input_file[subset] ))
+            input_list = self.list_from_file(
+                            pl.Path(self.base_folder_path).joinpath( subset_2_input_file[subset] ), limit)
 
         elif task == "words":
             self.object_2_transcription, code_2_utf = self.word_to_transcription( self.base_folder_path.joinpath( word_descriptions ))
             # input file of line ids is used to derive a list of words
-            input_list = self.generate_word_set( 
-                    self.base_folder_path, 
+            input_list = self.generate_word_set(
+                    self.base_folder_path,
                     self.base_folder_path.joinpath( subset_2_input_file[subset] ))
 
 
@@ -237,12 +239,12 @@ class IAMDataset(VisionDataset):
         """
         Return a sequence of pairs image/text (for Kraken).
 
-        Returns: 
+        Returns:
             A sequence where each sample is represented as a dictionary of the form::
 
             {'image': 'image_path', 'text': 'ground_truth_text'}.
         """
-        return [ { 'image': k, 'text': v } for (k,v) in self.items ]
+        return [ { 'image': k, 'text': v, 'preparse': True} for (k,v) in self.items ]
 
 
     def get_word_metadata(self, base_folder_path: pl.Path) -> dict:
@@ -275,23 +277,37 @@ class IAMDataset(VisionDataset):
         return word_2_metadata
 
 
+    def list_from_file(self, list_file_path: pl.Path, limit: int = 0) -> list:
+        """
+        Make a list of line ids (=file prefixes for the images).
 
-    def list_from_file(self, list_file_path: pl.Path ) -> list:
+        Args:
+            list_file_path: file containing the line ids (one per line). Eg.::
+
+            a01-049x-07
+            a01-049x-08
+            ...
+
+       	    limit: allows for generating mini-datasets, for debugging purpose
+        """
         input_list = []
         with open(list_file_path, "r") as input_list_file:
-            for l in input_list_file:
+            for lno, l in enumerate(input_list_file, 1):
+                if limit and lno > limit:
+                    break
                 if l:
                     input_list.append( l[:-1] )
         return input_list
 
 
-    def line_to_transcription( self, file_path: pl.Path ) -> Tuple[dict, dict]:
+    def line_to_transcription( self, file_path: pl.Path) -> Tuple[dict, dict]:
         """
         Map line ids to their transcriptions and chars to integer codes.
 
         Args:
             file_path: meta-data for all lines, in the form:
                        01-000u-00 ok 154 19 408 746 1661 89 A|MOVE|to|stop|Mr.|Gaitskell|from
+
 
         Returns:
             tuple: a pair (<mapping of image id to transcription>, <mapping of integer to character>)
