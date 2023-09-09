@@ -28,6 +28,8 @@ from typing import List, Dict, Tuple
 
 
 
+
+
 class IAMDataset(VisionDataset):
     """
     IAM Handwriting dataset, from
@@ -107,6 +109,7 @@ class IAMDataset(VisionDataset):
         if not self.base_folder_path.exists() or not self.base_folder_path.is_dir():
             self.base_folder_path.mkdir(parents=True)
 
+        # note: self.root is a VisionDataset attribute
         for fl in self.files:
             self.download_and_extract( self.root, self.base_folder_path, fl, extract)
 
@@ -180,10 +183,9 @@ class IAMDataset(VisionDataset):
             print( self.encoder.get_tsv_string(), file=charset_file)
 
         if transform is None:
-            self.transform = torchvision.transforms.ToTensor()
+            self.transform = lambda x: x
 
         self.image_loader = image_loader
-
 
 
     def __len__(self):
@@ -201,14 +203,48 @@ class IAMDataset(VisionDataset):
                 print(self.__dict__.keys())
                 print("IMREAD failed (using default image)")
                 pil_image = default_image
-        # PIL -> Tensor
-        img = self.transform( pil_image )
+        # default: PIL -> Tensor
+        img = torchvision.transforms.ToTensor()( self.transform( pil_image ) )
         _, img_height, img_width = img.size()
+
+        # Text transform
+        if self.target_transform:
+            transcription = self.target_transform( transcription )
 
         transcription = self.encoder.encode(transcription).reshape([1,-1]) # <-> transpose
         transcription_length = torch.LongTensor([ transcription.shape[1] ])
         transcription = torch.LongTensor( transcription )
         return ((img, img_width, img_height), (transcription, transcription_length))
+
+
+    def extract_for_kraken(self, subfolder: str) -> int:
+        """
+        For Kraken only: extract image/text pairs in a single directory where each pair
+        shares a prefix, with "*.gt.txt" files containing the transcritions; apply any
+        transform defined at initialization time.
+
+        Returns:
+            int: number of items in the dataset
+        """
+        kraken_gt_folder = pl.Path( self.root,  subfolder)
+        kraken_gt_folder.mkdir(exist_ok=True)
+        for file in kraken_gt_folder.glob("*"):
+            file.unlink()
+
+        for (k,v) in self.items:
+            image_file = pl.Path(k)
+            basename = image_file.name
+            local_link = pl.Path(kraken_gt_folder, basename)
+            local_link.unlink(missing_ok=True)
+            # should apply image transform here
+            #local_link.symlink_to( pl.Path("..", image_file ))
+            transformed_img = self.transform( Image.open( image_file ))
+            transformed_img.save( local_link )
+
+            with open( local_link.with_suffix(".gt.txt"), "w") as gt_file:
+                gt_file.write( self.target_transform(v) if self.target_transform else v )
+
+        return len(self.items)
 
 
     def generate_word_set(self, base_folder_path: pl.Path, lineset_file_path: pl.Path) -> list:
@@ -244,7 +280,8 @@ class IAMDataset(VisionDataset):
 
             {'image': 'image_path', 'text': 'ground_truth_text'}.
         """
-        return [ { 'image': k, 'text': v, 'preparse': True} for (k,v) in self.items ]
+        return [ { 'image': k, 'text': self.target_transform(v) if self.target_transform else v, 'preparse': True} for (k,v) in self.items ]
+
 
 
     def get_word_metadata(self, base_folder_path: pl.Path) -> dict:
@@ -288,7 +325,7 @@ class IAMDataset(VisionDataset):
             a01-049x-08
             ...
 
-       	    limit: allows for generating mini-datasets, for debugging purpose
+           limit: allows for generating mini-datasets, for debugging purpose
         """
         input_list = []
         with open(list_file_path, "r") as input_list_file:
@@ -400,7 +437,7 @@ class IAMDataset(VisionDataset):
             fl_meta: a dict with file meta-info (keys: url, filename, md5, origin, desc)
         """
         output_file_path = pl.Path(root, fl_meta['filename'])
-        
+
         #print( fl_meta, type(fl_meta['md5']) )
         if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
             #gdown.download( fl_meta['url'], str(output_file_path), quiet=True, resume=True )
