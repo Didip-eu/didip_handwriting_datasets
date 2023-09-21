@@ -217,17 +217,23 @@ class IAMDataset(VisionDataset):
         return ((img, img_width, img_height), (transcription, transcription_length))
 
 
-    def extract_for_kraken(self, subfolder: str) -> int:
+    def extract_for_kraken(self, subfolder: str, dummy = False) -> int:
         """
         For Kraken only: extract image/text pairs in a single directory where each pair
         shares a prefix, with "*.gt.txt" files containing the transcritions; apply any
         transform defined at initialization time.
+
+        Args:
+            str: subfolder in which image and GT files are to be created.
+            dummy: do not create the pairs, assuming they are already there (for ease of debugging)
 
         Returns:
             int: number of items in the dataset
         """
         kraken_gt_folder = pl.Path( self.root,  subfolder)
         kraken_gt_folder.mkdir(exist_ok=True)
+        if dummy:
+                return len(self.items)
         for file in kraken_gt_folder.glob("*"):
             file.unlink()
 
