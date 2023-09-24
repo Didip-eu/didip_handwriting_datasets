@@ -15,21 +15,30 @@ class MonasteriumTest( unittest.TestCase ):
 
     def test_pagexml_to_img_line_extraction_text_count(self):
         bf = '/home/nicolas/htr/Monasterium'
-        ms = MonasteriumDataset(bf, subset='train')
+        ms = MonasteriumDataset(bf, subset='train', extract=False)
         cnt = ms.extract_lines(shape='bbox', text_only=True, limit=5)
         self.assertEqual( cnt, 5)
 
     def test_pagexml_to_img_line_extraction_bbox_count(self):
         bf = '/home/nicolas/htr/Monasterium'
-        ms = MonasteriumDataset(bf, subset='train')
+        ms = MonasteriumDataset(bf, subset='train', extract=False)
         cnt = ms.extract_lines(shape='bbox', limit=5)
         self.assertEqual( cnt, 5)
 
     def test_pagexml_to_img_line_extraction_polygon_count(self):
         bf = '/home/nicolas/htr/Monasterium'
-        ms = MonasteriumDataset(bf, subset='train')
+        ms = MonasteriumDataset(bf, subset='train', extract=False)
         cnt = ms.extract_lines(limit=5)
         self.assertEqual( cnt, 5)
+
+    
+    def test_pagexml_to_img_line_extraction_file_creation(self):
+        bf = '/home/nicolas/htr/Monasterium'
+        ms = MonasteriumDataset(bf, subset='train', extract=False)
+        ms.extract_lines(limit=5)
+        gt_cnt, img_cnt = ms.count_line_items()
+        print("gt_cnt =", gt_cnt, ", img_cnt =", img_cnt )
+        self.assertTrue( gt_cnt == 5 and img_cnt == 5)
 
     
 

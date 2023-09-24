@@ -31,10 +31,18 @@ class MonasteriumDataset(Dataset):
         if not extract:
             return
 
-        # Todo: do not extract images if target folder exists
-        self.target_folder.mkdir(exist_ok=True)
-        if not [ i for i in self.target_folder.iterdir()] :
+        self.target_folder.mkdir(exist_ok=True) # always create the subfolder if not already there
+
+        # Extract if:
+        # - there are no images and extract=True
+        if extract:
+            self.purge()
             self.extract_lines() 
+
+    def purge(self) -> int:
+        for cnt, line in enumerate(self.target_folder.iterdir()):
+            line.unlink()
+        return cnt
 
     def map_pagexml_to_img_id(self) -> dict:
         """
@@ -160,13 +168,12 @@ class MonasteriumDataset(Dataset):
                     count += 1
         return count
 
-    def has_line_img(self) -> bool:
-        return len( [ i for i in Path(self.target_folder).iterdir() ] )
+    def count_line_items(self) -> Tuple[int, int]:
+        return (
+                len( [ i for i in Path(self.target_folder).glob('*.gt') ] ),
+                len( [ i for i in Path(self.target_folder).glob('*.png') ] )
+                )
 
-    def purge_line_img(self) -> int:
-        for f in Path( self.target_folder ).itedir():
-            f.unlink()
-        
 #
 #print("--------- Img sizes")
 #img_sizes_array = np.array( img_sizes )
