@@ -8,6 +8,7 @@ import re
 import argparse
 import numpy as np
 from torch.utils.data import Dataset
+import torch
 
 
 """
@@ -161,6 +162,13 @@ class MonasteriumDataset(Dataset):
 
                     count += 1
         return count
+
+
+    def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
+        """
+        """
+        return torch.zeros(2,4)
+
 
     def count_line_items(self) -> Tuple[int, int]:
         return (
