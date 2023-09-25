@@ -36,7 +36,6 @@ class MonasteriumDataset(Dataset):
         # Extract if:
         # - there are no images and extract=True
         if extract:
-            self.purge()
             self.extract_lines() 
 
     def purge(self) -> int:
@@ -53,13 +52,6 @@ class MonasteriumDataset(Dataset):
             (dict, dict): two dictionaries, that respectively map the PageXML ids to the document
                             image ids and conversely.
         """
-
-#        parser = argparse.ArgumentParser()
-#
-#        parser.add_argument("-n", "--text_only", action="store_true", help="Do not extract the line iamges")
-#
-#        args = parser.parse_args()
-
         img2xml = {}
         xml2img = {}
 
@@ -101,6 +93,8 @@ class MonasteriumDataset(Dataset):
         """
         Generate line images from the PageXML files, to be saved in the local directory of the consumer's program.
         """
+
+        self.purge() # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
