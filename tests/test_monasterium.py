@@ -67,6 +67,27 @@ class MonasteriumTest( unittest.TestCase ):
         ms = MonasteriumDataset(bf, subset='train', target_folder=tf, limit=5)
         self.assertTrue( Path( tf, 'monasterium_ds.csv').exists() )
 
+    def test_dataset_csv_load(self):
+        bf = '/home/nicolas/htr/Monasterium'
+        tf = 'line_imgs'
+        test_csv = """line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l2.png Wir Ruprecht der Elter von Gotes gnaden pfallenczgrave by Rine, dez heiligen Romischen riches obrester truchsesze
+line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l3.png und herczog in Beyern, bekennen und tun chunt offenlichen mit disem briefe allen den, die in sehent oder horent le¬
+line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l4.png sen, daz uns kuntlichen und wissenlichen ist, und daz selben unser eltern und vordern herczogen zu Beyern an uns
+line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l5.png und seliger gedechtnusse den hochgeborn herczog Rudolf, unserm bruder, her bracht haben, daz die vesten und merkte
+line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbach, die von unsers bruders herczog Rudolfs dez vorgenanten tode uf uns verfallen
+"""
+        ms = MonasteriumDataset(bf, subset='train', target_folder=tf, limit=5)
+        
+        csv_file = Path( tf, 'monasterium_ds.csv')
+        with open(csv_file, 'w') as of:
+            of.write(test_csv)
+        ms = MonasteriumDataset(bf, subset='train', target_folder=tf, extract=False)
+        if csv_file.exists():
+            csv_file.unlink()
+        self.assertEqual( len(ms), 5 )
+
+
+
 if __name__ == "__main__":
     unittest.main() 
 

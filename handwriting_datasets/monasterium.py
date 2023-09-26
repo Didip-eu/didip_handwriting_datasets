@@ -49,38 +49,45 @@ class MonasteriumDataset(VisionDataset):
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
-        self.csv = 'monasterium_ds.csv'
+        csv_path = Path(target_folder, 'monasterium_ds.csv')
 
         super().__init__(basefolder, transform=trf, target_transform=target_transform )
         self.setname = 'Monasterium'
         self.basefolder=basefolder
 
         self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
-        #self.target_folder = Path('.', target_folder)
 
         self.data = []
 
+        # when DS not created from scratch, try loading from an existing CSV file
         if not extract:
+            if csv_path.exists():
+                self.data = self.load_from_csv( csv_path )
             return
 
         self.data = self.extract_lines( target_folder, limit=limit ) 
 
         # Generate a CSV file with one entry per img/transcription pair
-        self.dump_to_csv( Path( target_folder, self.csv), self.data )
+        self.dump_to_csv( csv_path, self.data )
 
     def purge(self, folder: str) -> int:
         cnt = 0
-        for line in Path( folder ).iterdir():
-            line.unlink()
+        for item in Path( folder ).iterdir():
+            item.unlink()
             cnt += 1
-        Path( folder, self.csv ).unlink(missing_ok = True)
         return cnt
 
     def dump_to_csv(self, file_path: Path, data: list):
 
         with open( file_path, 'w' ) as of:
             for path, gt in self.data:
+                #print('{}\t{}'.format( path, gt ))
                 of.write( '{}\t{}'.format( path, gt ) )
+
+    def load_from_csv(self, file_path: Path) -> list:
+        with open( file_path, 'r') as infile:
+            return [ pair[:-1].split('\t') for pair in infile ]
+
 
 
     def map_pagexml_to_img_id(self) -> dict:
