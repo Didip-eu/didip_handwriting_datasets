@@ -27,21 +27,18 @@ class MonasteriumDataset(Dataset):
         self.basefolder=basefolder
 
         self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
-        self.target_folder = Path('.', target_folder)
+        #self.target_folder = Path('.', target_folder)
 
         if not extract:
             return
 
-        self.target_folder.mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.extract_lines( target_folder ) 
 
-        # Extract if:
-        # - there are no images and extract=True
-        if extract:
-            self.extract_lines() 
-
-    def purge(self) -> int:
-        for cnt, line in enumerate(self.target_folder.iterdir()):
+    def purge(self, folder: str) -> int:
+        cnt = 0
+        for line in Path( folder ).iterdir():
             line.unlink()
+            cnt += 1
         return cnt
 
     def map_pagexml_to_img_id(self) -> dict:
@@ -90,18 +87,27 @@ class MonasteriumDataset(Dataset):
         return xml2img
 
 
-    def extract_lines(self, shape='polygons', text_only=False, limit=0) -> int:
+    def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
-        Generate line images from the PageXML files, to be saved in the local directory of the consumer's program.
-        """
+        Generate line images from the PageXML files
+        
+        - images are saved in the local directory of the consumer's program
+        - generates a CSV file with all pairs (img_file_path, transcription)
+        
+        Returns:
+            list: an array of pairs (img_file_path, transcription)
 
-        self.purge() # ensure there are no pre-existing line items in the target directory
+        """
+        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
         count = 0 # for testing purpose
 
         xml2img = self.map_pagexml_to_img_id()
+
+        items = []
 
         for page in self.pagexmls:
 
@@ -124,7 +130,7 @@ class MonasteriumDataset(Dataset):
 
                 for textline_elt in page_root.findall( './/pc:TextLine', ns ):
                     if limit and count == limit:
-                        return count 
+                        return items
 
                     textline = dict()
                     textline['id']=textline_elt.get("id")
@@ -133,9 +139,10 @@ class MonasteriumDataset(Dataset):
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
                     img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
-                    textline['img_path']=Path(self.target_folder, image_id + "-" + textline['id'] )
+                    textline['img_path']=Path(target_folder, image_id + "-" + textline['id'] )
                     print("textline[image_path]=", textline['img_path'])
 
+                    items.append( (textline['img_path'], textline['transcription']) ) 
                     if not text_only:
                         bbox_img = page_image.crop( textline['bbox'] )
 
@@ -161,7 +168,7 @@ class MonasteriumDataset(Dataset):
                         gt_lengths.append(len( textline['transcription']))
 
                     count += 1
-        return count
+        return items
 
 
     def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
@@ -170,10 +177,10 @@ class MonasteriumDataset(Dataset):
         return torch.zeros(2,4)
 
 
-    def count_line_items(self) -> Tuple[int, int]:
+    def count_line_items(self, folder) -> Tuple[int, int]:
         return (
-                len( [ i for i in Path(self.target_folder).glob('*.gt') ] ),
-                len( [ i for i in Path(self.target_folder).glob('*.png') ] )
+                len( [ i for i in Path(folder).glob('*.gt') ] ),
+                len( [ i for i in Path(folder).glob('*.png') ] )
                 )
 
 #
