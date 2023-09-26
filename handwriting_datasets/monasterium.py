@@ -7,9 +7,13 @@ from PIL import ImagePath as IP
 import re
 import argparse
 import numpy as np
-from torch.utils.data import Dataset
 import torch
+import torchvision
+from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
+
+torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
+from torchvision.transforms import v2
 
 
 """
@@ -21,9 +25,25 @@ Generate image/GT pairs for Monasterium transcriptions
 """
 
 
-class MonasteriumDataset(Dataset):
+class MonasteriumDataset(VisionDataset):
 
-    def __init__(self, basefolder, subset, extract=True, target_folder='line_imgs', limit=0):
+    def __init__(
+                self,
+                basefolder: str,
+                subset: str,
+                transform: Optional[Callable] = None,
+                target_transform: Optional[Callable] = None,
+                extract: bool = True,
+                target_folder: str ='line_imgs',
+                limit: int = 0
+                ):
+
+        tf = v2.PILToTensor()
+        if transform:
+            tf = v2.Compose( [ v2.PILToTensor(), transform ] )
+
+
+        super().__init__(basefolder, transform=tf, target_transform=target_transform )
         self.setname = 'Monasterium'
         self.basefolder=basefolder
 
@@ -181,7 +201,7 @@ class MonasteriumDataset(Dataset):
             tuple: a pair (image, transcription)
         """
         transcr = self.data[index][1]
-        img = transforms.PILToTensor()( Image.open(self.data[index][0], 'r') )
+        img = self.transform( Image.open(self.data[index][0], 'r') )
         return (img, transcr)
 
 
