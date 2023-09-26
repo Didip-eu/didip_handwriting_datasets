@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 from torch.utils.data import Dataset
 import torch
+import torchvision.transforms as transforms
 
 
 """
@@ -22,17 +23,19 @@ Generate image/GT pairs for Monasterium transcriptions
 
 class MonasteriumDataset(Dataset):
 
-    def __init__(self, basefolder, subset, extract=True, target_folder='line_imgs'):
+    def __init__(self, basefolder, subset, extract=True, target_folder='line_imgs', limit=0):
         self.setname = 'Monasterium'
         self.basefolder=basefolder
 
         self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
         #self.target_folder = Path('.', target_folder)
 
+        self.data = []
+
         if not extract:
             return
 
-        self.extract_lines( target_folder ) 
+        self.data = self.extract_lines( target_folder, limit=limit ) 
 
     def purge(self, folder: str) -> int:
         cnt = 0
@@ -139,15 +142,15 @@ class MonasteriumDataset(Dataset):
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
                     img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
-                    textline['img_path']=Path(target_folder, image_id + "-" + textline['id'] )
-                    print("textline[image_path]=", textline['img_path'])
+                    img_path_prefix = Path(target_folder, image_id + "-" + textline['id'] )
+                    textline['img_path'] = img_path_prefix.with_suffix('.png')
 
                     items.append( (textline['img_path'], textline['transcription']) ) 
                     if not text_only:
                         bbox_img = page_image.crop( textline['bbox'] )
 
                         if shape=='bbox':
-                            bbox_img.save( textline['img_path'].with_suffix('.png') )
+                            bbox_img.save( textline['img_path'] )
 
                         else:
                             # mask (=line polygon)
@@ -161,20 +164,36 @@ class MonasteriumDataset(Dataset):
                             bg = Image.new("RGB", bbox_img.size, color=0)
 
                             # composite
-                            Image.composite(bbox_img, bg, mask).save( Path( textline['img_path'].with_suffix('.png')))
+                            Image.composite(bbox_img, bg, mask).save( Path( textline['img_path'] ))
 
-                    with open(textline['img_path'].with_suffix('.gt'), 'w') as gt_file:
+                    with open( img_path_prefix.with_suffix('.gt'), 'w') as gt_file:
                         gt_file.write( textline['transcription'] )
                         gt_lengths.append(len( textline['transcription']))
 
                     count += 1
+        print(items)
         return items
 
 
     def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
         """
+        Returns:
+            tuple: a pair (image, transcription)
         """
-        return torch.zeros(2,4)
+        transcr = self.data[index][1]
+        img = transforms.PILToTensor()( Image.open(self.data[index][0], 'r') )
+        return (img, transcr)
+
+
+    def __len__(self) -> int:
+        """
+        Returns:
+            tuple: a pair (image, transcription)
+        """
+        return len( self.data )
+
+
+
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
