@@ -2,6 +2,7 @@ import sys
 from typing import *
 import defusedxml.ElementTree as ET
 from pathlib import *
+import warnings
 from PIL import Image, ImageDraw
 from PIL import ImagePath as IP
 import re
@@ -11,9 +12,12 @@ import torch
 import torchvision
 from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
+import logging
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
+
+
 
 
 """
@@ -24,6 +28,9 @@ Generate image/GT pairs for Monasterium transcriptions
 
 """
 
+logging.basicConfig( level=logging.DEBUG )
+
+logger = logging.getLogger()
 
 class MonasteriumDataset(VisionDataset):
 
@@ -38,12 +45,13 @@ class MonasteriumDataset(VisionDataset):
                 limit: int = 0
                 ):
 
-        tf = v2.PILToTensor()
+        trf = v2.PILToTensor()
         if transform:
-            tf = v2.Compose( [ v2.PILToTensor(), transform ] )
+            trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
+        self.csv = 'monasterium_ds.csv'
 
-        super().__init__(basefolder, transform=tf, target_transform=target_transform )
+        super().__init__(basefolder, transform=trf, target_transform=target_transform )
         self.setname = 'Monasterium'
         self.basefolder=basefolder
 
@@ -57,12 +65,23 @@ class MonasteriumDataset(VisionDataset):
 
         self.data = self.extract_lines( target_folder, limit=limit ) 
 
+        # Generate a CSV file with one entry per img/transcription pair
+        self.dump_to_csv( Path( target_folder, self.csv), self.data )
+
     def purge(self, folder: str) -> int:
         cnt = 0
         for line in Path( folder ).iterdir():
             line.unlink()
             cnt += 1
+        Path( folder, self.csv ).unlink(missing_ok = True)
         return cnt
+
+    def dump_to_csv(self, file_path: Path, data: list):
+
+        with open( file_path, 'w' ) as of:
+            for path, gt in self.data:
+                of.write( '{}\t{}'.format( path, gt ) )
+
 
     def map_pagexml_to_img_id(self) -> dict:
         """
@@ -115,12 +134,13 @@ class MonasteriumDataset(VisionDataset):
         Generate line images from the PageXML files
         
         - images are saved in the local directory of the consumer's program
-        - generates a CSV file with all pairs (img_file_path, transcription)
         
         Returns:
             list: an array of pairs (img_file_path, transcription)
 
         """
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+
         Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
         self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
 
@@ -149,7 +169,12 @@ class MonasteriumDataset(VisionDataset):
                 page_root = page_tree.getroot()
 
                 if not text_only:
-                    page_image = Image.open( img_path, 'r')
+
+                    try:
+                        page_image = Image.open( img_path, 'r')
+                    except Image.DecompressionBombWarning as dcb:
+                        logger.debug( f'{dcb}: ignoring page' )
+                        continue
 
                 for textline_elt in page_root.findall( './/pc:TextLine', ns ):
                     if limit and count == limit:
@@ -191,7 +216,7 @@ class MonasteriumDataset(VisionDataset):
                         gt_lengths.append(len( textline['transcription']))
 
                     count += 1
-        print(items)
+
         return items
 
 
@@ -223,7 +248,7 @@ class MonasteriumDataset(VisionDataset):
                 )
 
 #
-#print("--------- Img sizes")
+#logger.debug("--------- Img sizes")
 #img_sizes_array = np.array( img_sizes )
 #
 #means = img_sizes_array.mean(axis=0)
@@ -231,11 +256,11 @@ class MonasteriumDataset(VisionDataset):
 #mins = img_sizes_array.min(axis=0)
 #medians = np.median(img_sizes_array, axis=0)
 #
-#print('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[0], mins[0], maxs[0], medians[0]))
-#print('Height: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[1],mins[1], maxs[1], medians[1]))
+#logger.debug('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[0], mins[0], maxs[0], medians[0]))
+#logger.debug('Height: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[1],mins[1], maxs[1], medians[1]))
 #
 #
-#print("\n-------- GT lengths")
+#logger.debug("\n-------- GT lengths")
 #gt_lengths_array = np.array( gt_lengths)
 #
 #means = gt_lengths_array.mean()
@@ -243,6 +268,6 @@ class MonasteriumDataset(VisionDataset):
 #mins = gt_lengths_array.min()
 #medians = np.median(gt_lengths_array)
 #
-#print('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means, mins, maxs, medians))
+#logger.debug('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means, mins, maxs, medians))
 #
 #
