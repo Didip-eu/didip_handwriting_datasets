@@ -318,35 +318,9 @@ class MonasteriumDataset(VisionDataset):
 
 
 
-
-
     def count_line_items(self, folder) -> Tuple[int, int]:
         return (
                 len( [ i for i in Path(folder).glob('*.gt') ] ),
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
-
-#
-#logger.debug("--------- Img sizes")
-#img_sizes_array = np.array( img_sizes )
-#
-#means = img_sizes_array.mean(axis=0)
-#maxs = img_sizes_array.max(axis=0)
-#mins = img_sizes_array.min(axis=0)
-#medians = np.median(img_sizes_array, axis=0)
-#
-#logger.debug('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[0], mins[0], maxs[0], medians[0]))
-#logger.debug('Height: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means[1],mins[1], maxs[1], medians[1]))
-#
-#
-#logger.debug("\n-------- GT lengths")
-#gt_lengths_array = np.array( gt_lengths)
-#
-#means = gt_lengths_array.mean()
-#maxs = gt_lengths_array.max()
-#mins = gt_lengths_array.min()
-#medians = np.median(gt_lengths_array)
-#
-#logger.debug('Width: avg={:.1f}, min={:.1f}, max={:.1f}, median={:.1f}'.format(means, mins, maxs, medians))
-#
 #
