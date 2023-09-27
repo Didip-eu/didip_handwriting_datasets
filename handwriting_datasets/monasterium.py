@@ -13,6 +13,7 @@ import torchvision
 from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
 import logging
+import random
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
@@ -37,13 +38,25 @@ class MonasteriumDataset(VisionDataset):
     def __init__(
                 self,
                 basefolder: str,
-                subset: str,
+                subset: str = 'train',
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract: bool = True,
                 target_folder: str ='line_imgs',
                 limit: int = 0
                 ):
+        """
+        Args:
+            basefolder (str): Where the original files (pageXML documents and page images) are stored
+            subset (str): 'train' (default), 'validate' or 'test'.
+            transform (Callable): Function to apply to the PIL image at loading time.
+            target_transform (Callable): Function to apply to the transcription ground truth at loading time.
+            extract: if True (default), extract and store line images from the pages (default); 
+                     otherwise try loading the data from an existing CSV file and return.
+            target_folder: Where line images and ground truth transcriptions are created (assumed to 
+                           be relative to the caller's pwd).
+            limit (int): Stops after extracting {limit} images (for testing purpose only).
+        """
 
         trf = v2.PILToTensor()
         if transform:
@@ -65,12 +78,21 @@ class MonasteriumDataset(VisionDataset):
                 self.data = self.load_from_csv( csv_path )
             return
 
-        self.data = self.extract_lines( target_folder, limit=limit ) 
+        self.data = self.split_set( self.extract_lines( target_folder, limit=limit ), subset )
 
         # Generate a CSV file with one entry per img/transcription pair
         self.dump_to_csv( csv_path, self.data )
 
+
     def purge(self, folder: str) -> int:
+        """
+        Empty the line image subfolder: all line images and transcriptions are
+        deleted, as well as the CSV file.
+
+        Args:
+            folder (str): Name of the subfolder to purge (relative the caller's
+                          pwd
+        """
         cnt = 0
         for item in Path( folder ).iterdir():
             item.unlink()
@@ -78,13 +100,29 @@ class MonasteriumDataset(VisionDataset):
         return cnt
 
     def dump_to_csv(self, file_path: Path, data: list):
+        """
+        Create a CSV file with all pairs (<line image path>, transcription).
 
+        Args:
+            file_path (pathlib.Path): A file path (relative to the caller's pwd).
+        """
         with open( file_path, 'w' ) as of:
             for path, gt in self.data:
                 #print('{}\t{}'.format( path, gt ))
                 of.write( '{}\t{}'.format( path, gt ) )
 
+
     def load_from_csv(self, file_path: Path) -> list:
+        """
+        Load pairs (<line image path>, transcription) from an existing CSV file.
+
+        Args:
+            file_path (pathlib.Path): A file path (relative to the caller's pwd).
+
+        Returns:
+            list: A list of 2-tuples whose first element is the (relative) path of
+                  the line image and the second element is the transcription.
+        """
         with open( file_path, 'r') as infile:
             return [ pair[:-1].split('\t') for pair in infile ]
 
@@ -95,11 +133,10 @@ class MonasteriumDataset(VisionDataset):
         Maps each PageXML to its document image's Id
 
         Returns:
-
-            (dict, dict): two dictionaries, that respectively map the PageXML ids to the document
+            dict: A dictionary, that maps the PageXML id to the document
                             image ids and conversely.
         """
-        img2xml = {}
+        #img2xml = {}
         xml2img = {}
 
         mets = Path(self.basefolder).joinpath('mets').glob('*.xml')
@@ -130,7 +167,7 @@ class MonasteriumDataset(VisionDataset):
                     xml_ids.append( url_re.sub(r'\1', url) )
 
                 for img, xml in zip(img_ids, xml_ids):
-                    img2xml[img]=xml
+                    #img2xml[img]=xml
                     xml2img[xml]=img
 
         return xml2img
@@ -138,14 +175,20 @@ class MonasteriumDataset(VisionDataset):
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
-        Generate line images from the PageXML files
-        
-        - images are saved in the local directory of the consumer's program
-        
+        Generate line images from the PageXML files and save them in a local subdirectory
+        of the consumer's program.
+
+        Args:
+            target_folder (str): Line images are extracted in this subfolder (relative to the caller's pwd).
+            shape (str): Extract lines as polygon-within-bbox (default) or as bboxes.
+            text_only (bool): Store only the transcriptions (*.gt files).
+            limit (int): Stops after extracting {limit} images (for testing purpose).
+
         Returns:
-            list: an array of pairs (img_file_path, transcription)
+            list: An array of pairs (img_file_path, transcription)
 
         """
+        # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
         Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
@@ -227,10 +270,40 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
+    def split_set(self, pairs: Tuple[str, str], subset: str = 'train') -> List[ Tuple[int, int]]:
+        """
+        Split a set of pairs (<line image>, transcription>) into 3 sets: train (70%),
+        validation (10%), and test (20%).
+
+        Args:
+            pairs (tuple): A list of all pairs (<line image>, transcription>) in the dataset.
+            subset (str): Subset to return: 'train' (default), 'validate', or 'test'.
+
+        Returns:
+            list: A list of pairs, either for training, validation, or testing.
+        """
+        random.seed(10)
+        test_count = int( len(pairs)*.2 )
+        validation_count = int( len(pairs)*.1 )
+
+        all_pairs = set( pairs )
+        test_pairs = set( random.sample( all_pairs, test_count) )
+        all_pairs -= test_pairs
+
+        validation_pairs = set( random.sample( all_pairs, validation_count))
+        all_pairs -= validation_pairs
+
+        if subset == 'validate':
+            return validation_pairs
+        if subset == 'test':
+            return test_pairs
+        return list( all_pairs )
+
+
     def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
         """
         Returns:
-            tuple: a pair (image, transcription)
+            tuple: A pair (image, transcription)
         """
         transcr = self.data[index][1]
         img = self.transform( Image.open(self.data[index][0], 'r') )
@@ -240,7 +313,7 @@ class MonasteriumDataset(VisionDataset):
     def __len__(self) -> int:
         """
         Returns:
-            tuple: a pair (image, transcription)
+            tuple: A pair (image, transcription)
         """
         return len( self.data )
 
