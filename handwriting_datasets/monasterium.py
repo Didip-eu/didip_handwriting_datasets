@@ -127,7 +127,6 @@ class MonasteriumDataset(VisionDataset):
             return [ pair[:-1].split('\t') for pair in infile ]
 
 
-
     def map_pagexml_to_img_id(self) -> dict:
         """
         Maps each PageXML to its document image's Id

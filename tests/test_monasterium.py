@@ -47,6 +47,17 @@ class MonasteriumTest( unittest.TestCase ):
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls )), 7)
 
+    def test_split_set_no_overlap(self):
+        ms = MonasteriumDataset(self.bf, extract=False)
+        ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
+        train_set = set( ms.split_set( ls, 'train'))
+        validate_set = set( ms.split_set( ls, 'validate'))
+        test_set = set( ms.split_set( ls, 'test'))
+        self.assertFalse(
+                train_set.intersection( validate_set )
+             or train_set.intersection( test_set )
+             or validate_set.intersection( test_set ))
+
     def test_line_extraction_polygon_count(self):
         ms = MonasteriumDataset(self.bf, extract=False)
         lst = ms.extract_lines(self.tf, limit=5)
