@@ -45,7 +45,7 @@ class MonasteriumDataset(VisionDataset):
                 extract: bool = True,
                 segmentation_only = False,
                 target_folder: str ='line_imgs',
-                limit: int = 0
+                limit: int = 0,
                 ):
         """
         Args:
@@ -80,7 +80,6 @@ class MonasteriumDataset(VisionDataset):
             self.extract_pages( target_folder )
             return
 
-
         # when DS not created from scratch, try loading from an existing CSV file
         if not extract:
             if csv_path.exists():
@@ -99,9 +98,6 @@ class MonasteriumDataset(VisionDataset):
         (Typically used for training API that expect a file tree as an in put, such as Kraken.)
 
         """
-
-        warnings.simplefilter("error", Image.DecompressionBombWarning)
-
         Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
         self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
 
@@ -122,10 +118,18 @@ class MonasteriumDataset(VisionDataset):
                 page_root = page_tree.getroot()
                 img_orig_name = page_root.find('pc:Page', ns).get('imageFilename')
 
-                # discard XML files with no line element
+                
                 if img_orig_name and page_root.findall( './/pc:TextLine', ns ):
                     image_id = xml2img[ xml_id ]
                     img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
+
+                    # discard images that are too large
+                    warnings.simplefilter("error", Image.DecompressionBombWarning)
+                    try:
+                        Image.open( img_path, 'r')
+                    except Image.DecompressionBombWarning as dcb:
+                        print( f'{dcb}: ignoring page {img_path}' )
+                        continue
 
                     # copy image to target folder
                     target_img_path = Path( target_folder, img_orig_name )
