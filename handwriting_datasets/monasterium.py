@@ -74,11 +74,12 @@ class MonasteriumDataset(VisionDataset):
         # input PageXML files
         self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
 
+        self.data = []
+
         if segmentation_only:
             self.extract_pages( target_folder )
             return
 
-        self.data = []
 
         # when DS not created from scratch, try loading from an existing CSV file
         if not extract:
@@ -94,7 +95,7 @@ class MonasteriumDataset(VisionDataset):
 
     def extract_pages(self, target_folder: str):
         """
-        Copy provided PageXML files under a new name, that matches the image name's stem.
+        Copy provided PageXML files under a new name, that matches the image name's stem, *as referenced in the file itself*. E.g. <Page imageFilename="NA-ACK_13600725_00738_r.jpg" imageWidth="7908" imageHeight=" 5646">
         (Typically used for training API that expect a file tree as an in put, such as Kraken.)
 
         """
@@ -115,27 +116,29 @@ class MonasteriumDataset(VisionDataset):
             if xml_id not in xml2img:
                 continue
 
-            # discard XML files with no line element
             with open(page, 'r') as page_file:
                 page_tree = ET.parse( page_file )
                 ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
                 page_root = page_tree.getroot()
-                if not page_root.findall( './/pc:TextLine', ns ):
+                img_orig_name = page_root.find('pc:Page', ns).get('imageFilename')
+
+                # discard XML files with no line element
+                if img_orig_name and page_root.findall( './/pc:TextLine', ns ):
+                    image_id = xml2img[ xml_id ]
+                    img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
+
+                    # copy image to target folder
+                    target_img_path = Path( target_folder, img_orig_name )
+                    print( img_path,"-->", target_img_path )
+                    sh.copyfile( img_path, target_img_path )
+
+                    # copy xml to target folder, with name that matches image's stem
+                    target_xml_path = Path( target_folder).joinpath( Path( img_orig_name ).with_suffix('.xml'))
+                    print( page, "-->", target_xml_path )
+                    sh.copyfile( page, target_xml_path )
+                else:
                     print("XML file contains no line")
-                    continue
 
-            image_id = xml2img[ xml_id ]
-            img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
-
-            # copy image to target folder
-            target_img_path = Path( target_folder, f'{image_id}.jpg' )
-            print( img_path,"-->", target_img_path )
-            sh.copyfile( img_path, target_img_path )
-
-            # copy xml to target folder, with name that matches image's stem
-            target_xml_path = Path( target_folder, f'{image_id}.xml')
-            print( page, "-->", target_xml_path )
-            sh.copyfile( page, target_xml_path )
 
 
     def purge(self, folder: str) -> int:
