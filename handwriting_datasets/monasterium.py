@@ -14,6 +14,7 @@ from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
 import logging
 import random
+import shutil as sh
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
@@ -42,6 +43,7 @@ class MonasteriumDataset(VisionDataset):
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract: bool = True,
+                segmentation_only = False,
                 target_folder: str ='line_imgs',
                 limit: int = 0
                 ):
@@ -53,6 +55,7 @@ class MonasteriumDataset(VisionDataset):
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
             extract: if True (default), extract and store line images from the pages (default); 
                      otherwise try loading the data from an existing CSV file and return.
+            segmentation_only: if True, only generates PageXML files that share their prefix with the images (note that those MD5 aren not the same as FSDB)
             target_folder: Where line images and ground truth transcriptions are created (assumed to 
                            be relative to the caller's pwd).
             limit (int): Stops after extracting {limit} images (for testing purpose only).
@@ -68,7 +71,12 @@ class MonasteriumDataset(VisionDataset):
         self.setname = 'Monasterium'
         self.basefolder=basefolder
 
+        # input PageXML files
         self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
+
+        if segmentation_only:
+            self.extract_pages( target_folder )
+            return
 
         self.data = []
 
@@ -82,6 +90,52 @@ class MonasteriumDataset(VisionDataset):
 
         # Generate a CSV file with one entry per img/transcription pair
         self.dump_to_csv( csv_path, self.data )
+
+
+    def extract_pages(self, target_folder: str):
+        """
+        Copy provided PageXML files under a new name, that matches the image name's stem.
+        (Typically used for training API that expect a file tree as an in put, such as Kraken.)
+
+        """
+
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+
+        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
+
+        img_sizes = []
+        count = 0 # for testing purpose
+
+        xml2img = self.map_pagexml_to_img_id()
+
+        for page in [p for p in self.pagexmls]:
+
+            xml_id = Path( page ).stem
+            if xml_id not in xml2img:
+                continue
+
+            # discard XML files with no line element
+            with open(page, 'r') as page_file:
+                page_tree = ET.parse( page_file )
+                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+                page_root = page_tree.getroot()
+                if not page_root.findall( './/pc:TextLine', ns ):
+                    print("XML file contains no line")
+                    continue
+
+            image_id = xml2img[ xml_id ]
+            img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
+
+            # copy image to target folder
+            target_img_path = Path( target_folder, f'{image_id}.jpg' )
+            print( img_path,"-->", target_img_path )
+            sh.copyfile( img_path, target_img_path )
+
+            # copy xml to target folder, with name that matches image's stem
+            target_xml_path = Path( target_folder, f'{image_id}.xml')
+            print( page, "-->", target_xml_path )
+            sh.copyfile( page, target_xml_path )
 
 
     def purge(self, folder: str) -> int:
