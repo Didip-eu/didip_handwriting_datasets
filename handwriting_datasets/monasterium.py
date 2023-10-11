@@ -190,7 +190,7 @@ class MonasteriumDataset(VisionDataset):
 
     def map_pagexml_to_img_id(self) -> dict:
         """
-        Maps each PageXML to its document image's Id
+        Maps each PageXML to its document image's Id, using Transkribus METS file.
 
         Returns:
             dict: A dictionary, that maps the PageXML id to the document
