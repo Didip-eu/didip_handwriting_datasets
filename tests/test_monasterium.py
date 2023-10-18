@@ -8,16 +8,12 @@ logging.basicConfig(level=logging.DEBUG)
 
 class MonasteriumTest( unittest.TestCase ):
 
-    bf = '/home/nicolas/htr/Monasterium'
+    bf = '/home/nicolas/htr/handwriting_datasets/MonasteriumTekliaGTDataset'
     tf = 'line_imgs'
 
     def test_dataset_dummy(self):
         monasterium_data = MonasteriumDataset('.', extract=False)
         self.assertTrue(True)
-
-    def test_pagexml_to_img_id_mapping(self):
-        xml2id = MonasteriumDataset(self.bf, extract=False).map_pagexml_to_img_id()
-        self.assertTrue( len(xml2id) )
 
     def test_line_extraction_text_count(self):
         ls = MonasteriumDataset(self.bf, extract=False).extract_lines(self.tf, shape='bbox', text_only=True, limit=5)
@@ -52,11 +48,11 @@ class MonasteriumTest( unittest.TestCase ):
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         train_set = set( ms.split_set( ls, 'train'))
         validate_set = set( ms.split_set( ls, 'validate'))
-        test_set = set( ms.split_set( ls, 'test'))
+        _Dtest_set = set( ms.split_set( ls, 'test'))
         self.assertFalse(
                 train_set.intersection( validate_set )
-             or train_set.intersection( test_set )
-             or validate_set.intersection( test_set ))
+             or train_set.intersection( _Dtest_set )
+             or validate_set.intersection( _Dtest_set ))
 
     def test_line_extraction_polygon_count(self):
         ms = MonasteriumDataset(self.bf, extract=False)
@@ -79,7 +75,7 @@ class MonasteriumTest( unittest.TestCase ):
 
     def Dtest_dataset_full(self):
         ms = MonasteriumDataset(self.bf, subset='train', target_folder='line_imgs')
-        self.assertEqual( len( ms ), 3033 )
+        self.assertEqual( len( ms ), 5897 )
 
     def test_dataset_csv_dump(self):
         ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, limit=10)
@@ -94,14 +90,20 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
 """
         ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, limit=5)
         
-        csv_file = Path(self.tf, 'monasterium_ds.csv')
+        target_folder = 'tests'
+        csv_file = Path(target_folder, 'monasterium_ds.csv')
         with open(csv_file, 'w') as of:
             of.write(test_csv)
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, extract=False)
+        ms = MonasteriumDataset(self.bf, subset='train', target_folder=target_folder, extract=False)
         if csv_file.exists():
             csv_file.unlink()
         self.assertEqual( len(ms), 5 )
 
+    def Dtest_gentle_fail_on_empty_transcriptions(self):
+
+        ms_with_empty_gt_lines = "MonasteriumTekliaGTDataset/NA-ACK_13231001_00103_r.xml"
+
+        
 
 
 if __name__ == "__main__":

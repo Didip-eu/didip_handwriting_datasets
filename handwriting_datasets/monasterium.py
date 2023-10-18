@@ -23,10 +23,10 @@ from torchvision.transforms import v2
 
 
 """
-Generate image/GT pairs for Monasterium transcriptions
+Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, generic dataset class, that can be used to generate
 
-1. Use the metadata files (in ./mets) to map PageXML files (in ./page_urls) with the images they describe (in ./page_imgs)
-2. Extract line polygons from each image and their respective transcriptions from the PageXML file
+- line-segmentation dataset
+- HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
 
 """
 
@@ -72,7 +72,7 @@ class MonasteriumDataset(VisionDataset):
         self.basefolder=basefolder
 
         # input PageXML files
-        self.pagexmls = Path(self.basefolder).joinpath('page_urls').glob('*.xml')
+        self.pagexmls = Path(self.basefolder).glob('*.xml')
 
         self.data = []
 
@@ -90,59 +90,6 @@ class MonasteriumDataset(VisionDataset):
 
         # Generate a CSV file with one entry per img/transcription pair
         self.dump_to_csv( csv_path, self.data )
-
-
-    def extract_pages(self, target_folder: str):
-        """
-        Copy provided PageXML files under a new name, that matches the image name's stem, *as referenced in the file itself*. E.g. <Page imageFilename="NA-ACK_13600725_00738_r.jpg" imageWidth="7908" imageHeight=" 5646">
-        (Typically used for training API that expect a file tree as an in put, such as Kraken.)
-
-        """
-        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
-
-        img_sizes = []
-        count = 0 # for testing purpose
-
-        xml2img = self.map_pagexml_to_img_id()
-
-        for page in [p for p in self.pagexmls]:
-
-            xml_id = Path( page ).stem
-            if xml_id not in xml2img:
-                continue
-
-            with open(page, 'r') as page_file:
-                page_tree = ET.parse( page_file )
-                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
-                page_root = page_tree.getroot()
-                img_orig_name = page_root.find('pc:Page', ns).get('imageFilename')
-
-                
-                if img_orig_name and page_root.findall( './/pc:TextLine', ns ):
-                    image_id = xml2img[ xml_id ]
-                    img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
-
-                    # discard images that are too large
-                    warnings.simplefilter("error", Image.DecompressionBombWarning)
-                    try:
-                        Image.open( img_path, 'r')
-                    except Image.DecompressionBombWarning as dcb:
-                        print( f'{dcb}: ignoring page {img_path}' )
-                        continue
-
-                    # copy image to target folder
-                    target_img_path = Path( target_folder, img_orig_name )
-                    print( img_path,"-->", target_img_path )
-                    sh.copyfile( img_path, target_img_path )
-
-                    # copy xml to target folder, with name that matches image's stem
-                    target_xml_path = Path( target_folder).joinpath( Path( img_orig_name ).with_suffix('.xml'))
-                    print( page, "-->", target_xml_path )
-                    sh.copyfile( page, target_xml_path )
-                else:
-                    print("XML file contains no line")
-
 
 
     def purge(self, folder: str) -> int:
@@ -188,50 +135,6 @@ class MonasteriumDataset(VisionDataset):
             return [ pair[:-1].split('\t') for pair in infile ]
 
 
-    def map_pagexml_to_img_id(self) -> dict:
-        """
-        Maps each PageXML to its document image's Id, using Transkribus METS file.
-
-        Returns:
-            dict: A dictionary, that maps the PageXML id to the document
-                            image ids and conversely.
-        """
-        #img2xml = {}
-        xml2img = {}
-
-        mets = Path(self.basefolder).joinpath('mets').glob('*.xml')
-
-        for met in mets:
-            with open(met, 'r') as met_file:
-                met_tree = ET.parse( met_file )
-                ns = {  'ns2': "http://www.w3.org/1999/xlink",
-                        'ns3': "http://www.loc.gov/METS/" }
-
-                met_root = met_tree.getroot()
-
-                url_re = re.compile(r'.*id=([A-Z]+)&?.*')
-
-                img_grp = met_root.find(".//ns3:fileGrp[@ID='IMG']", ns)
-                xml_grp = met_root.find(".//ns3:fileGrp[@ID='PAGEXML']", ns)
-
-                img_ids=[]
-                xml_ids=[]
-
-                for img_tag in img_grp.findall(".//ns3:FLocat", ns):
-                    url = img_tag.get(f"{{{ns['ns2']}}}href")
-                    img_ids.append( url_re.sub(r'\1', url) )
-
-
-                for xml_tag in xml_grp.findall(".//ns3:FLocat", ns):
-                    url = xml_tag.get(f"{{{ns['ns2']}}}href")
-                    xml_ids.append( url_re.sub(r'\1', url) )
-
-                for img, xml in zip(img_ids, xml_ids):
-                    #img2xml[img]=xml
-                    xml2img[xml]=img
-
-        return xml2img
-
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
@@ -258,17 +161,13 @@ class MonasteriumDataset(VisionDataset):
         img_sizes = []
         count = 0 # for testing purpose
 
-        xml2img = self.map_pagexml_to_img_id()
-
         items = []
 
         for page in self.pagexmls:
 
             xml_id = Path( page ).stem
-            if xml_id not in xml2img:
-                continue
-            image_id = xml2img[ xml_id ]
-            img_path = Path(self.basefolder, 'page_imgs', f'{image_id}.jpg')
+            img_path = Path(self.basefolder, f'{xml_id}.jpg')
+            print( img_path )
 
             with open(page, 'r') as page_file:
 
@@ -293,11 +192,16 @@ class MonasteriumDataset(VisionDataset):
                     textline = dict()
                     textline['id']=textline_elt.get("id")
                     textline['transcription']=textline_elt.find('./pc:TextEquiv', ns).find('./pc:Unicode', ns).text
+
+                    # skip lines that don't have a transcription
+                    if not textline['transcription']:
+                        continue
+
                     polygon_string=textline_elt.find('./pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
                     img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
-                    img_path_prefix = Path(target_folder, image_id + "-" + textline['id'] )
+                    img_path_prefix = Path(target_folder, f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
 
                     items.append( (textline['img_path'], textline['transcription']) ) 
