@@ -16,6 +16,8 @@ import logging
 import random
 import shutil as sh
 
+from . import download_utils as du
+
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
 
@@ -27,6 +29,13 @@ Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, gen
 
 - line-segmentation dataset
 - HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
+- TODO: make downloadable
+
+Directory structure for local storage:
+
+- basefolder : location where is to be downloaded and its content to be extracted (i.e. a subdirectory
+  'MonasteriumTekliaGTDataset' containing all image files)
+- target_folder: where to create the dataset to be used for given task (segmentation or htr)
 
 """
 
@@ -36,26 +45,39 @@ logger = logging.getLogger()
 
 class MonasteriumDataset(VisionDataset):
 
+    dataset_file = {
+            #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
+            'url': 'https://drive.google.com/uc?export=download&id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
+            'filename': 'MonasteriumTekliaGTDataset.tar.gz',
+            'md5': '7d3974eb45b2279f340cc9b18a53b47a',
+            'desc': 'Monasterium ground truth data (Teklia)',
+            'origin': 'google',
+    }
+
     def __init__(
                 self,
                 basefolder: str,
                 subset: str = 'train',
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
-                extract: bool = True,
+                extract_pages: bool = True,
+                extract_lines: bool = False,
                 segmentation_only = False,
                 target_folder: str ='line_imgs',
                 limit: int = 0,
                 ):
         """
         Args:
-            basefolder (str): Where the original files (pageXML documents and page images) are stored
+            basefolder (str): Where the subfolder containing original files (pageXML documents and page images) 
+                           is to be created.
             subset (str): 'train' (default), 'validate' or 'test'.
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
-            extract: if True (default), extract and store line images from the pages (default); 
-                     otherwise try loading the data from an existing CSV file and return.
-            segmentation_only: if True, only generates PageXML files that share their prefix with the images (note that those MD5 aren not the same as FSDB)
+            extract_pages: if True (default), assumes that the dataset archive has already been extracted in 
+                           the base folder.
+            extract_lines: if True (default), extract and store line images from the pages (default); 
+                           otherwise try loading the data from an existing CSV file and return.
+            segmentation_only: if True, do not extract the lines.
             target_folder: Where line images and ground truth transcriptions are created (assumed to 
                            be relative to the caller's pwd).
             limit (int): Stops after extracting {limit} images (for testing purpose only).
@@ -68,20 +90,27 @@ class MonasteriumDataset(VisionDataset):
         csv_path = Path(target_folder, 'monasterium_ds.csv')
 
         super().__init__(basefolder, transform=trf, target_transform=target_transform )
-        self.setname = 'Monasterium'
+        self.setname = 'MonasteriumTekliaGTDataset'
         self.basefolder=basefolder
 
+        basefolder_path = Path( basefolder )
+        if not basefolder_path.is_dir():
+            print("Cannot extract archive: folder {basefolder} should be created first.", file=sys.stderr)
+            sys.exit()
+
+        self.download_and_extract( basefolder_path, basefolder_path, self.dataset_file, extract_pages)
+
         # input PageXML files
-        self.pagexmls = Path(self.basefolder).glob('*.xml')
+        self.pagexmls = Path(basefolder).glob('*.xml')
 
         self.data = []
 
-        if segmentation_only:
-            self.extract_pages( target_folder )
+        # if archive has not been extracted, no point going further
+        if not extract_pages or segmentation_only:
             return
 
         # when DS not created from scratch, try loading from an existing CSV file
-        if not extract:
+        if not extract_lines:
             if csv_path.exists():
                 self.data = self.load_from_csv( csv_path )
             return
@@ -90,6 +119,50 @@ class MonasteriumDataset(VisionDataset):
 
         # Generate a CSV file with one entry per img/transcription pair
         self.dump_to_csv( csv_path, self.data )
+
+
+#
+    def download_and_extract(
+            self,
+            root: str,
+            base_folder_path: Path,
+            fl_meta: dict,
+            extract=True) -> None:
+        """
+        Download the archive and extract it. If a valid archive already exists in the root location,
+        extract only.
+
+        TODO: factor out in utility module ??
+
+        Args:
+            root: where to save the archive
+            base_folder: where to extract (any valid path)
+            fl_meta: a dict with file meta-info (keys: url, filename, md5, origin, desc)
+        """
+        output_file_path = Path(root, fl_meta['filename'])
+
+        #print( fl_meta, type(fl_meta['md5']) )
+        if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
+            print("Downloading archive...")
+            du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
+
+        if not base_folder_path.exists() or not base_folder_path.is_dir():
+            raise OSError("Base folder does not exist! Aborting.")
+
+        # line images
+        if not extract:
+            return
+        if output_file_path.suffix == '.tgz' or output_file_path.suffixes == [ '.tar', '.gz' ] :
+            with tarfile.open(output_file_path, 'r:gz') as archive:
+                print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
+                archive.extractall( base_folder_path )
+        # task description
+        elif output_file_path.suffix == '.zip':
+            with zipfile.ZipFile(output_file_path, 'r' ) as archive:
+                print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
+                archive.extractall( base_folder_path )
+
+
 
 
     def purge(self, folder: str) -> int:
@@ -288,4 +361,4 @@ class MonasteriumDataset(VisionDataset):
                 len( [ i for i in Path(folder).glob('*.gt') ] ),
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
-#
+
