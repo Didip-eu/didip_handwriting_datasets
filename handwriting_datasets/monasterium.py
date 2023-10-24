@@ -15,6 +15,7 @@ import torchvision.transforms as transforms
 import logging
 import random
 import shutil as sh
+import tarfile
 
 from . import download_utils as du
 
@@ -47,7 +48,7 @@ class MonasteriumDataset(VisionDataset):
 
     dataset_file = {
             #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
-            'url': 'https://drive.google.com/uc?export=download&id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
+            'url': r'https://drive.google.com/uc?id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
             'filename': 'MonasteriumTekliaGTDataset.tar.gz',
             'md5': '7d3974eb45b2279f340cc9b18a53b47a',
             'desc': 'Monasterium ground truth data (Teklia)',
@@ -64,7 +65,7 @@ class MonasteriumDataset(VisionDataset):
                 extract_lines: bool = False,
                 segmentation_only = False,
                 target_folder: str ='line_imgs',
-                limit: int = 0,
+                line_count: int = 0,
                 ):
         """
         Args:
@@ -80,7 +81,7 @@ class MonasteriumDataset(VisionDataset):
             segmentation_only: if True, do not extract the lines.
             target_folder: Where line images and ground truth transcriptions are created (assumed to 
                            be relative to the caller's pwd).
-            limit (int): Stops after extracting {limit} images (for testing purpose only).
+            line_count (int): Stops after extracting {line_count} images (for testing purpose only).
         """
 
         trf = v2.PILToTensor()
@@ -90,6 +91,8 @@ class MonasteriumDataset(VisionDataset):
         csv_path = Path(target_folder, 'monasterium_ds.csv')
 
         super().__init__(basefolder, transform=trf, target_transform=target_transform )
+
+        # the tarball's top folder
         self.setname = 'MonasteriumTekliaGTDataset'
         self.basefolder=basefolder
 
@@ -100,8 +103,8 @@ class MonasteriumDataset(VisionDataset):
 
         self.download_and_extract( basefolder_path, basefolder_path, self.dataset_file, extract_pages)
 
-        # input PageXML files
-        self.pagexmls = Path(basefolder).glob('*.xml')
+        # input PageXML files are at the root of the resulting tree
+        self.pagexmls = Path(basefolder, self.setname).glob('*.xml')
 
         self.data = []
 
@@ -115,7 +118,7 @@ class MonasteriumDataset(VisionDataset):
                 self.data = self.load_from_csv( csv_path )
             return
 
-        self.data = self.split_set( self.extract_lines( target_folder, limit=limit ), subset )
+        self.data = self.split_set( self.extract_lines( target_folder, limit=line_count ), subset )
 
         # Generate a CSV file with one entry per img/transcription pair
         self.dump_to_csv( csv_path, self.data )
@@ -175,7 +178,7 @@ class MonasteriumDataset(VisionDataset):
                           pwd
         """
         cnt = 0
-        for item in Path( folder ).iterdir():
+        for item in [ f for f in Path( folder ).iterdir() if not f.is_dir()]:
             item.unlink()
             cnt += 1
         return cnt
@@ -239,7 +242,7 @@ class MonasteriumDataset(VisionDataset):
         for page in self.pagexmls:
 
             xml_id = Path( page ).stem
-            img_path = Path(self.basefolder, f'{xml_id}.jpg')
+            img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
             print( img_path )
 
             with open(page, 'r') as page_file:
