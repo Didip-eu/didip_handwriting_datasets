@@ -112,8 +112,6 @@ class MonasteriumDataset(VisionDataset):
         if not extract_pages or not task:
             return
 
-            return
-
         if task == 'htr':
             # when DS not created from scratch, try loading from an existing CSV file
             # TO-DO: make generic for both tasks
@@ -245,7 +243,6 @@ class MonasteriumDataset(VisionDataset):
 
             xml_id = Path( page ).stem
             img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
-            print( img_path )
 
             with open(page, 'r') as page_file:
 
@@ -270,11 +267,12 @@ class MonasteriumDataset(VisionDataset):
                     textregion = dict()
                     textregion['id']=textregion_elt.get("id")
 
-                    polygon_string=textregion_elt.find('./pc:Coords', ns).get('points')
+                    polygon_string=textregion_elt.find('pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textregion['bbox'] = IP.Path( coordinates ).getbbox()
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
+                    textregion['size'] = [ '{:.0f}'.format( textregion['bbox'][i+2]-textregion['bbox'][i] ) for i in (0,1) ]
 
                     #items.append( (textregion['img_path'], textline['transcription']) ) 
                     if not text_only:
@@ -297,32 +295,39 @@ class MonasteriumDataset(VisionDataset):
             ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
             page_root = page_tree.getroot()
             page_elt = page_root.find('pc:Page', ns)
-
             for region_elt in page_elt.findall('pc:TextRegion', ns):
                 if region_elt.get('id') != textregion['id']:
+                    #print(f'Removing region {region_elt.get("id")}')
                     page_elt.remove( region_elt )
                 else:
+                    # Shift text region's new coordinates (they now cover the whole image)
+                    coord_elt = region_elt.find('pc:Coords', ns)
+                    rg_bbox_str = '0,0 {},{}'.format( textregion['size'][0], textregion['size'][1] )
+                    coord_elt.set( 'points', rg_bbox_str )
                     # substract region's coordinates from lines coordinates
-                    for line in region_elt.findall('pc:TextLine', ns):
-                        coord_elt = line.find('pc:Coords', ns)
-                        coordinates =  [ tuple(map(int, pt.split(','))) for pt in coord_elt.get('points').split(' ') ]
-                        print( "Old coordinates =", coordinates)
-                        print( "text region BBox =", textregion['bbox'] )
-                        x_off, y_off = textregion['bbox'][:2]
-                        print( "Offset =", x_off, y_off)
-                        coordinates = [ (
+                    for line_elt in region_elt.findall('pc:TextLine', ns):
+                        #print(f"Line {line_elt.get('id')}")
+                        for elt_name in ['pc:Coords', 'pc:Baseline']:
+                            elt = line_elt.find( elt_name, ns)
+                            if elt is None:
+                                print('Page {}, region {}: could not find element {} for line {}'.format(
+                                    page, region_elt.get('id'), elt_name, line_elt.get('id')))
+                                continue
+                            points =  [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ]
+                            #print( "Old points =", points)
+                            #print( "text region BBox =", textregion['bbox'] )
+                            x_off, y_off = textregion['bbox'][:2]
+                            #print( "Offset =", x_off, y_off)
+                            points = [ (
                                         pt[0]-x_off if pt[0]>x_off else 0, 
-                                        pt[1]-y_off if pt[1]>y_off else 0) for pt in coordinates ]
-                        print( "New coordinates =", coordinates)
-                        transposed_polygon_str = ' '.join([ ','.join([str(p) for p in pt]) for pt in coordinates ] )
-                        print("Transposed polygon str =", transposed_polygon_str )
-                        coord_elt.set('points', transposed_polygon_str)
-                        #sys.exit()
-
+                                        pt[1]-y_off if pt[1]>y_off else 0) for pt in points ]
+                            #print( "New points =", points)
+                            transposed_point_str = ' '.join([ ','.join(['{:.0f}'.format(p) for p in pt]) for pt in points ] )
+                            #print("Transposed point str =", transposed_point_str )
+                            elt.set('points', transposed_point_str)
 
             page_tree.write( textregion['img_path'].with_suffix('.xml') )
 
-        
 
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
@@ -356,7 +361,7 @@ class MonasteriumDataset(VisionDataset):
 
             xml_id = Path( page ).stem
             img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
-            print( img_path )
+            #print( img_path )
 
             with open(page, 'r') as page_file:
 
