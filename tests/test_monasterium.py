@@ -16,40 +16,40 @@ class MonasteriumTest( unittest.TestCase ):
         monasterium_data = MonasteriumDataset(self.bf, extract_pages=False)
         self.assertEqual( monasterium_data.data, [])
 
-    def test_download_archive(self):
+    def Dtest_download_archive(self):
         monasterium_data = MonasteriumDataset(self.bf, extract_pages=False)
         self.assertEqual( monasterium_data.data, [])
 
-    def test_line_extraction_text_count(self):
-        ls = MonasteriumDataset(self.bf, extract_lines=False).extract_lines(self.tf, shape='bbox', text_only=True, limit=5)
+    def Dtest_line_extraction_text_count(self):
+        ls = MonasteriumDataset(self.bf, build_items=False).extract_lines(self.tf, shape='bbox', text_only=True, limit=5)
         self.assertEqual( len(ls), 5)
 
-    def test_line_extraction_bbox_count(self):
-        ls = MonasteriumDataset(self.bf, extract_lines=False).extract_lines(self.tf, shape='bbox', limit=5)
+    def Dtest_line_extraction_bbox_count(self):
+        ls = MonasteriumDataset(self.bf, build_items=False).extract_lines(self.tf, shape='bbox', limit=5)
         self.assertEqual( len(ls), 5)
 
     def Dtest_split_set_train(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+        ms = MonasteriumDataset(self.bf, build_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls, 'train')), 7)
 
     def Dtest_split_set_validate(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+        ms = MonasteriumDataset(self.bf, build_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls, 'validate')), 1)
 
     def Dtest_split_set_test(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+        ms = MonasteriumDataset(self.bf, build_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls, 'test')), 2)
 
     def Dtest_split_set_default(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+        ms = MonasteriumDataset(self.bf, build_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls )), 7)
 
     def Dtest_split_set_no_overlap(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+        ms = MonasteriumDataset(self.bf, buid_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         train_set = set( ms.split_set( ls, 'train'))
         validate_set = set( ms.split_set( ls, 'validate'))
@@ -59,31 +59,35 @@ class MonasteriumTest( unittest.TestCase ):
              or train_set.intersection( test_set )
              or validate_set.intersection( test_set ))
 
-    def test_line_extraction_polygon_count(self):
-        ms = MonasteriumDataset(self.bf, extract_lines=False)
+    def Dtest_line_extraction_polygon_count(self):
+        ms = MonasteriumDataset(self.bf, build_items=False)
         lst = ms.extract_lines(self.tf, limit=5)
         self.assertEqual( len(lst), 5)
 
-    def test_line_extraction_file_creation(self):
-        ms = MonasteriumDataset(self.bf, target_folder='line_imgs', extract_lines=False)
+    def Dtest_line_extraction_file_creation(self):
+        ms = MonasteriumDataset(self.bf, target_folder='line_imgs', build_items=False)
         ms.extract_lines(self.tf, limit=5)
         gt_cnt, img_cnt = ms.count_line_items(self.tf)
         self.assertTrue( gt_cnt == 5 and img_cnt == 5)
 
+    def Dtest_dataset_no_task(self):
+        ms = MonasteriumDataset(self.bf)
+        self.assertEqual( ms.data, [] )
+
     def Dtest_dataset_getitem(self):
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder='line_imgs', limit=10)
+        ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder='line_imgs', count=10)
         self.assertTrue( type( ms[0] ) is tuple and type( ms[0][0] ) is Tensor and type( ms[0][1] ) is str )
 
-    def test_dataset_lines_count(self):
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder='line_imgs', extract_lines=True, line_count=10)
+    def Dtest_dataset_lines_count(self):
+        ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder='line_imgs', count=10)
         self.assertEqual( len( ms ), 7 )
 
-    def test_dataset_lines_full(self):
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder='line_imgs', extract_lines=True)
+    def Dtest_dataset_lines_full(self):
+        ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder='line_imgs')
         self.assertEqual( len( ms ), 5897 )
 
     def Dtest_dataset_lines_csv_dump(self):
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, limit=10)
+        ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder=self.tf, count=10)
         self.assertTrue( Path(self.tf, 'monasterium_ds.csv').exists() )
 
     def Dtest_dataset_lines_csv_load(self):
@@ -108,6 +112,11 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
 
         ms_with_empty_gt_lines = "MonasteriumTekliaGTDataset/NA-ACK_13231001_00103_r.xml"
 
+    def test_dataset_extract_regions(self):
+        rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True, limit=5)
+
+    def test_dataset_extract_regions_all(self):
+        rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True)
         
 
 

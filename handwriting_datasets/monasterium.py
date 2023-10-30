@@ -62,10 +62,10 @@ class MonasteriumDataset(VisionDataset):
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = True,
-                extract_lines: bool = False,
-                segmentation_only = False,
+                build_items: bool = True,
+                task: str = '',
                 target_folder: str ='line_imgs',
-                line_count: int = 0,
+                count: int = 0,
                 ):
         """
         Args:
@@ -74,14 +74,14 @@ class MonasteriumDataset(VisionDataset):
             subset (str): 'train' (default), 'validate' or 'test'.
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
-            extract_pages: if True (default), assumes that the dataset archive has already been extracted in 
-                           the base folder.
-            extract_lines: if True (default), extract and store line images from the pages (default); 
-                           otherwise try loading the data from an existing CSV file and return.
-            segmentation_only: if True, do not extract the lines.
+            extract_pages (bool): if True (default), extract the archive's content into the base folder.
+            task (str): 'htr' for HTR set = pairs (line, transcription), 'segm' for segmentation 
+                        = cropped TextRegion images, with corresponding PageXML files. Default: ''
+            build_items (bool): if True (default), extract and store images for the task from the pages; 
+                     otherwise try loading the data from existing, cached data.
             target_folder: Where line images and ground truth transcriptions are created (assumed to 
                            be relative to the caller's pwd).
-            line_count (int): Stops after extracting {line_count} images (for testing purpose only).
+            count (int): Stops after extracting {count} image items (for testing purpose only).
         """
 
         trf = v2.PILToTensor()
@@ -109,20 +109,26 @@ class MonasteriumDataset(VisionDataset):
         self.data = []
 
         # if archive has not been extracted, no point going further
-        if not extract_pages or segmentation_only:
+        if not extract_pages or not task:
             return
 
-        # when DS not created from scratch, try loading from an existing CSV file
-        if not extract_lines:
-            if csv_path.exists():
-                self.data = self.load_from_csv( csv_path )
             return
 
-        self.data = self.split_set( self.extract_lines( target_folder, limit=line_count ), subset )
-
-        # Generate a CSV file with one entry per img/transcription pair
-        self.dump_to_csv( csv_path, self.data )
-
+        if task == 'htr':
+            # when DS not created from scratch, try loading from an existing CSV file
+            # TO-DO: make generic for both tasks
+            if not build_items:
+                if csv_path.exists():
+                    self.data = self.load_from_csv( csv_path )
+            else:
+                self.data = self.split_set( self.extract_lines( target_folder, limit=count ), subset )
+                # Generate a CSV file with one entry per img/transcription pair
+                self.dump_to_csv( csv_path, self.data )
+        elif task == 'segm':
+            if not build_items:
+                pass
+            else:
+                self.data = self.extract_text_regions( target_folder, limit=count )
 
 #
     def download_and_extract(
@@ -211,6 +217,113 @@ class MonasteriumDataset(VisionDataset):
             return [ pair[:-1].split('\t') for pair in infile ]
 
 
+    def extract_text_regions(self, target_folder: str, text_only=False, limit=0) -> List[Tuple[str, str]]:
+        """
+        Crop text regions from original files, and create a new dataset for segmentation where text region image 
+        has a corresponding, new PageXML decriptor.
+
+        Args:
+            target_folder (str): Line images are extracted in this subfolder (relative to the caller's pwd).
+            limit (int): Stops after extracting {limit} images (for testing purpose).
+
+        Returns:
+            list: An array of pairs (img_file_path, transcription)
+        """
+        # filtering out Godzilla-sized images (a couple of them)
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+
+        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
+
+        gt_lengths = []
+        img_sizes = []
+        count = 0 # for testing purpose
+
+        items = []
+
+        for page in self.pagexmls:
+
+            xml_id = Path( page ).stem
+            img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
+            print( img_path )
+
+            with open(page, 'r') as page_file:
+
+                page_tree = ET.parse( page_file )
+
+                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+
+                page_root = page_tree.getroot()
+
+                if not text_only:
+
+                    try:
+                        page_image = Image.open( img_path, 'r')
+                    except Image.DecompressionBombWarning as dcb:
+                        logger.debug( f'{dcb}: ignoring page' )
+                        continue
+
+                for textregion_elt in page_root.findall( './/pc:TextRegion', ns ):
+                    if limit and count == limit:
+                        return items
+
+                    textregion = dict()
+                    textregion['id']=textregion_elt.get("id")
+
+                    polygon_string=textregion_elt.find('./pc:Coords', ns).get('points')
+                    coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
+                    textregion['bbox'] = IP.Path( coordinates ).getbbox()
+                    img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
+                    textregion['img_path'] = img_path_prefix.with_suffix('.png')
+
+                    #items.append( (textregion['img_path'], textline['transcription']) ) 
+                    if not text_only:
+                        bbox_img = page_image.crop( textregion['bbox'] )
+
+                        bbox_img.save( textline['img_path'] )
+
+                    # create a new PageXML file whose a single text region that covers the whole image, 
+                    # where line coordinates have been shifted accordingly
+                    self.write_region_to_xml( page, ns, textregion )
+
+                    count += 1
+
+        return items
+
+
+    def write_region_to_xml( self, page, ns, textregion ):
+        with open( page, 'r') as page_file:
+            page_tree = ET.parse( page_file )
+            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+            page_root = page_tree.getroot()
+            page_elt = page_root.find('pc:Page', ns)
+
+            for region_elt in page_elt.findall('pc:TextRegion', ns):
+                if region_elt.get('id') != textregion['id']:
+                    page_elt.remove( region_elt )
+                else:
+                    # substract region's coordinates from lines coordinates
+                    for line in region_elt.findall('pc:TextLine', ns):
+                        coord_elt = line.find('pc:Coords', ns)
+                        coordinates =  [ tuple(map(int, pt.split(','))) for pt in coord_elt.get('points').split(' ') ]
+                        print( "Old coordinates =", coordinates)
+                        print( "text region BBox =", textregion['bbox'] )
+                        x_off, y_off = textregion['bbox'][:2]
+                        print( "Offset =", x_off, y_off)
+                        coordinates = [ (
+                                        pt[0]-x_off if pt[0]>x_off else 0, 
+                                        pt[1]-y_off if pt[1]>y_off else 0) for pt in coordinates ]
+                        print( "New coordinates =", coordinates)
+                        transposed_polygon_str = ' '.join([ ','.join([str(p) for p in pt]) for pt in coordinates ] )
+                        print("Transposed polygon str =", transposed_polygon_str )
+                        coord_elt.set('points', transposed_polygon_str)
+                        #sys.exit()
+
+
+            page_tree.write( textregion['img_path'].with_suffix('.xml') )
+
+        
+
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
@@ -276,7 +389,7 @@ class MonasteriumDataset(VisionDataset):
                     polygon_string=textline_elt.find('./pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
-                    img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
+                    #img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
 
