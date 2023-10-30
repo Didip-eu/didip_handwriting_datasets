@@ -272,7 +272,7 @@ class MonasteriumDataset(VisionDataset):
                     textregion['bbox'] = IP.Path( coordinates ).getbbox()
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
-                    textregion['size'] = [ '{:.0f}'.format( textregion['bbox'][i+2]-textregion['bbox'][i] ) for i in (0,1) ]
+                    textregion['size'] = [ '{:.0f}'.format( textregion['bbox'][i+2]-textregion['bbox'][i]+1 ) for i in (0,1) ]
 
                     #items.append( (textregion['img_path'], textline['transcription']) ) 
                     if not text_only:
