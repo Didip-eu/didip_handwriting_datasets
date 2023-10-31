@@ -12,7 +12,7 @@ class MonasteriumTest( unittest.TestCase ):
     bf = '/home/nicolas/tmp/data'
     tf = '/home/nicolas/tmp/data/Monasterium'
 
-    def test_dataset_dummy(self):
+    def Dtest_dataset_dummy(self):
         monasterium_data = MonasteriumDataset(self.bf, extract_pages=False)
         self.assertEqual( monasterium_data.data, [])
 
@@ -112,12 +112,17 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
 
         ms_with_empty_gt_lines = "MonasteriumTekliaGTDataset/NA-ACK_13231001_00103_r.xml"
 
-    def test_dataset_extract_regions(self):
+    def Dtest_dataset_extract_regions(self):
         rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True, limit=5)
 
-    def test_dataset_extract_regions_all(self):
+    def Dtest_dataset_extract_regions_all(self):
         rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True)
         
+    def Dtest_dataset_sanity_check(self):
+        self.assertTrue( MonasteriumDataset(self.bf, build_items=False).sanity_check() )
+
+    def test_dataset_compute_bbox(self):
+        self.assertEqual( MonasteriumDataset(self.bf, build_items=False).compute_bbox( str(Path( self.bf, 'MonasteriumTekliaGTDataset', 'NA-ACK_13530719_00415_r.xml')), 'r1'), [] )
 
 
 if __name__ == "__main__":

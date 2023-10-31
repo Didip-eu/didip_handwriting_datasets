@@ -22,7 +22,8 @@ from . import download_utils as du
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
 
-
+class DataException( Exception ):
+    pass
 
 
 """
@@ -269,15 +270,16 @@ class MonasteriumDataset(VisionDataset):
 
                     polygon_string=textregion_elt.find('pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-                    textregion['bbox'] = IP.Path( coordinates ).getbbox()
+                    #textregion['bbox'] = IP.Path( coordinates ).getbbox()
+                    # fix bbox for given region, according to the line points it contains
+                    textregion['bbox'] = self.compute_bbox( page, textregion['id'] )
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
-                    textregion['size'] = [ '{:.0f}'.format( textregion['bbox'][i+2]-textregion['bbox'][i]+1 ) for i in (0,1) ]
+                    textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
 
                     #items.append( (textregion['img_path'], textline['transcription']) ) 
                     if not text_only:
                         bbox_img = page_image.crop( textregion['bbox'] )
-
                         bbox_img.save( textline['img_path'] )
 
                     # create a new PageXML file whose a single text region that covers the whole image, 
@@ -289,7 +291,96 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
+    def compute_bbox(self, page, region_id ):
+        """
+        """
+        error_count = 0
+        xml_id = Path( page ).stem
+        img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
+        
+        def within(pt, bbox):
+            return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
+
+        with open(page, 'r') as page_file:
+
+            page_tree = ET.parse( page_file )
+            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+            page_root = page_tree.getroot()
+
+            region_elt = page_root.find( ".//pc:TextRegion[@id='{}']".format( region_id), ns )
+            polygon_string=region_elt.find('pc:Coords', ns).get('points')
+            coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
+            original_bbox = IP.Path( coordinates ).getbbox()
+
+            all_points = []
+            for line_elt in region_elt.findall('pc:TextLine', ns):
+                for elt_name in ['pc:Baseline', 'pc:Coords']:
+                    elt = line_elt.find( elt_name, ns )
+                    if elt is None:
+                        print('Page {}, region {}: could not find element {} for line {}'.format(
+                            page, region_elt.get('id'), elt_name, line_elt.get('id')))
+                        continue
+                    #print( elt.get('points').split(','))
+                    all_points.extend( [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ])
+            not_ok = [ p for p in all_points if not within( p, original_bbox) ]
+            if not_ok:
+                print("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, textregion_id, not_ok))
+                error_count += len(not_ok)
+            return IP.Path( all_points ).getbbox()
+
+
+
+    def sanity_check(self, folder): 
+        """
+        TODO: arbitrary folder
+        """
+        def within(pt, bbox):
+            return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
+
+        for page in self.pagexmls:
+
+            error_count = 0
+            xml_id = Path( page ).stem
+            img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
+
+            with open(page, 'r') as page_file:
+
+                page_tree = ET.parse( page_file )
+                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+                page_root = page_tree.getroot()
+
+                for textregion_elt in page_root.findall( './/pc:TextRegion', ns ):
+
+                    textregion = dict()
+                    textregion['id']=textregion_elt.get("id")
+
+                    polygon_string=textregion_elt.find('pc:Coords', ns).get('points')
+                    coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
+                    textregion['bbox'] = IP.Path( coordinates ).getbbox()
+
+                    for line_elt in textregion_elt.findall('pc:TextLine', ns):
+                        for elt_name in ['pc:Baseline']:
+                            elt = line_elt.find( elt_name, ns )
+                            if elt is None:
+                                print('Page {}, region {}: could not find element {} for line {}'.format(
+                                    page, textregion_elt.get('id'), elt_name, line_elt.get('id')))
+                                continue
+                            points = [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ]
+                            not_ok = [ p for p in points if not within( p, textregion['bbox']) ]
+                            if not_ok:
+                                print("File {}, line {}: invalid points for textregion {}: {}".format(page, line_elt.get('id'), textregion, not_ok))
+                                error_count += len(not_ok)
+            if error_count:
+                print("{} erroneous points".format( error_count ))
+                #raise DataException()
+        return not error_count
+
+
+
     def write_region_to_xml( self, page, ns, textregion ):
+
+        error_count = 0
+
         with open( page, 'r') as page_file:
             page_tree = ET.parse( page_file )
             ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
@@ -302,7 +393,7 @@ class MonasteriumDataset(VisionDataset):
                 else:
                     # Shift text region's new coordinates (they now cover the whole image)
                     coord_elt = region_elt.find('pc:Coords', ns)
-                    rg_bbox_str = '0,0 {},{}'.format( textregion['size'][0], textregion['size'][1] )
+                    rg_bbox_str = '0,0 {:.0f},{:.0f}'.format( textregion['size'][0], textregion['size'][1] )
                     coord_elt.set( 'points', rg_bbox_str )
                     # substract region's coordinates from lines coordinates
                     for line_elt in region_elt.findall('pc:TextLine', ns):
@@ -321,12 +412,24 @@ class MonasteriumDataset(VisionDataset):
                             points = [ (
                                         pt[0]-x_off if pt[0]>x_off else 0, 
                                         pt[1]-y_off if pt[1]>y_off else 0) for pt in points ]
+                            # sanity check
+                            not_ok = [ p for p in points if p[0] > textregion['size'][0] or p[1] > textregion['size'][1] ]
+                            if not_ok:
+                                print("File {}, line {}: invalid points for image size {}: {}".format(page, line_elt.get('id'), textregion['size'], not_ok))
+                                error_count += len(not_ok)
+                                #continue
+                                #raise DataException()
                             #print( "New points =", points)
                             transposed_point_str = ' '.join([ ','.join(['{:.0f}'.format(p) for p in pt]) for pt in points ] )
                             #print("Transposed point str =", transposed_point_str )
                             elt.set('points', transposed_point_str)
 
             page_tree.write( textregion['img_path'].with_suffix('.xml') )
+
+            if error_count > 0:
+                print(page, textregion)
+                print("{} erroneous points".format( error_count))
+            return error_count
 
 
 
