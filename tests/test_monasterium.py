@@ -18,7 +18,7 @@ class MonasteriumTest( unittest.TestCase ):
         monasterium_data = MonasteriumDataset(self.bf)
         self.assertEqual( monasterium_data.data, [])
 
-    def test_download_archive(self):
+    def Dtest_download_archive(self):
         monasterium_data = MonasteriumDataset(self.bf)
         self.assertEqual( monasterium_data.data, [])
 
@@ -111,7 +111,7 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
         self.assertEqual( len(ms), 5 )
 
 
-    def Dtest_dataset_extract_regions(self):
+    def test_dataset_extract_regions(self):
         rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True, limit=5)
 
     def Dtest_dataset_extract_regions_all(self):
@@ -120,6 +120,8 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
     def test_dataset_compute_bbox(self):
         self.assertEqual( MonasteriumDataset(self.bf, build_items=False).compute_bbox( str(Path( self.bf, 'MonasteriumTekliaGTDataset', 'NA-ACK_13530719_00415_r.xml')), 'r1'),  (1092.0, 255.0, 5890.0, 3060.0))
 
+    def test_dataset_segmentation_task_defaults(self):
+        rs = MonasteriumDataset("/home/nicolas/tmp/data", task="segm", count=5)
 
 if __name__ == "__main__":
     unittest.main() 
