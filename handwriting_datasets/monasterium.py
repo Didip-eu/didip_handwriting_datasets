@@ -33,7 +33,8 @@ Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, gen
 
 - line-segmentation dataset
 - HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
-- TODO: make downloadable
+- TODO: fix namespace prefix in generated XML files
+
 
 Directory structure for local storage:
 
@@ -348,11 +349,17 @@ class MonasteriumDataset(VisionDataset):
     def write_region_to_xml( self, page: str, ns, textregion: dict ):
         """
         From the given text region data, generates a new PageXML file.
+
+        TODO: fix bug in ImageFilename attribute E.g. NA-RM_14240728_2469_r-r1..jpg
         """
         with open( page, 'r') as page_file:
             page_tree = ET.parse( page_file )
             page_root = page_tree.getroot()
             page_elt = page_root.find('pc:Page', ns)
+
+            # updating imageFilename attribute with region id
+            page_elt.set( 'imageFilename', textregion['img_path'] )
+
             for region_elt in page_elt.findall('pc:TextRegion', ns):
                 if region_elt.get('id') != textregion['id']:
                     page_elt.remove( region_elt )
@@ -375,7 +382,8 @@ class MonasteriumDataset(VisionDataset):
                             transposed_point_str = ' '.join([ ','.join(['{:.0f}'.format(p) for p in pt]) for pt in points ] )
                             elt.set('points', transposed_point_str)
 
-            page_tree.write( textregion['img_path'].with_suffix('.xml') )
+            with open( textregion['img_path'].with_suffix('.xml'), 'bw') as f:
+                page_tree.write( f, encoding='utf-8' )
 
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
