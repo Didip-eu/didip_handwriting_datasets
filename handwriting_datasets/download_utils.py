@@ -41,6 +41,8 @@ def check_extracted( data_dir: pl.Path, md5: str ):
     """
     if data_dir.exists() and data_dir.is_dir():
         all_sums = [ hashlib.md5( open(f, 'rb').read() ).hexdigest() for f in pl.Path( data_dir ).iterdir() if not f.is_dir() ]
-        return md5 == hashlib.md5( ''.join( all_sums ).encode()).hexdigest()
+        whole_sum = hashlib.md5( ''.join( all_sums ).encode()).hexdigest()
+        print("whole_sum=", whole_sum)
+        return md5 == whole_sum
     return False
 

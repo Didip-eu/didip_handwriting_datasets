@@ -54,7 +54,7 @@ class MonasteriumDataset(VisionDataset):
             'url': r'https://drive.google.com/uc?id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
             'filename': 'MonasteriumTekliaGTDataset.tar.gz',
             'md5': '7d3974eb45b2279f340cc9b18a53b47a',
-            'full-md5': '5959e846ca0042f37c8a872d0be6149f',
+            'full-md5': 'e6c347b71c86b3412f3c858d4d91d4d6',
             'desc': 'Monasterium ground truth data (Teklia)',
             'origin': 'google',
     }
@@ -68,7 +68,7 @@ class MonasteriumDataset(VisionDataset):
                 extract_pages: bool = False,
                 build_items: bool = True,
                 task: str = '',
-                target_folder: str ='line_imgs',
+                target_folder: str ='Monasterium',
                 count: int = 0,
                 ):
         """
@@ -273,6 +273,8 @@ class MonasteriumDataset(VisionDataset):
 
                     # fix bbox for given region, according to the line points it contains
                     textregion['bbox'] = self.compute_bbox( page, textregion['id'] )
+                    if textregion['bbox'] == (0,0,0,0):
+                        continue
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
                     textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
@@ -291,7 +293,7 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
-    def compute_bbox(self, page, region_id ):
+    def compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
         """
         In the raw Monasterium/Teklia PageXMl file, baseline and/or textline polygon points
         may be outside the nominal boundaries of their text region. This method computes a
@@ -322,28 +324,33 @@ class MonasteriumDataset(VisionDataset):
             original_bbox = IP.Path( coordinates ).getbbox()
 
             all_points = []
+            valid_lines = 0
             for line_elt in region_elt.findall('pc:TextLine', ns):
                 for elt_name in ['pc:Baseline', 'pc:Coords']:
                     elt = line_elt.find( elt_name, ns )
-                    if elt is None:
+                    if elt_name == 'pc:Baseline' and elt is None:
                         print('Page {}, region {}: could not find element {} for line {}'.format(
                             page, region_elt.get('id'), elt_name, line_elt.get('id')))
                         continue
+                    valid_lines += 1
                     #print( elt.get('points').split(','))
                     all_points.extend( [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ])
+            if not valid_lines:
+                return (0,0,0,0)
             not_ok = [ p for p in all_points if not within( p, original_bbox) ]
             if not_ok:
                 print("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, region_id, not_ok))
-            return IP.Path( all_points ).getbbox()
+            bbox = IP.Path( all_points ).getbbox()
+            print("region {}, bbox={}".format( region_id, bbox))
+            return bbox
 
 
-    def write_region_to_xml( self, page, ns, textregion ):
+    def write_region_to_xml( self, page: str, ns, textregion: dict ):
         """
-
+        From the given text region data, generates a new PageXML file.
         """
         with open( page, 'r') as page_file:
             page_tree = ET.parse( page_file )
-            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
             page_root = page_tree.getroot()
             page_elt = page_root.find('pc:Page', ns)
             for region_elt in page_elt.findall('pc:TextRegion', ns):
@@ -359,8 +366,6 @@ class MonasteriumDataset(VisionDataset):
                         for elt_name in ['pc:Coords', 'pc:Baseline']:
                             elt = line_elt.find( elt_name, ns)
                             if elt is None:
-                                print('Page {}, region {}: could not find element {} for line {}'.format(
-                                    page, region_elt.get('id'), elt_name, line_elt.get('id')))
                                 continue
                             points =  [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ]
                             x_off, y_off = textregion['bbox'][:2]
