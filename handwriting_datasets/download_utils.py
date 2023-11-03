@@ -27,8 +27,20 @@ def resumable_download(url, root: str, filename: str, google=False) -> None:
 
 
 def is_valid_archive(file_path: pl.Path, md5: str) -> bool:
+    """
+    Check integrity of a tarball.
+    """
     if not file_path.exists():
         return False
     return hashlib.md5( open(file_path, 'rb').read()).hexdigest() == md5
 
+
+def check_extracted( data_dir: pl.Path, md5: str ):
+    """
+    Check integrity of a file tree.
+    """
+    if data_dir.exists() and data_dir.is_dir():
+        all_sums = [ hashlib.md5( open(f, 'rb').read() ).hexdigest() for f in pl.Path( data_dir ).iterdir() if not f.is_dir() ]
+        return md5 == hashlib.md5( ''.join( all_sums ).encode()).hexdigest()
+    return False
 

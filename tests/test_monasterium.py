@@ -1,3 +1,5 @@
+#!/usr/env python3
+
 import unittest
 from handwriting_datasets.monasterium import MonasteriumDataset
 from torch import Tensor
@@ -12,23 +14,23 @@ class MonasteriumTest( unittest.TestCase ):
     bf = '/home/nicolas/tmp/data'
     tf = '/home/nicolas/tmp/data/Monasterium'
 
-    def Dtest_dataset_dummy(self):
-        monasterium_data = MonasteriumDataset(self.bf, extract_pages=False)
+    def test_dataset_dummy(self):
+        monasterium_data = MonasteriumDataset(self.bf)
         self.assertEqual( monasterium_data.data, [])
 
-    def Dtest_download_archive(self):
-        monasterium_data = MonasteriumDataset(self.bf, extract_pages=False)
+    def test_download_archive(self):
+        monasterium_data = MonasteriumDataset(self.bf)
         self.assertEqual( monasterium_data.data, [])
 
-    def Dtest_line_extraction_text_count(self):
+    def test_line_extraction_text_count(self):
         ls = MonasteriumDataset(self.bf, build_items=False).extract_lines(self.tf, shape='bbox', text_only=True, limit=5)
         self.assertEqual( len(ls), 5)
 
-    def Dtest_line_extraction_bbox_count(self):
+    def test_line_extraction_bbox_count(self):
         ls = MonasteriumDataset(self.bf, build_items=False).extract_lines(self.tf, shape='bbox', limit=5)
         self.assertEqual( len(ls), 5)
 
-    def Dtest_split_set_train(self):
+    def test_split_set_train(self):
         ms = MonasteriumDataset(self.bf, build_items=False)
         ls = ms.extract_lines(self.tf, shape='bbox', limit=10)
         self.assertEqual( len(ms.split_set( ls, 'train')), 7)
@@ -59,26 +61,26 @@ class MonasteriumTest( unittest.TestCase ):
              or train_set.intersection( test_set )
              or validate_set.intersection( test_set ))
 
-    def Dtest_line_extraction_polygon_count(self):
+    def test_line_extraction_polygon_count(self):
         ms = MonasteriumDataset(self.bf, build_items=False)
         lst = ms.extract_lines(self.tf, limit=5)
         self.assertEqual( len(lst), 5)
 
-    def Dtest_line_extraction_file_creation(self):
+    def test_line_extraction_file_creation(self):
         ms = MonasteriumDataset(self.bf, target_folder='line_imgs', build_items=False)
         ms.extract_lines(self.tf, limit=5)
         gt_cnt, img_cnt = ms.count_line_items(self.tf)
         self.assertTrue( gt_cnt == 5 and img_cnt == 5)
 
-    def Dtest_dataset_no_task(self):
+    def test_dataset_no_task(self):
         ms = MonasteriumDataset(self.bf)
         self.assertEqual( ms.data, [] )
 
-    def Dtest_dataset_getitem(self):
+    def test_dataset_getitem(self):
         ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder='line_imgs', count=10)
         self.assertTrue( type( ms[0] ) is tuple and type( ms[0][0] ) is Tensor and type( ms[0][1] ) is str )
 
-    def Dtest_dataset_lines_count(self):
+    def test_dataset_lines_count(self):
         ms = MonasteriumDataset(self.bf, task='htr', subset='train', target_folder='line_imgs', count=10)
         self.assertEqual( len( ms ), 7 )
 
@@ -103,14 +105,11 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
         csv_file = Path(target_folder, 'monasterium_ds.csv')
         with open(csv_file, 'w') as of:
             of.write(test_csv)
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder=target_folder, extract_pages=False)
+        ms = MonasteriumDataset(self.bf, subset='train', target_folder=target_folder)
         if csv_file.exists():
             csv_file.unlink()
         self.assertEqual( len(ms), 5 )
 
-    def Dtest_gentle_fail_on_empty_transcriptions(self):
-
-        ms_with_empty_gt_lines = "MonasteriumTekliaGTDataset/NA-ACK_13231001_00103_r.xml"
 
     def Dtest_dataset_extract_regions(self):
         rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True, limit=5)
@@ -118,11 +117,8 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbac
     def Dtest_dataset_extract_regions_all(self):
         rs = MonasteriumDataset(self.bf, build_items=False).extract_text_regions(self.tf, text_only=True)
         
-    def Dtest_dataset_sanity_check(self):
-        self.assertTrue( MonasteriumDataset(self.bf, build_items=False).sanity_check() )
-
     def test_dataset_compute_bbox(self):
-        self.assertEqual( MonasteriumDataset(self.bf, build_items=False).compute_bbox( str(Path( self.bf, 'MonasteriumTekliaGTDataset', 'NA-ACK_13530719_00415_r.xml')), 'r1'), [] )
+        self.assertEqual( MonasteriumDataset(self.bf, build_items=False).compute_bbox( str(Path( self.bf, 'MonasteriumTekliaGTDataset', 'NA-ACK_13530719_00415_r.xml')), 'r1'),  (1092.0, 255.0, 5890.0, 3060.0))
 
 
 if __name__ == "__main__":
