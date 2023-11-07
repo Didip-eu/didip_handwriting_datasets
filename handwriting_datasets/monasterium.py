@@ -34,7 +34,7 @@ Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, gen
 
 - line-segmentation dataset
 - HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
-- TODO: fix namespace prefix in generated XML files
+
 
 
 Directory structure for local storage:
@@ -283,7 +283,6 @@ class MonasteriumDataset(VisionDataset):
                     print('textregion["img_path"] =', textregion['img_path'], "type =", type(textregion['img_path']))
                     textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
 
-                    #items.append( (textregion['img_path'], textline['transcription']) ) 
                     if not text_only:
                         bbox_img = page_image.crop( textregion['bbox'] )
                         bbox_img.save( textregion['img_path'] )
@@ -310,7 +309,7 @@ class MonasteriumDataset(VisionDataset):
         Returns:
             tuple: region's new coordinates, as (x1, y1, x2, y2)
         """
-        
+
         def within(pt, bbox):
             return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
 
@@ -364,7 +363,7 @@ class MonasteriumDataset(VisionDataset):
             page_elt = page_root.find('pc:Page', ns)
 
             # updating imageFilename attribute with region id
-            page_elt.set( 'imageFilename', str(textregion['img_path']) )
+            page_elt.set( 'imageFilename', str(textregion['img_path'].name) )
 
             for region_elt in page_elt.findall('pc:TextRegion', ns):
                 if region_elt.get('id') != textregion['id']:
