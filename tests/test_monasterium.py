@@ -7,7 +7,7 @@ from pathlib import Path
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
-
+ 
 class MonasteriumTest( unittest.TestCase ):
 
     # 
@@ -99,7 +99,7 @@ line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l4.png sen, daz uns kuntlichen und wissenli
 line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l5.png und seliger gedechtnusse den hochgeborn herczog Rudolf, unserm bruder, her bracht haben, daz die vesten und merkte
 line_imgs/UEATCCLUTCEPCEOJQYTDXTXU-r1l6.png der Hohenstein, Hersprugge und Urbach, die von unsers bruders herczog Rudolfs dez vorgenanten tode uf uns verfallen
 """
-        ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, limit=5)
+        ms = MonasteriumDataset(self.bf, subset='train', target_folder=self.tf, count=5)
         
         target_folder = 'tests'
         csv_file = Path(target_folder, 'monasterium_ds.csv')

@@ -1,6 +1,7 @@
 import sys
 from typing import *
-import defusedxml.ElementTree as ET
+#import defusedxml.ElementTree as ET
+import xml.etree.ElementTree as ET
 from pathlib import *
 import warnings
 from PIL import Image, ImageDraw
@@ -246,7 +247,8 @@ class MonasteriumDataset(VisionDataset):
 
                 page_tree = ET.parse( page_file )
 
-                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15",
+                        'xsi': "http://www.w3.org/2001/XMLSchema-instance" }
 
                 page_root = page_tree.getroot()
 
@@ -278,6 +280,7 @@ class MonasteriumDataset(VisionDataset):
                         continue
                     img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
+                    print('textregion["img_path"] =', textregion['img_path'], "type =", type(textregion['img_path']))
                     textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
 
                     #items.append( (textregion['img_path'], textline['transcription']) ) 
@@ -307,8 +310,6 @@ class MonasteriumDataset(VisionDataset):
         Returns:
             tuple: region's new coordinates, as (x1, y1, x2, y2)
         """
-        xml_id = Path( page ).stem
-        img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
         
         def within(pt, bbox):
             return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
@@ -352,13 +353,18 @@ class MonasteriumDataset(VisionDataset):
 
         TODO: fix bug in ImageFilename attribute E.g. NA-RM_14240728_2469_r-r1..jpg
         """
+
+        ET.register_namespace('', ns['pc'])
+        ET.register_namespace('xsi', ns['xsi'])
+
         with open( page, 'r') as page_file:
+
             page_tree = ET.parse( page_file )
             page_root = page_tree.getroot()
             page_elt = page_root.find('pc:Page', ns)
 
             # updating imageFilename attribute with region id
-            page_elt.set( 'imageFilename', textregion['img_path'] )
+            page_elt.set( 'imageFilename', str(textregion['img_path']) )
 
             for region_elt in page_elt.findall('pc:TextRegion', ns):
                 if region_elt.get('id') != textregion['id']:
@@ -383,7 +389,7 @@ class MonasteriumDataset(VisionDataset):
                             elt.set('points', transposed_point_str)
 
             with open( textregion['img_path'].with_suffix('.xml'), 'bw') as f:
-                page_tree.write( f, encoding='utf-8' )
+                page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
     def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
