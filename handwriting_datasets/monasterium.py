@@ -216,12 +216,13 @@ class MonasteriumDataset(VisionDataset):
 
     def extract_text_regions(self, target_folder: str, text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
-        Crop text regions from original files, and create a new dataset for segmentation where text region image 
-        has a corresponding, new PageXML decriptor.
+        Crop text regions from original files, and create a new dataset for segmentation where the text
+        region image has a corresponding, new PageXML decriptor.
 
         Args:
             target_folder (str): Line images are extracted in this subfolder (relative to the caller's pwd).
             limit (int): Stops after extracting {limit} images (for testing purpose).
+            descriptor_format (str): 'xml' (default) or 'json'
 
         Returns:
             list: a list of pairs (img_file_path, transcription)
@@ -287,13 +288,48 @@ class MonasteriumDataset(VisionDataset):
                         bbox_img = page_image.crop( textregion['bbox'] )
                         bbox_img.save( textregion['img_path'] )
 
-                    # create a new PageXML file whose a single text region that covers the whole image, 
+                    # create a new descriptor file whose a single text region that covers the whole image, 
                     # where line coordinates have been shifted accordingly
                     self.write_region_to_xml( page, ns, textregion )
 
                     count += 1
 
         return items
+
+
+    @classmethod
+    def pagexml_to_json_segmentation(cls, page: str):
+        """
+        Given a pageXML file, return a JSON file describing the lines
+
+        Format
+        {"text_direction": ..., "type": "baselines", "lines": [{"tags": ..., "baseline": [ ... ]}]}
+
+        """
+        direction = {'0.0': 'horizontal-lr', '0.1': 'horizontal-rl', '1.0': 'vertical-td', '1.1': 'bu'}
+
+        with open( page ) as page_file:
+            page_tree = ET.parse( page_file )
+            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+            page_root = page_tree.getroot()
+
+            page_dict = { 'type': 'baselines' }
+
+            page_dict['text_direction'] = direction[ page_root.find('.//pc:TextRegion', ns).get( 'orientation' )]
+
+            lines_object = []
+            for line in page_root.findall('.//pc:TextLine', ns):
+                line_id = line.get('id')
+                baseline_points = [ pt.split(',') for pt in line.find('./pc:Baseline', ns).get('points').split(' ') ]
+
+                polygon_points = [ pt.split(',') for pt in line.find('./pc:Coords', ns).get('points').split(' ') ]
+
+                lines_object.append( {'line_id': line_id, 'baseline': baseline_points, 'boundary': polygon_points} )
+
+            page_dict['lines'] = lines_object
+        print( page_dict )
+
+
 
 
     def compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
@@ -487,6 +523,7 @@ class MonasteriumDataset(VisionDataset):
                     count += 1
 
         return items
+    
 
 
     def split_set(self, pairs: Tuple[str, str], subset: str = 'train') -> List[ Tuple[int, int]]:
