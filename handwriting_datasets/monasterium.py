@@ -19,6 +19,7 @@ import shutil as sh
 import tarfile
 import subprocess
 import hashlib
+import json
 
 from . import download_utils as du
 
@@ -300,10 +301,14 @@ class MonasteriumDataset(VisionDataset):
     @classmethod
     def pagexml_to_json_segmentation(cls, page: str):
         """
-        Given a pageXML file, return a JSON file describing the lines
+        Given a pageXML file, return a JSON dictionary describing the lines.
 
-        Format
-        {"text_direction": ..., "type": "baselines", "lines": [{"tags": ..., "baseline": [ ... ]}]}
+        Args:
+            page (str): path of a PageXML file
+        Output:
+            dict: a dictionary of the form
+
+            {"text_direction": ..., "type": "baselines", "lines": [{"tags": ..., "baseline": [ ... ]}]}
 
         """
         direction = {'0.0': 'horizontal-lr', '0.1': 'horizontal-rl', '1.0': 'vertical-td', '1.1': 'bu'}
@@ -315,20 +320,43 @@ class MonasteriumDataset(VisionDataset):
 
             page_dict = { 'type': 'baselines' }
 
-            page_dict['text_direction'] = direction[ page_root.find('.//pc:TextRegion', ns).get( 'orientation' )]
+            #page_dict['text_direction'] = direction[ page_root.find('.//pc:TextRegion', ns).get( 'orientation' )]
 
             lines_object = []
             for line in page_root.findall('.//pc:TextLine', ns):
                 line_id = line.get('id')
-                baseline_points = [ pt.split(',') for pt in line.find('./pc:Baseline', ns).get('points').split(' ') ]
+                baseline_elt = line.find('./pc:Baseline', ns)
+                if baseline_elt is None:
+                    continue
+                baseline_points = [ pt.split('.') for pt in baseline_elt.get('points').split(' ') ]
 
-                polygon_points = [ pt.split(',') for pt in line.find('./pc:Coords', ns).get('points').split(' ') ]
+                coord_elt = line.find('./pc:Coords', ns)
+                if coord_elt is None:
+                    continue
+                polygon_points = [ pt.split(',') for pt in coord_elt.get('points').split(' ') ] 
 
                 lines_object.append( {'line_id': line_id, 'baseline': baseline_points, 'boundary': polygon_points} )
 
             page_dict['lines'] = lines_object
-        print( page_dict )
 
+        return json.dumps( page_dict )
+
+
+    @classmethod
+    def pages_to_json(cls, dir_path: str):
+        """
+        Convert a full dir of PageXML segmentation file to their JSON equivalent.
+        Args:
+            dir_path (str): a directory containing PageXML segmentation data
+        """
+
+        count=0
+        for page in Path( dir_path ).glob('*.xml'):
+            print( page )
+            with open( page.with_suffix('.json'), 'w') as of:
+                print( cls.pagexml_to_json_segmentation( page ), file=of)
+                count += 1
+        print(f"Converted {count} PageXMl files to JSON")
 
 
 
