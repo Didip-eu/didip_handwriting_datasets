@@ -299,7 +299,7 @@ class MonasteriumDataset(VisionDataset):
 
 
     @classmethod
-    def pagexml_to_json_segmentation(cls, page: str):
+    def pagexml_to_segmentation_dict(cls, page: str) -> dict:
         """
         Given a pageXML file, return a JSON dictionary describing the lines.
 
@@ -328,18 +328,18 @@ class MonasteriumDataset(VisionDataset):
                 baseline_elt = line.find('./pc:Baseline', ns)
                 if baseline_elt is None:
                     continue
-                baseline_points = [ pt.split('.') for pt in baseline_elt.get('points').split(' ') ]
+                baseline_points = [ [ int(p) for p in pt.split(',') ] for pt in baseline_elt.get('points').split(' ') ]
 
                 coord_elt = line.find('./pc:Coords', ns)
                 if coord_elt is None:
                     continue
-                polygon_points = [ pt.split(',') for pt in coord_elt.get('points').split(' ') ] 
+                polygon_points = [ [ int(p) for p in pt.split(',') ] for pt in coord_elt.get('points').split(' ') ]
 
                 lines_object.append( {'line_id': line_id, 'baseline': baseline_points, 'boundary': polygon_points} )
 
             page_dict['lines'] = lines_object
 
-        return json.dumps( page_dict )
+        return page_dict 
 
 
     @classmethod
@@ -354,7 +354,7 @@ class MonasteriumDataset(VisionDataset):
         for page in Path( dir_path ).glob('*.xml'):
             print( page )
             with open( page.with_suffix('.json'), 'w') as of:
-                print( cls.pagexml_to_json_segmentation( page ), file=of)
+                print( json.dumps(cls.pagexml_to_segmentation_dict( page )), file=of)
                 count += 1
         print(f"Converted {count} PageXMl files to JSON")
 
