@@ -40,15 +40,20 @@ Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, gen
 
 Directory structure for local storage:
 
-- basefolder : location where is to be downloaded and its content to be extracted (i.e. a subdirectory
-  'MonasteriumTekliaGTDataset' containing all image files)
-- target_folder: where to create the dataset to be used for given task (segmentation or htr)
+- root: where datasets archives are to be downloaded
+- root/<base_folder> : where archives are to be extracted (i.e. a subdirectory 'MonasteriumTekliaGTDataset' containing all image files)
+- work_folder: where to create the dataset to be used for given task (segmentation or htr)
 
 """
 
 logging.basicConfig( level=logging.DEBUG )
 
 logger = logging.getLogger()
+
+# Where files are extracted: just under the root and is no meant to be modified 
+base_folder_name="MonasteriumHandwritingDataset"
+work_folder_name="MonasteriumHandwritingDataset"
+
 
 class MonasteriumDataset(VisionDataset):
 
@@ -64,20 +69,22 @@ class MonasteriumDataset(VisionDataset):
 
     def __init__(
                 self,
-                basefolder: str,
+                root: str=str(Path.home().joinpath('tmp', 'data', 'Monasterium')),
+                work_folder: str ='', # here further files are created, for any particular task
                 subset: str = 'train',
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
                 build_items: bool = True,
                 task: str = '',
-                target_folder: str ='Monasterium',
+                shape: str = '',
                 count: int = 0,
                 ):
         """
         Args:
-            basefolder (str): Where the subfolder containing original files (pageXML documents and page images) 
-                           is to be created.
+            root (str): Where the subfolder containing original files (pageXML documents and page images) 
+                        is to be created.
+            work_folder (str): Where line images and ground truth transcriptions are created (assumed to 
             subset (str): 'train' (default), 'validate' or 'test'.
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
@@ -85,9 +92,9 @@ class MonasteriumDataset(VisionDataset):
                                otherwise (default), check first for a file tree with matching name and checksum.
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segm' for segmentation 
                         = cropped TextRegion images, with corresponding PageXML files. Default: ''
+            shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
             build_items (bool): if True (default), extract and store images for the task from the pages; 
                      otherwise try loading the data from existing, cached data.
-            target_folder: Where line images and ground truth transcriptions are created (assumed to 
                            be relative to the caller's pwd).
             count (int): Stops after extracting {count} image items (for testing purpose only).
         """
@@ -96,41 +103,47 @@ class MonasteriumDataset(VisionDataset):
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
-        csv_path = Path(target_folder, 'monasterium_ds.csv')
-
-        super().__init__(basefolder, transform=trf, target_transform=target_transform )
+        super().__init__(root, transform=trf, target_transform=target_transform )
 
         # the tarball's top folder
         self.setname = 'MonasteriumTekliaGTDataset'
-        self.basefolder=basefolder
 
-        basefolder_path = Path( basefolder )
-        if not basefolder_path.is_dir():
-            print("Cannot extract archive: folder {basefolder} should be created first.", file=sys.stderr)
+        self.base_folder_path = Path( root, base_folder_name )
+        if not self.base_folder_path.is_dir():
+            print(f"Cannot extract archive: folder {repr(self.base_folder_path)} should be created first.", file=sys.stderr)
             sys.exit()
 
-        self.download_and_extract( basefolder_path, basefolder_path, self.dataset_file, extract_pages)
+        self.download_and_extract( root, self.base_folder_path, self.dataset_file, extract_pages)
 
         # input PageXML files are at the root of the resulting tree
-        self.pagexmls = Path(basefolder, self.setname).glob('*.xml')
+        self.pagexmls = self.base_folder_path.joinpath( self.setname ).glob('*.xml')
 
         self.data = []
 
+
         if task == 'htr':
+            work_folder_path = Path(root, work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
+            if not work_folder_path.is_dir():
+                work_folder_path.mkdir() 
+
+            csv_path = work_folder_path.joinpath('monasterium_ds.csv')
             # when DS not created from scratch, try loading from an existing CSV file
             # TO-DO: make generic for both tasks
             if not build_items:
                 if csv_path.exists():
                     self.data = self.load_from_csv( csv_path )
             else:
-                self.data = self.split_set( self.extract_lines( target_folder, limit=count ), subset )
+                self.data = self.split_set( self.extract_lines( work_folder_path, limit=count, shape=shape ), subset )
                 # Generate a CSV file with one entry per img/transcription pair
                 self.dump_to_csv( csv_path, self.data )
         elif task == 'segm':
+            work_folder_path = Path(root, work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
+            if not work_folder_path.is_dir():
+                work_folder_path.mkdir() 
             if not build_items:
                 pass
             else:
-                self.data = self.extract_text_regions( target_folder, limit=count )
+                self.data = self.extract_text_regions( work_folder_path, limit=count )
 
 #
     def download_and_extract(
@@ -215,24 +228,24 @@ class MonasteriumDataset(VisionDataset):
             return [ pair[:-1].split('\t') for pair in infile ]
 
 
-    def extract_text_regions(self, target_folder: str, text_only=False, limit=0) -> List[Tuple[str, str]]:
+    def extract_text_regions(self, work_folder_path: Path, text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
         Crop text regions from original files, and create a new dataset for segmentation where the text
         region image has a corresponding, new PageXML decriptor.
 
         Args:
-            target_folder (str): Line images are extracted in this subfolder (relative to the caller's pwd).
+            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
             limit (int): Stops after extracting {limit} images (for testing purpose).
             descriptor_format (str): 'xml' (default) or 'json'
-
+/
         Returns:
             list: a list of pairs (img_file_path, transcription)
         """
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
-        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
+        Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
@@ -243,7 +256,7 @@ class MonasteriumDataset(VisionDataset):
         for page in self.pagexmls:
 
             xml_id = Path( page ).stem
-            img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
+            img_path = Path(self.base_folder_path, self.setname, f'{xml_id}.jpg')
 
             with open(page, 'r') as page_file:
 
@@ -280,7 +293,7 @@ class MonasteriumDataset(VisionDataset):
                     textregion['bbox'] = self.compute_bbox( page, textregion['id'] )
                     if textregion['bbox'] == (0,0,0,0):
                         continue
-                    img_path_prefix = Path(target_folder, f"{xml_id}-{textregion['id']}" )
+                    img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
                     print('textregion["img_path"] =', textregion['img_path'], "type =", type(textregion['img_path']))
                     textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
@@ -455,14 +468,14 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def extract_lines(self, target_folder: str, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
+    def extract_lines(self, work_folder_path: Path, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
 
         Args:
-            target_folder (str): Line images are extracted in this subfolder (relative to the caller's pwd).
-            shape (str): Extract lines as polygon-within-bbox (default) or as bboxes.
+            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
+            shape (str): Extract lines as polygon-within-bbox (default) or as bboxes ('bbox').
             text_only (bool): Store only the transcriptions (*.gt files).
             limit (int): Stops after extracting {limit} images (for testing purpose).
 
@@ -473,8 +486,8 @@ class MonasteriumDataset(VisionDataset):
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
-        Path( target_folder ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( target_folder ) # ensure there are no pre-existing line items in the target directory
+        Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
@@ -485,7 +498,7 @@ class MonasteriumDataset(VisionDataset):
         for page in self.pagexmls:
 
             xml_id = Path( page ).stem
-            img_path = Path(self.basefolder, self.setname, f'{xml_id}.jpg')
+            img_path = Path(self.base_folder_path, self.setname, f'{xml_id}.jpg')
             #print( img_path )
 
             with open(page, 'r') as page_file:
@@ -520,7 +533,8 @@ class MonasteriumDataset(VisionDataset):
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
                     #img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
-                    img_path_prefix = Path(target_folder, f"{xml_id}-{textline['id']}" )
+                    
+                    img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
 
                     items.append( (textline['img_path'], textline['transcription']) ) 

@@ -91,7 +91,7 @@ class FunsdDataset(VisionDataset):
                 transform: Optional[Callable] = None, 
                 target_transform: Optional[Callable] = None, 
                 image_loader=torchvision.datasets.folder.default_loader, 
-                min_gt_length=-1, max_gt_length=-1,
+                #min_gt_length=-1, max_gt_length=-1,
                 extract=True,
                 ) -> None:
         """
@@ -146,13 +146,13 @@ class FunsdDataset(VisionDataset):
 
         self.encoder = lm_util.Encoder(code_2_utf=code_2_utf)
 
-        if min_gt_length>0:
-            if max_gt_length>=0:
-                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)>=min_gt_length and len(v)<=max_gt_length}
-            else:
-                self.file2transcriptions = {k: v for k, v in self.file2transcriptions.items() if len(v) >= min_gt_length}
-        elif max_gt_length>=0:
-                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)<=max_gt_length}
+#        if min_gt_length>0:
+#            if max_gt_length>=0:
+#                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)>=min_gt_length and len(v)<=max_gt_length}
+#            else:
+#                self.file2transcriptions = {k: v for k, v in self.file2transcriptions.items() if len(v) >= min_gt_length}
+#        elif max_gt_length>=0:
+#                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)<=max_gt_length}
 
         #with open(self.base_folder_path.joinpath( "gt.json" ), "w", encoding="utf-8") as cmf:
         #    json.dump( self.word_2_transcription, cmf, indent=0)

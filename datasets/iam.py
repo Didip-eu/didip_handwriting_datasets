@@ -7,8 +7,10 @@ Downloads and prepares the files needed for the text line recognition task.
 
 import torchvision
 import torch
+from torch.utils.data import Dataset
+
 import torch.nn.functional as F
-import pathlib as pl
+from pathlib import Path
 import numpy as np
 from typing import Any, Callable, Optional, Tuple
 from PIL import Image
@@ -29,8 +31,47 @@ from typing import List, Dict, Tuple
 
 
 
+files = [
+        {   'url': "https://drive.google.com/uc?export=download&id=1iz9BcpivWMrvoskAyZG48EbDqDPuzyRC",
+            'filename': "largeWriterIndependentTextLineRecognitionTask.zip",
+            'md5': 'e1707fc9ed31550f1cbb61e3bff4df52',
+            'desc': 'List of images in training and validation sets for line recognition task (22K)',
+            'origin': 'google'
 
-class IAMDataset(VisionDataset):
+        },
+        {   'url': "https://drive.google.com/uc?export=download&id=1s2GBlEqUaziwj6RBhCn3R10lxdc5ug1X",
+            'filename': "xml.tgz",
+            'md5': 'f041f4b062e1fb27a09632d2bb921dfd',
+            'desc': 'Meta-data (one XML file per form)',
+            'origin': 'google'
+
+        },
+        {   'url': "https://drive.google.com/uc?export=download&id=11LdQK-JOi5-dU0Hnj64a2BLyG4T05f8u",
+            'filename': "lines.tgz",
+            'md5': '100530f7aac0f9a670bb2c21786cce70',
+            'desc': 'Lines images (638M)',
+            'origin': 'google'
+        },
+        {   'url': "https://drive.google.com/uc?export=download&id=1w0WQQ-6lWRJ6gADzCetbvuY150PWpi7T",
+            'filename': "words.tgz",
+            'md5': '58b1e255e455f45e08e3e1029a8e5984',
+            'desc': 'Word images (783M)',
+            'origin': 'google'
+        },
+        {   'url': "https://drive.google.com/uc?export=download&id=17W7y9K4MC7q3_EU_tCSYyJw4Y2R3Hm4n",
+            'filename': "ascii.tgz",
+            'md5': 'c5b0914b766de2e405f9f8be86d0a662',
+            'desc': 'Meta-data on forms, lines, and words, including transcriptions (2.5M, tabulated format)',
+            'origin': 'google'
+        }
+]
+
+
+# Where files are extracted: just under the root and is no meant to be modified
+base_folder_name='IAMHandwritingDataset' 
+work_folder_name='IAMHandwritingDatasetWork' 
+
+class IAMVisionDataset(VisionDataset):
     """
     IAM Handwriting dataset, from
         URL: https://fki.tic.heia-fr.ch/databases/download-the-iam-handwriting-database
@@ -42,46 +83,9 @@ class IAMDataset(VisionDataset):
 
     """
 
-    files = [
-            {   'url': "https://drive.google.com/uc?export=download&id=1iz9BcpivWMrvoskAyZG48EbDqDPuzyRC",
-                'filename': "largeWriterIndependentTextLineRecognitionTask.zip",
-                'md5': 'e1707fc9ed31550f1cbb61e3bff4df52',
-                'desc': 'List of images in training and validation sets for line recognition task (22K)',
-                'origin': 'google'
-
-            },
-            {   'url': "https://drive.google.com/uc?export=download&id=1s2GBlEqUaziwj6RBhCn3R10lxdc5ug1X",
-                'filename': "xml.tgz",
-                'md5': 'f041f4b062e1fb27a09632d2bb921dfd',
-                'desc': 'Meta-data (one XML file per form)',
-                'origin': 'google'
-
-            },
-            {   'url': "https://drive.google.com/uc?export=download&id=11LdQK-JOi5-dU0Hnj64a2BLyG4T05f8u",
-                'filename': "lines.tgz",
-                'md5': '100530f7aac0f9a670bb2c21786cce70',
-                'desc': 'Lines images (638M)',
-                'origin': 'google'
-            },
-            {   'url': "https://drive.google.com/uc?export=download&id=1w0WQQ-6lWRJ6gADzCetbvuY150PWpi7T",
-                'filename': "words.tgz",
-                'md5': '58b1e255e455f45e08e3e1029a8e5984',
-                'desc': 'Word images (783M)',
-                'origin': 'google'
-            },
-            {   'url': "https://drive.google.com/uc?export=download&id=17W7y9K4MC7q3_EU_tCSYyJw4Y2R3Hm4n",
-                'filename': "ascii.tgz",
-                'md5': 'c5b0914b766de2e405f9f8be86d0a662',
-                'desc': 'Meta-data on forms, lines, and words, including transcriptions (2.5M, tabulated format)',
-                'origin': 'google'
-            }
-    ]
-
-    base_folder='IAMHandwritingDataset' # where files are extracted (relative to root)
-
-
     def __init__(
-                self, root: str='.',
+                self, root: str=str(Path.home().joinpath('tmp', 'data', 'IAM')),
+                work_folder: str = '', # here further files are created, for any particular task
                 subset: str ="train",
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
@@ -91,6 +95,9 @@ class IAMDataset(VisionDataset):
                 limit: int = 0,
                 extract=True) -> None:
         """
+        Goal: Initialize a ready-to-use loader, with default: lines (not words), trainset
+
+
         Args:
             root: location where base folder is created (all tarballs are downloaded in the root,
                   then extracted in the base folder below) - default: current/project directory
@@ -104,13 +111,15 @@ class IAMDataset(VisionDataset):
 
         self.debug = False
 
-        self.base_folder_path = pl.Path( root, self.base_folder )
+        self.base_folder_path = Path( root, base_folder_name )
+        self.work_folder_path = Path( root, work_folder_name ) if work_folder == '' else Path( work_folder )
 
-        if not self.base_folder_path.exists() or not self.base_folder_path.is_dir():
-            self.base_folder_path.mkdir(parents=True)
+        for folder in [ self.base_folder_path, self.work_folder_path ]:
+            if not folder.exists() or not folder.is_dir():
+                folder.mkdir( parents=True )
 
         # note: self.root is a VisionDataset attribute
-        for fl in self.files:
+        for fl in files:
             self.download_and_extract( self.root, self.base_folder_path, fl, extract)
 
         # Line-to-transcription mapping
@@ -125,7 +134,7 @@ class IAMDataset(VisionDataset):
         # a01-000u-00-01 ok 154 507 766 213 48 NN MOVE
         word_descriptions = "words.txt"
 
-        # Subset lists for predefine task (Line Recognition Task)
+        # Subset lists for predefined task (Line Recognition Task)
         # Image for line a01-000u-00 is in a01/a01-000u/a01-000u-01.png
         # List of training samples (lines), in the form <form>-<mid>-<line>
         # E.g.
@@ -139,47 +148,51 @@ class IAMDataset(VisionDataset):
                 'test': 'testset.txt' }
 
 
-        self.object_to_transcription = {}
+        self.object_2_transcription = {}
         code_2_utf = {}
 
         if task == "lines" or limit:
+            # create dictionary {<line id>: transcription}
             self.object_2_transcription, code_2_utf = self.line_to_transcription( self.base_folder_path.joinpath( line_descriptions ))
             # input file of line ids is used without further ado
             input_list = self.list_from_file(
-                            pl.Path(self.base_folder_path).joinpath( subset_2_input_file[subset] ), limit)
+                            Path(self.base_folder_path).joinpath( subset_2_input_file[subset] ), limit)
 
         elif task == "words":
+            # create dictionary {<word id>: transcription}
             self.object_2_transcription, code_2_utf = self.word_to_transcription( self.base_folder_path.joinpath( word_descriptions ))
             # input file of line ids is used to derive a list of words
             input_list = self.generate_word_set(
                     self.base_folder_path,
                     self.base_folder_path.joinpath( subset_2_input_file[subset] ))
 
+        # In case length of GT texts is constrained 
+        if min_gt_length>0:
+            if max_gt_length>=0:
+                self.object_2_transcriptions = {k:v for k,v in self.object_2_transcriptions.items() if len(v)>=min_gt_length and len(v)<=max_gt_length}
+            else:
+                self.object_2_transcriptions = {k: v for k, v in self.object_2_transcriptions.items() if len(v) >= min_gt_length}
+        elif max_gt_length>=0:
+                self.object_2_transcriptions = {k:v for k,v in self.object_2_transcriptions.items() if len(v)<=max_gt_length}
 
+        # convert {<line or word id>: transcription} →  dictionary { <object image path>: transcription } 
         image_2_transcription = self.object_image_to_transcription( input_list )
-        print(len(image_2_transcription.keys()))
+        #print(len(image_2_transcription.keys()))
 
 
-        # building encoder
+        # CRITICAL LINE: building the encoder 
         self.items = tuple( image_2_transcription.items() )
         self.encoder = lm_util.Encoder(code_2_utf=code_2_utf)
 
         print(f'Encoder: {len(self.encoder)} entries')
 
 
-        if min_gt_length>0:
-            if max_gt_length>=0:
-                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)>=min_gt_length and len(v)<=max_gt_length}
-            else:
-                self.file2transcriptions = {k: v for k, v in self.file2transcriptions.items() if len(v) >= min_gt_length}
-        elif max_gt_length>=0:
-                self.file2transcriptions = {k:v for k,v in self.file2transcriptions.items() if len(v)<=max_gt_length}
 
         # Groundtruth and charset files: for debugging purpose only (not needed for training)
-        with open(self.base_folder_path.joinpath( "gt.json" ), "w", encoding="utf-8") as cmf:
-            json.dump( image_2_transcription, cmf, indent=0)
+        # with open(self.base_folder_path.joinpath( "gt.json" ), "w", encoding="utf-8") as cmf:
+        #    json.dump( image_2_transcription, cmf, indent=0)
 
-        with open(self.base_folder_path.joinpath("charset.tsv"), "w") as charset_file:
+        with open(self.work_folder_path.joinpath("charset.tsv"), "w") as charset_file:
             print( self.encoder.get_tsv_string(), file=charset_file)
 
         if transform is None:
@@ -217,20 +230,20 @@ class IAMDataset(VisionDataset):
         return ((img, img_width, img_height), (transcription, transcription_length))
 
 
-    def extract_for_kraken(self, subfolder: str, dummy = False) -> int:
+    def extract_image_and_text_file(self, subfolder: str, dummy = False) -> int:
         """
         For Kraken only: extract image/text pairs in a single directory where each pair
         shares a prefix, with "*.gt.txt" files containing the transcritions; apply any
         transform defined at initialization time.
 
         Args:
-            str: subfolder in which image and GT files are to be created.
-            dummy: do not create the pairs, assuming they are already there (for ease of debugging)
+            subfolder (str): subfolder in which image and GT files are to be created.
+            dummy (bool): do not create the pairs, assuming they are already there (for ease of debugging)
 
         Returns:
             int: number of items in the dataset
         """
-        kraken_gt_folder = pl.Path( self.root,  subfolder)
+        kraken_gt_folder = Path( self.root,  subfolder)
         kraken_gt_folder.mkdir(exist_ok=True)
         if dummy:
                 return len(self.items)
@@ -238,12 +251,13 @@ class IAMDataset(VisionDataset):
             file.unlink()
 
         for (k,v) in self.items:
-            image_file = pl.Path(k)
+            image_file = Path(k)
             basename = image_file.name
-            local_link = pl.Path(kraken_gt_folder, basename)
+            local_link = Path(kraken_gt_folder, basename)
             local_link.unlink(missing_ok=True)
             # should apply image transform here
-            #local_link.symlink_to( pl.Path("..", image_file ))
+            #local_link.symlink_to( Path("..", image_file ))
+
             transformed_img = self.transform( Image.open( image_file ))
             transformed_img.save( local_link )
 
@@ -253,7 +267,7 @@ class IAMDataset(VisionDataset):
         return len(self.items)
 
 
-    def generate_word_set(self, base_folder_path: pl.Path, lineset_file_path: pl.Path) -> list:
+    def generate_word_set(self, base_folder_path: Path, lineset_file_path: Path) -> list:
         """
         Generate word lists for training or testing: word lists are derived from the line recognition task sets
         provided by the authors.
@@ -277,9 +291,11 @@ class IAMDataset(VisionDataset):
         print('[Derived from {}] - words: {} writers: {}'.format(lineset_file_path.name, len(word_set), len(writer_set)))
         return list(word_set)
 
+
+
     def get_sample_dictionary(self) -> List[Dict[str,str]]:
         """
-        Return a sequence of pairs image/text (for Kraken).
+        Return a sequence of pairs <image path>/text (for Kraken).
 
         Returns:
             A sequence where each sample is represented as a dictionary of the form::
@@ -290,7 +306,7 @@ class IAMDataset(VisionDataset):
 
 
 
-    def get_word_metadata(self, base_folder_path: pl.Path) -> dict:
+    def get_word_metadata(self, base_folder_path: Path) -> dict:
         """
         Maps words to their line id and writer.
 
@@ -320,7 +336,7 @@ class IAMDataset(VisionDataset):
         return word_2_metadata
 
 
-    def list_from_file(self, list_file_path: pl.Path, limit: int = 0) -> list:
+    def list_from_file(self, list_file_path: Path, limit: int = 0) -> list:
         """
         Make a list of line ids (=file prefixes for the images).
 
@@ -343,7 +359,7 @@ class IAMDataset(VisionDataset):
         return input_list
 
 
-    def line_to_transcription( self, file_path: pl.Path) -> Tuple[dict, dict]:
+    def line_to_transcription( self, file_path: Path) -> Tuple[dict, dict]:
         """
         Map line ids to their transcriptions and chars to integer codes.
 
@@ -373,7 +389,7 @@ class IAMDataset(VisionDataset):
         return (l2t, code_2_utf)
 
 
-    def word_to_transcription( self, file_path: pl.Path ) -> Tuple[dict, dict]:
+    def word_to_transcription( self, file_path: Path ) -> Tuple[dict, dict]:
         """
         Map word ids to their transcriptions and chars to integer codes.
 
@@ -404,7 +420,7 @@ class IAMDataset(VisionDataset):
 
     def object_image_to_transcription(self, object_list: list ) -> Dict[str, str]:
         """
-        Map object images to their transcriptions.
+        Map object image paths to their transcriptions.
 
         Args:
             object_list: list of image ids
@@ -419,7 +435,7 @@ class IAMDataset(VisionDataset):
             # Ex.
             # Line 'h05-012-00' and word 'h05-012-00-00' are both stored in h05/h05-012,
             # in h05-012-00.png and 05-012-00-00.png, respectively
-            object_image_path = pl.Path(self.base_folder_path, form, form + "-" + mid, fl + ".png")
+            object_image_path = Path(self.base_folder_path, form, form + "-" + mid, fl + ".png")
             object_transcription = self.object_2_transcription[fl] if fl in self.object_2_transcription else None
             # filter out empty images
             if object_image_path.stat().st_size > 0 and object_transcription:
@@ -429,11 +445,12 @@ class IAMDataset(VisionDataset):
 
     def download_and_extract(
             self, root: str, 
-            base_folder_path: pl.Path, 
+            base_folder_path: Path, 
             fl_meta: dict, extract=True) -> None:
         """
         Download the archive and extract it. If a valid archive already exists in the root location,
-        extract only.
+        extract only; Boolean flag 'extract' is False, just check that the base folder does exist and
+        return.
 
         TODO: factor out in utility module ??
 
@@ -442,7 +459,7 @@ class IAMDataset(VisionDataset):
             base_folder: where to extract (any valid path)
             fl_meta: a dict with file meta-info (keys: url, filename, md5, origin, desc)
         """
-        output_file_path = pl.Path(root, fl_meta['filename'])
+        output_file_path = Path(root, fl_meta['filename'])
 
         #print( fl_meta, type(fl_meta['md5']) )
         if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
