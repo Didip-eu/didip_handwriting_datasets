@@ -19,7 +19,7 @@ import pathlib
 import zipfile
 import sys
 import json
-import lm_util
+from . import lm_util
 import uuid
 import random
 from typing import List, Tuple, Dict

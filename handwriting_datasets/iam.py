@@ -24,7 +24,7 @@ import tarfile
 import zipfile
 import sys
 import json
-import lm_util
+from . import lm_util
 import argparse
 from typing import List, Dict, Tuple
 

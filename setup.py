@@ -1,5 +1,6 @@
 #/usr/bin/env python3
 import setuptools
+from setuptools import find_packages
 
 with open("README.md", "r") as fh:
     long_description=fh.read()
@@ -13,5 +14,5 @@ setuptools.setup(
         description="Torch dataset classes",
         long_description=long_description,
         long_description_content_type="text/markdown",
-        #packages=['handwriting_datasets', 'lm_util']
+        packages=find_packages()
 )
