@@ -22,6 +22,7 @@ import hashlib
 import json
 
 from . import download_utils as du
+from . import xml_utils as xu
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
@@ -70,7 +71,7 @@ class MonasteriumDataset(VisionDataset):
     def __init__(
                 self,
                 root: str=str(Path.home().joinpath('tmp', 'data', 'Monasterium')),
-                work_folder: str ='', # here further files are created, for any particular task
+                work_folder: str = '', # here further files are created, for any particular task
                 subset: str = 'train',
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
@@ -84,13 +85,14 @@ class MonasteriumDataset(VisionDataset):
         Args:
             root (str): Where the subfolder containing original files (pageXML documents and page images) 
                         is to be created.
-            work_folder (str): Where line images and ground truth transcriptions are created (assumed to 
+            work_folder (str): Where line images and ground truth transcriptions fitting a particular task
+                               are to be created; default: './MonasteriumHandwritingDatasetHTR'.
             subset (str): 'train' (default), 'validate' or 'test'.
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
             extract_pages (bool): if True, extract the archive's content into the base folder no matter what;
                                otherwise (default), check first for a file tree with matching name and checksum.
-            task (str): 'htr' for HTR set = pairs (line, transcription), 'segm' for segmentation 
+            task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
                         = cropped TextRegion images, with corresponding PageXML files. Default: ''
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
             build_items (bool): if True (default), extract and store images for the task from the pages; 
@@ -122,7 +124,7 @@ class MonasteriumDataset(VisionDataset):
 
 
         if task == 'htr':
-            work_folder_path = Path(root, work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
+            work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
             if not work_folder_path.is_dir():
                 work_folder_path.mkdir() 
 
@@ -173,6 +175,7 @@ class MonasteriumDataset(VisionDataset):
 
         # skip if archive already extracted (unless explicit override)
         if not extract and du.check_extracted( base_folder_path.joinpath( self.setname ) , fl_meta['full-md5'] ):
+            print('Found valid file tree in {}: skipping the extraction stage.'.format(str(base_folder_path.joinpath( self.setname ))))
             return
         if output_file_path.suffix == '.tgz' or output_file_path.suffixes == [ '.tar', '.gz' ] :
             with tarfile.open(output_file_path, 'r:gz') as archive:
@@ -309,68 +312,6 @@ class MonasteriumDataset(VisionDataset):
                     count += 1
 
         return items
-
-
-    @classmethod
-    def pagexml_to_segmentation_dict(cls, page: str) -> dict:
-        """
-        Given a pageXML file, return a JSON dictionary describing the lines.
-
-        Args:
-            page (str): path of a PageXML file
-        Output:
-            dict: a dictionary of the form
-
-            {"text_direction": ..., "type": "baselines", "lines": [{"tags": ..., "baseline": [ ... ]}]}
-
-        """
-        direction = {'0.0': 'horizontal-lr', '0.1': 'horizontal-rl', '1.0': 'vertical-td', '1.1': 'bu'}
-
-        with open( page ) as page_file:
-            page_tree = ET.parse( page_file )
-            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
-            page_root = page_tree.getroot()
-
-            page_dict = { 'type': 'baselines' }
-
-            #page_dict['text_direction'] = direction[ page_root.find('.//pc:TextRegion', ns).get( 'orientation' )]
-
-            lines_object = []
-            for line in page_root.findall('.//pc:TextLine', ns):
-                line_id = line.get('id')
-                baseline_elt = line.find('./pc:Baseline', ns)
-                if baseline_elt is None:
-                    continue
-                baseline_points = [ [ int(p) for p in pt.split(',') ] for pt in baseline_elt.get('points').split(' ') ]
-
-                coord_elt = line.find('./pc:Coords', ns)
-                if coord_elt is None:
-                    continue
-                polygon_points = [ [ int(p) for p in pt.split(',') ] for pt in coord_elt.get('points').split(' ') ]
-
-                lines_object.append( {'line_id': line_id, 'baseline': baseline_points, 'boundary': polygon_points} )
-
-            page_dict['lines'] = lines_object
-
-        return page_dict 
-
-
-    @classmethod
-    def pages_to_json(cls, dir_path: str):
-        """
-        Convert a full dir of PageXML segmentation file to their JSON equivalent.
-        Args:
-            dir_path (str): a directory containing PageXML segmentation data
-        """
-
-        count=0
-        for page in Path( dir_path ).glob('*.xml'):
-            print( page )
-            with open( page.with_suffix('.json'), 'w') as of:
-                print( json.dumps(cls.pagexml_to_segmentation_dict( page )), file=of)
-                count += 1
-        print(f"Converted {count} PageXMl files to JSON")
-
 
 
     def compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
