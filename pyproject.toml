@@ -16,8 +16,8 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/nicolasrenet/handwriting_datasets"
 
-[scripts]
-pageconvert = pagexml2json:main
+#[scripts]
+#pageconvert = pagexml2json:main
 
 
 
