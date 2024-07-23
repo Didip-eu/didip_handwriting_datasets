@@ -4,7 +4,7 @@ The lifecycle of a dataset instance relies on 3 folders:
 | -- | ----------------- | ----------------------- | ------------------------------------------------- |--------------------------------------------------------------------- |
 | 1  | Downloading       | `<root>`                | location where original archives are to be stored | Y (`root=`)                                                          |
 | 2  | Extract           | `<root>/<base_folder>`  | where archive's contents are extracted            | N (name hardcoded for dataset Eg. `'MonasteriumHandwritingDataset'`) |
-| 3  | Instance creation | `<work_folder>`         | where input data for the task are created         | Y (default: `'./MonasteriumHandwritingDataset(HTR|Segment)'`)        |
+| 3  | Instance creation | `<work_folder>`         | where input data for the task are created         | Y (default: `'./MonasteriumHandwritingDataset(HTRi\|Segment)'`)        |
 
 1. By default, the root folder (default: `~/tmp/data/Monasterium)` is checked first for a valid archive before downloading;
 2. The base folder is automatically created when expanding the archive (default: `<root>/MonasteriumHandwritingDataset`); this location is checked for a valid file tree (checksums). To force the extraction of the archive's content, pass the `extract_pages=True` flag. 
