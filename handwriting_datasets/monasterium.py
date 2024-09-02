@@ -39,8 +39,7 @@ Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, gen
 - HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
 
 
-
-Directory structure for local storage:
+Directory structure for local file storage:
 
 - root: where datasets archives are to be downloaded
 - root/<base_folder> : where archives are to be extracted (i.e. a subdirectory 'MonasteriumTekliaGTDataset' containing all image files)
@@ -98,8 +97,8 @@ class MonasteriumDataset(VisionDataset):
                         the dataset archive is extracted but no actual data get built.
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
             build_items (bool): if True (default), extract and store images for the task from the pages; 
-                     otherwise try loading the data from existing, cached data.
-                           be relative to the caller's pwd).
+                     otherwise try loading the data from existing, cached data (in which case, work_folder
+                     option must be non-empty).
             count (int): Stops after extracting {count} image items (for testing purpose only).
         """
 
@@ -110,7 +109,7 @@ class MonasteriumDataset(VisionDataset):
         super().__init__(root, transform=trf, target_transform=target_transform )
 
         self.root = root
-        self.work_folder_path = None
+        self.work_folder_path = None # task-dependent
         # tarball creates its own base folder
         self.base_folder_path = Path( self.root, tarball_root_name )
         self.download_and_extract( root, Path(root), self.dataset_file, extract_pages)
@@ -142,22 +141,29 @@ class MonasteriumDataset(VisionDataset):
         """
 
         if task == 'htr':
+            print('work_folder=' + work_folder )
             if crop:
                 self.print("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
             self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
                 self.work_folder_path.mkdir() 
 
-            csv_path = self.work_folder_path.joinpath('monasterium_ds.csv')
-            # when DS not created from scratch, try loading from an existing CSV file
+            tsv_path = self.work_folder_path.joinpath('monasterium_ds.tsv')
+            # when DS not created from scratch, try loading 
+            # - from an existing TSV file 
+            # - actual folder 
+            # - or pickled tensors?
             # TO-DO: make generic for both tasks
             if not build_items:
-                if csv_path.exists():
-                    self.data = self.load_from_csv( csv_path )
+                tsv_path = self.work_folder_path.joinpath('monasterium_ds.tsv')
+                if work_folder == '':
+                    print("Pass a -work_folder option to specify the data folder")
+                if tsv_path.exists():
+                    self.data = self.load_from_tsv( tsv_path )
             else:
                 self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, limit=count, shape=shape ), subset )
-                # Generate a CSV file with one entry per img/transcription pair
-                self.dump_to_csv( csv_path, self.data )
+                # Generate a TSV file with one entry per img/transcription pair
+                self.dump_data_to_tsv( tsv_path )
         elif task == 'segment':
             self.work_folder_path = Path('.', work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
@@ -227,7 +233,7 @@ class MonasteriumDataset(VisionDataset):
     def purge(self, folder: str) -> int:
         """
         Empty the line image subfolder: all line images and transcriptions are
-        deleted, as well as the CSV file.
+        deleted, as well as the TSV file.
 
         Args:
             folder (str): Name of the subfolder to purge (relative the caller's
@@ -240,20 +246,24 @@ class MonasteriumDataset(VisionDataset):
         return cnt
 
 
-    def dump_data_to_csv(self, file_path: str):
+    def dump_data_to_tsv(self, file_path: str=''):
         """
         Create a CSV file with all pairs (<line image absolute path>, <transcription>).
 
         Args:
-            file_path (str): A file path (relative to the caller's pwd).
+            file_path (str): A TSV file path (relative to the caller's pwd).
         """
+        if file_path == '':
+            for path, gt in self.data:
+                print("{}\t{}".format( Path(path).absolute(), Path(gt).absolute()))
+            return
         with open( file_path, 'w' ) as of:
             for path, gt in self.data:
                 #print('{}\t{}'.format( path, gt ))
-                of.write( '{}\t{}'.format( path, gt ) )
+                of.write( '{}\t{}\n'.format( Path(path).absolute(), Path(gt).absolute() ) )
 
 
-    def load_from_csv(self, file_path: Path) -> list:
+    def load_from_tsv(self, file_path: Path) -> list:
         """
         Load pairs (<line image path>, transcription) from an existing CSV file.
 
@@ -262,10 +272,13 @@ class MonasteriumDataset(VisionDataset):
 
         Returns:
             list: A list of 2-tuples whose first element is the (relative) path of
-                  the line image and the second element is the transcription.
+                  the line image and the second element is the transcription file (*.pt).
         """
         with open( file_path, 'r') as infile:
             return [ pair[:-1].split('\t') for pair in infile ]
+
+
+
 
     def build_page_lines_pairs(self, base_folder_path:Path, work_folder_path: Path, text_only:bool=False, limit:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
         """
