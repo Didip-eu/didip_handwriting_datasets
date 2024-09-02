@@ -119,10 +119,10 @@ class MonasteriumDataset(VisionDataset):
 
         self.data = []
 
-        print(self.get_paths())
+        #print(self.get_paths())
 
         if (task != ''):
-            self.build_task( task, build_items=build_items, subset=subset, shape=shape, work_folder=work_folder )
+            self.build_task( task, build_items=build_items, subset=subset, shape=shape, work_folder=work_folder, count=count )
 
 
     def build_task( self, task: str='htr', build_items: bool=True, subset: str='train', shape: str='polygons', count: int=0, work_folder: str='', crop=False):
@@ -159,9 +159,10 @@ class MonasteriumDataset(VisionDataset):
                 if work_folder == '':
                     print("Pass a -work_folder option to specify the data folder")
                 if tsv_path.exists():
+                    # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
             else:
-                self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, limit=count, shape=shape ), subset )
+                self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, count=count, shape=shape ), subset )
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv( tsv_path )
         elif task == 'segment':
@@ -171,9 +172,9 @@ class MonasteriumDataset(VisionDataset):
             if not build_items:
                 pass
             elif crop:
-                self.data = self.extract_text_regions( self.base_folder_path, self.work_folder_path, limit=count )
+                self.data = self.extract_text_regions( self.base_folder_path, self.work_folder_path, count=count )
             else:
-                self.data = self.build_page_lines_pairs( self.base_folder_path, self.work_folder_path, limit=count )
+                self.data = self.build_page_lines_pairs( self.base_folder_path, self.work_folder_path, count=count )
 
 
 
@@ -246,52 +247,69 @@ class MonasteriumDataset(VisionDataset):
         return cnt
 
 
-    def dump_data_to_tsv(self, file_path: str=''):
+    def dump_data_to_tsv(self, file_path: str='', all_path_style=False):
         """
         Create a CSV file with all pairs (<line image absolute path>, <transcription>).
 
         Args:
             file_path (str): A TSV file path (relative to the caller's pwd).
+            all_path_style (bool): list GT file name instead of GT content.
         """
         if file_path == '':
-            for path, gt in self.data:
-                print("{}\t{}".format( Path(path).absolute(), Path(gt).absolute()))
+            for img_path, gt in self.data:
+                print("{}\t{}".format( img_path, 
+                      gt if not all_path_style else Path(img_path).with_suffix('.gt')))
             return
         with open( file_path, 'w' ) as of:
-            for path, gt in self.data:
-                #print('{}\t{}'.format( path, gt ))
-                of.write( '{}\t{}\n'.format( Path(path).absolute(), Path(gt).absolute() ) )
+            for img_path, gt in self.data:
+                #print('{}\t{}'.format( img_path, gt ))
+                of.write( '{}\t{}\n'.format( img_path,
+                                             gt if not all_path_style else Path(img_path).with_suffix('.gt')))
+                                            
 
 
     def load_from_tsv(self, file_path: Path) -> list:
         """
-        Load pairs (<line image path>, transcription) from an existing CSV file.
+        Load pairs (<line image path>, transcription) from an existing TSV file.
 
         Args:
-            file_path (pathlib.Path): A file path (relative to the caller's pwd).
+            file_path (pathlib.Path): A file path (relative to the caller's pwd), where each line
+                                      is either a pair (<img file path>, <transcription text>) or
+                                      a pair (img file path>, <transcription file path>).
 
         Returns:
             list: A list of 2-tuples whose first element is the (relative) path of
-                  the line image and the second element is the transcription file (*.pt).
+                  the line image and the second element is the _content_ of the transcription file.
         """
+        pairs=[]
         with open( file_path, 'r') as infile:
-            return [ pair[:-1].split('\t') for pair in infile ]
+            # detect file style from first line
+            img_path, file_or_text = next( infile )[:-1].split('\t')
+            all_path_style = True if Path(file_or_text).exists() else False
+            infile.seek(0) 
+            if not all_path_style:
+                pairs = [ pair[:-1].split('\t') for pair in infile ]
+            else:
+                for pair in infile:
+                    img_file, gt_file = pair[:-1].split('\t')
+                    with open( gt_file, 'r') as igt:
+                        gt_content = '\n'.join( igt.readlines())
+                        pairs.append( (img_file, gt_content) )
+        return pairs
 
 
-
-
-    def build_page_lines_pairs(self, base_folder_path:Path, work_folder_path: Path, text_only:bool=False, limit:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
+    def build_page_lines_pairs(self, base_folder_path:Path, work_folder_path: Path, text_only:bool=False, count:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
         """
         Create a new dataset for segmentation that associate each page image with its metadata.
 
         Args:
             base_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            limit (int): Stops after extracting {limit} images (for testing purpose).
+            count (int): Stops after extracting {count} images (for testing purpose).
             metadata_format (str): 'xml' (default) or 'json'
 
         Returns:
-            list: a list of pairs (img_file_path, transcription)
+            list: a list of pairs (<absolute img filepath>, <absolute transcription filepath>)
         """
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
         self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
@@ -313,7 +331,7 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
-    def extract_text_regions(self, base_folder_path: Path, work_folder_path: Path, text_only=False, limit=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
+    def extract_text_regions(self, base_folder_path: Path, work_folder_path: Path, text_only=False, count=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
         """
         Crop text regions from original files, and create a new dataset for segmentation where the text
         region image has a corresponding, new PageXML decriptor.
@@ -321,7 +339,7 @@ class MonasteriumDataset(VisionDataset):
         Args:
             base_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            limit (int): Stops after extracting {limit} images (for testing purpose).
+            count (int): Stops after extracting {count} images (for testing purpose).
             metadata_format (str): 'xml' (default) or 'json'
 /
         Returns:
@@ -333,7 +351,7 @@ class MonasteriumDataset(VisionDataset):
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
         self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
-        count = 0 # for testing purpose
+        cnt = 0 # for testing purpose
 
         items = []
 
@@ -360,7 +378,7 @@ class MonasteriumDataset(VisionDataset):
                         continue
 
                 for textregion_elt in page_root.findall( './/pc:TextRegion', ns ):
-                    if limit and count == limit:
+                    if cnt and cnt == count:
                         return items
 
                     textregion = dict()
@@ -390,7 +408,7 @@ class MonasteriumDataset(VisionDataset):
                     # where line coordinates have been shifted accordingly
                     self.write_region_to_xml( page, ns, textregion )
 
-                    count += 1
+                    cnt += 1
 
         return items
 
@@ -490,7 +508,7 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='polygons', text_only=False, limit=0) -> List[Tuple[str, str]]:
+    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='polygons', text_only=False, count=0) -> List[Tuple[str, str]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
@@ -500,10 +518,10 @@ class MonasteriumDataset(VisionDataset):
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
             shape (str): Extract lines as polygon-within-bbox (default) or as bboxes ('bbox').
             text_only (bool): Store only the transcriptions (*.gt files).
-            limit (int): Stops after extracting {limit} images (for testing purpose).
+            count (int): Stops after extracting {count} images (for testing purpose).
 
         Returns:
-            list: An array of pairs (img_file_path, transcription)
+            list of tuples: An array of pairs (<absolute img_file_path>, <transcription text>)
 
         """
         # filtering out Godzilla-sized images (a couple of them)
@@ -514,7 +532,7 @@ class MonasteriumDataset(VisionDataset):
 
         gt_lengths = []
         img_sizes = []
-        count = 0 # for testing purpose
+        cnt = 0 # for testing purpose
 
         items = []
 
@@ -541,7 +559,7 @@ class MonasteriumDataset(VisionDataset):
                         continue
 
                 for textline_elt in page_root.findall( './/pc:TextLine', ns ):
-                    if limit and count == limit:
+                    if count and cnt == count:
                         return items
 
                     textline = dict()
@@ -561,6 +579,7 @@ class MonasteriumDataset(VisionDataset):
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
 
                     items.append( (textline['img_path'], textline['transcription']) ) 
+                    #print("extract_lines():", items[-1])
                     if not text_only:
                         bbox_img = page_image.crop( textline['bbox'] )
 
@@ -585,7 +604,7 @@ class MonasteriumDataset(VisionDataset):
                         gt_file.write( textline['transcription'] )
                         gt_lengths.append(len( textline['transcription']))
 
-                    count += 1
+                    cnt += 1
 
         return items
     
@@ -597,7 +616,8 @@ class MonasteriumDataset(VisionDataset):
         validation (10%), and test (20%).
 
         Args:
-            pairs (tuple): A list of all pairs (<line image>, transcription>) in the dataset.
+            pairs (tuple): A list of all pairs (<line image filename>, transcription filename>)
+                           in the dataset.
             subset (str): Subset to return: 'train' (default), 'validate', or 'test'.
 
         Returns:
