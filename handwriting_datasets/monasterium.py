@@ -150,7 +150,7 @@ class MonasteriumDataset(VisionDataset):
         """
 
         if task == 'htr':
-            print('work_folder=' + work_folder )
+            
             if crop:
                 self.print("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
             self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
@@ -712,7 +712,7 @@ class MonasteriumDataset(VisionDataset):
             new_t[:,:h,:w]=ts
             return new_t
    
-        height = t.shape[1]
+        _, height, width = t.shape
         ratio = width / height
         if height > max_h:
             # resize to max_height while keeping ratio
