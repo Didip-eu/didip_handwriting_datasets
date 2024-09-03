@@ -10,6 +10,7 @@ import re
 import argparse
 import numpy as np
 import torch
+from torch import Tensor
 import torchvision
 from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
@@ -45,6 +46,12 @@ Directory structure for local file storage:
 - root/<base_folder> : where archives are to be extracted (i.e. a subdirectory 'MonasteriumTekliaGTDataset' containing all image files)
 - work_folder: where to create the dataset to be used for given task (segmentation or htr)
 
+TODO:
+
+- dataset splitting should return 3 sets together? 
+- build_items=False option needlessly complicated: better with 'load_from_tsv_file=<tsv path>' option
+  whose directory is assumed to be the work folder
+
 """
 
 logging.basicConfig( level=logging.DEBUG )
@@ -72,7 +79,7 @@ class MonasteriumDataset(VisionDataset):
                 self,
                 root: str=str(Path.home().joinpath('tmp', 'data', 'Monasterium')),
                 work_folder: str = '', # here further files are created, for any particular task
-                subset: str = 'train',
+                subset: str = 'all',
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
@@ -87,7 +94,7 @@ class MonasteriumDataset(VisionDataset):
                         is to be created.
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
-            subset (str): 'train' (default), 'validate' or 'test'.
+            subset (str): 'all' (default), 'train', 'validate' or 'test'.
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
             extract_pages (bool): if True, extract the archive's content into the base folder no matter what;
@@ -101,7 +108,7 @@ class MonasteriumDataset(VisionDataset):
                      option must be non-empty).
             count (int): Stops after extracting {count} image items (for testing purpose only).
         """
-
+        
         trf = v2.PILToTensor()
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
@@ -112,7 +119,9 @@ class MonasteriumDataset(VisionDataset):
         self.work_folder_path = None # task-dependent
         # tarball creates its own base folder
         self.base_folder_path = Path( self.root, tarball_root_name )
-        self.download_and_extract( root, Path(root), self.dataset_file, extract_pages)
+
+        if build_items:
+            self.download_and_extract( root, Path(root), self.dataset_file, extract_pages)
 
         # input PageXML files are at the root of the resulting tree
         self.pagexmls = Path(root, tarball_root_name ).glob('*.xml')
@@ -125,12 +134,12 @@ class MonasteriumDataset(VisionDataset):
             self.build_task( task, build_items=build_items, subset=subset, shape=shape, work_folder=work_folder, count=count )
 
 
-    def build_task( self, task: str='htr', build_items: bool=True, subset: str='train', shape: str='polygons', count: int=0, work_folder: str='', crop=False):
+    def build_task( self, task: str='htr', build_items: bool=True, subset: str='all', shape: str='polygons', count: int=0, work_folder: str='', crop=False):
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
 
         Args:
-            subset (str): 'train' (default), 'validate' or 'test'.
+            subset (str): 'all' (default), 'train' (default), 'validate' or 'test'.
             build_items (bool): if True (default), extract and store images for the task from the pages; 
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
@@ -165,18 +174,31 @@ class MonasteriumDataset(VisionDataset):
                 self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, count=count, shape=shape ), subset )
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv( tsv_path )
+                self.generate_readme("README.md", 
+                                     {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
+
         elif task == 'segment':
             self.work_folder_path = Path('.', work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
                 self.work_folder_path.mkdir() 
-            if not build_items:
-                pass
-            elif crop:
-                self.data = self.extract_text_regions( self.base_folder_path, self.work_folder_path, count=count )
-            else:
-                self.data = self.build_page_lines_pairs( self.base_folder_path, self.work_folder_path, count=count )
+
+            if build_items:
+                if crop:
+                    self.data = self.extract_text_regions( self.base_folder_path, self.work_folder_path, count=count )
+                else:
+                    self.data = self.build_page_lines_pairs( self.base_folder_path, self.work_folder_path, count=count )
 
 
+    def generate_readme( self, filename: str, params: dict ):
+        """
+        Create a metadata file in the work directory.
+        """
+        filepath = Path(self.work_folder_path, filename )
+        print(filepath)
+        with open( filepath, "w") as of:
+            print('Task was built with the following options:\n' + 
+                  '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
+                  file=of)
 
     def get_paths( self ):
         return """
@@ -610,24 +632,29 @@ class MonasteriumDataset(VisionDataset):
     
 
 
-    def split_set(self, pairs: Tuple[str, str], subset: str = 'train') -> List[ Tuple[int, int]]:
+    def split_set(self, pairs: List[Tuple[str, str]], subset: str = 'all') -> List[ Tuple[str, str]]:
         """
-        Split a set of pairs (<line image>, transcription>) into 3 sets: train (70%),
+        Split a set of pairs (<line image filename>, transcription>) into 3 sets: train (70%),
         validation (10%), and test (20%).
 
         Args:
-            pairs (tuple): A list of all pairs (<line image filename>, transcription filename>)
+            pairs (List[tuple]): A list of all pairs (<line image filename>, <transcription content>)
                            in the dataset.
-            subset (str): Subset to return: 'train' (default), 'validate', or 'test'.
+            subset (str): Subset to return: 'all' (default), 'train', 'validate', or 'test'.
 
         Returns:
             list: A list of pairs, either for training, validation, or testing.
         """
+
         random.seed(10)
         test_count = int( len(pairs)*.2 )
         validation_count = int( len(pairs)*.1 )
 
         all_pairs = set( pairs )
+        
+        if subset == 'all':
+            return list(all_pairs)
+
         test_pairs = set( random.sample( all_pairs, test_count) )
         all_pairs -= test_pairs
 
@@ -641,7 +668,7 @@ class MonasteriumDataset(VisionDataset):
         return list( all_pairs )
 
 
-    def __getitem__(self, index) -> Tuple[torch.Tensor, str]:
+    def __getitem__(self, index) -> Tuple[Tensor, str]:
         """
         Returns:
             tuple: A pair (image, transcription)
@@ -658,6 +685,43 @@ class MonasteriumDataset(VisionDataset):
         """
         return len( self.data )
 
+
+    @staticmethod
+    def size_fit_transform( t: Tensor, max_h: int=2000, max_w: int=300 ):
+        """
+        A reasonable default transform for a line-based dataset:
+
+        + fit a maximum size, with resizing and/or padding when needed
+        + preserver size ratio
+
+        Input:
+            t (Tensor): a multi-channel image.
+            max_h (int): maximum height
+            max_w (int): maximum weight
+
+        Output:
+            Tensor: a c x max_h x max_w image, 0-padded.
+        """
+     
+        def pad(ts, mh=0, mw=0):
+            print(f"pad({mh}, {mw})")
+            c,h,w = ts.shape
+            if h>mh or w>mw:
+                return ts
+            new_t = torch.zeros( (c,mh,mw) )
+            new_t[:,:h,:w]=ts
+            return new_t
+   
+        height = t.shape[1]
+        ratio = width / height
+        if height > max_h:
+            # resize to max_height while keeping ratio
+            t = v2.Resize(size=(max_h, int(max_h*ratio)), antialias=True)( t )
+        width = t.shape[2]
+        if width > max_w:
+            t = v2.Resize(size=(int(max_w/ratio), max_w), antialias=True)( t )
+        t = pad( t, max_h, max_w )
+        return t
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
