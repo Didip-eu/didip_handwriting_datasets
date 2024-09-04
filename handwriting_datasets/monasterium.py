@@ -83,6 +83,7 @@ class MonasteriumDataset(VisionDataset):
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
+                from_tsv_file: str = '',
                 build_items: bool = True,
                 task: str = '',
                 shape: str = '',
@@ -104,8 +105,9 @@ class MonasteriumDataset(VisionDataset):
                         the dataset archive is extracted but no actual data get built.
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
             build_items (bool): if True (default), extract and store images for the task from the pages; 
-                     otherwise try loading the data from existing, cached data (in which case, work_folder
-                     option must be non-empty).
+                     otherwise, just extract the original data from the archive.
+            from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
+                                 assumed to be the work folder, superceding the work_folder option).
             count (int): Stops after extracting {count} image items (for testing purpose only).
         """
         
@@ -120,8 +122,10 @@ class MonasteriumDataset(VisionDataset):
         # tarball creates its own base folder
         self.base_folder_path = Path( self.root, tarball_root_name )
 
-        if build_items:
+        if from_tsv_file == '':
             self.download_and_extract( root, Path(root), self.dataset_file, extract_pages)
+
+        print("__init__(): from_tsv_file=", from_tsv_file)
 
         # input PageXML files are at the root of the resulting tree
         self.pagexmls = Path(root, tarball_root_name ).glob('*.xml')
@@ -131,10 +135,19 @@ class MonasteriumDataset(VisionDataset):
         #print(self.get_paths())
 
         if (task != ''):
-            self.build_task( task, build_items=build_items, subset=subset, shape=shape, work_folder=work_folder, count=count )
+            build_ok = build_items if from_tsv_file == '' else False
+            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, work_folder=work_folder, count=count )
 
 
-    def build_task( self, task: str='htr', build_items: bool=True, subset: str='all', shape: str='polygons', count: int=0, work_folder: str='', crop=False):
+    def build_task( self, 
+                   task: str='htr', 
+                   build_items: bool=True, 
+                   from_tsv_file: str='',
+                   subset: str='all', 
+                   shape: str='polygons', 
+                   count: int=0, 
+                   work_folder: str='', 
+                   crop=False):
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
 
@@ -145,35 +158,36 @@ class MonasteriumDataset(VisionDataset):
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
             crop (bool): (for segmentation set only) crop text regions from both image and PageXML file.
             count (int): Stops after extracting {count} image items (for testing purpose only).
+            from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
+                                 assumed to be the work folder, superceding the work_folder option).
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
         """
-
+        print('build_task(): from_tsv_file=', from_tsv_file, "build_items=", build_items)
         if task == 'htr':
             
             if crop:
                 self.print("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
-            self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
-            if not self.work_folder_path.is_dir():
-                self.work_folder_path.mkdir() 
-
-            tsv_path = self.work_folder_path.joinpath('monasterium_ds.tsv')
+            
             # when DS not created from scratch, try loading 
             # - from an existing TSV file 
             # - actual folder 
             # - or pickled tensors?
             # TO-DO: make generic for both tasks
-            if not build_items:
-                tsv_path = self.work_folder_path.joinpath('monasterium_ds.tsv')
-                if work_folder == '':
-                    print("Pass a -work_folder option to specify the data folder")
+            if from_tsv_file != '':
+                print("from_tsv_file =", from_tsv_file )
+                tsv_path = Path( from_tsv_file )
                 if tsv_path.exists():
+                    self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
             else:
+                self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
+                if not self.work_folder_path.is_dir():
+                    self.work_folder_path.mkdir() 
                 self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, count=count, shape=shape ), subset )
                 # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv( tsv_path )
+                self.dump_data_to_tsv( Path(self.work_folder_path.joinpath('monasterium_ds.tsv')) )
                 self.generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
 
@@ -274,7 +288,7 @@ class MonasteriumDataset(VisionDataset):
         Create a CSV file with all pairs (<line image absolute path>, <transcription>).
 
         Args:
-            file_path (str): A TSV file path (relative to the caller's pwd).
+            file_path (str): A TSV (absolute) file path 
             all_path_style (bool): list GT file name instead of GT content.
         """
         if file_path == '':
@@ -730,3 +744,8 @@ class MonasteriumDataset(VisionDataset):
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
 
+
+
+# check that the module is testable
+def dummy():
+    return True
