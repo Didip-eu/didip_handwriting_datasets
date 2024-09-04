@@ -130,8 +130,6 @@ class MonasteriumDataset(VisionDataset):
 
         self.data = []
 
-        #print(self.get_paths())
-
         if (task != ''):
             build_ok = build_items if from_tsv_file == '' else False
             self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, work_folder=work_folder, count=count )
@@ -161,7 +159,7 @@ class MonasteriumDataset(VisionDataset):
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
         """
-        print('build_task(): from_tsv_file=', from_tsv_file, "build_items=", build_items)
+        
         if task == 'htr':
             
             if crop:
@@ -205,7 +203,7 @@ class MonasteriumDataset(VisionDataset):
         Create a metadata file in the work directory.
         """
         filepath = Path(self.work_folder_path, filename )
-        print(filepath)
+        
         with open( filepath, "w") as of:
             print('Task was built with the following options:\n' + 
                   '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
@@ -239,7 +237,6 @@ class MonasteriumDataset(VisionDataset):
         """
         output_file_path = Path(root, fl_meta['filename'])
 
-        #print( fl_meta, type(fl_meta['md5']) )
         if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
             print("Downloading archive...")
             du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
@@ -679,14 +676,15 @@ class MonasteriumDataset(VisionDataset):
         return list( all_pairs )
 
 
-    def __getitem__(self, index) -> Tuple[Tensor, str]:
+    def __getitem__(self, index) -> Tuple[Tensor, str, int, int]:
         """
         Returns:
             tuple: A pair (image, transcription)
         """
         transcr = self.data[index][1]
-        img = self.transform( Image.open(self.data[index][0], 'r') )
-        return (img, transcr)
+        img, height, width = self.transform( Image.open(self.data[index][0], 'r') )
+        #print("transcr=", transcr, "\nheight=", height, "\nwidth=", width)
+        return { 'img': img, 'transcription': transcr, 'height': height, 'width': width }
 
 
     def __len__(self) -> int:
@@ -711,11 +709,14 @@ class MonasteriumDataset(VisionDataset):
             max_w (int): maximum weight
 
         Output:
-            Tensor: a c x max_h x max_w image, 0-padded.
+            Tuple[Tensor, int, int]: a tuple with 
+                                     + a ( c × max_h × max_w ) tensor, 0-padded
+                                     + image height
+                                     + image width
         """
      
         def pad(ts, mh=0, mw=0):
-            print(f"pad({mh}, {mw})")
+            #print(f"pad({mh}, {mw})")
             c,h,w = ts.shape
             if h>mh or w>mw:
                 return ts
@@ -731,8 +732,10 @@ class MonasteriumDataset(VisionDataset):
         width = t.shape[2]
         if width > max_w:
             t = v2.Resize(size=(int(max_w/ratio), max_w), antialias=True)( t )
+        _, height, width = t.shape
         t = pad( t, max_h, max_w )
-        return t
+        #return t
+        return (t, height, width)
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
