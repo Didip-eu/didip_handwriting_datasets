@@ -125,8 +125,6 @@ class MonasteriumDataset(VisionDataset):
         if from_tsv_file == '':
             self.download_and_extract( root, Path(root), self.dataset_file, extract_pages)
 
-        print("__init__(): from_tsv_file=", from_tsv_file)
-
         # input PageXML files are at the root of the resulting tree
         self.pagexmls = Path(root, tarball_root_name ).glob('*.xml')
 
@@ -175,7 +173,6 @@ class MonasteriumDataset(VisionDataset):
             # - or pickled tensors?
             # TO-DO: make generic for both tasks
             if from_tsv_file != '':
-                print("from_tsv_file =", from_tsv_file )
                 tsv_path = Path( from_tsv_file )
                 if tsv_path.exists():
                     self.work_folder_path = tsv_path.parent
