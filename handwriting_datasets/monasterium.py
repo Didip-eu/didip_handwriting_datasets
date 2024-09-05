@@ -683,9 +683,10 @@ class MonasteriumDataset(VisionDataset):
             tuple: A pair (image, transcription)
         """
         transcr = self.data[index][1]
-        img, height, width = self.transform( Image.open(self.data[index][0], 'r') )
+        sample_dict = self.transform( Image.open(self.data[index][0], 'r') )
+        sample_dict['transcription'] = transcr
         #print("transcr=", transcr, "\nheight=", height, "\nwidth=", width)
-        return { 'img': img, 'transcription': transcr, 'height': height, 'width': width }
+        return sample_dict
 
 
     def __len__(self) -> int:
@@ -697,7 +698,7 @@ class MonasteriumDataset(VisionDataset):
 
 
     @staticmethod
-    def size_fit_transform( t: Tensor, max_h: int=2000, max_w: int=300 ):
+    def size_fit_transform( t: Tensor, max_h: int=2000, max_w: int=300 ) -> Dict[str, Union[Tensor,int]]:
         """
         A reasonable default transform for a line-based dataset:
 
@@ -710,10 +711,10 @@ class MonasteriumDataset(VisionDataset):
             max_w (int): maximum weight
 
         Output:
-            Tuple[Tensor, int, int]: a tuple with 
-                                     + a ( c × max_h × max_w ) tensor, 0-padded
-                                     + image height
-                                     + image width
+            dict[str, Union[Tensor,int]]]: a dictionary with 
+                                     + 'img': a ( c × max_h × max_w ) tensor, 0-padded
+                                     + 'height': image height (without padding)
+                                     + 'width': image width (without padding)
         """
      
         def pad(ts, mh=0, mw=0):
@@ -736,7 +737,7 @@ class MonasteriumDataset(VisionDataset):
         _, height, width = t.shape
         t = pad( t, max_h, max_w )
         #return t
-        return (t, height, width)
+        return {'img':t, 'height':height, 'width':width}
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
@@ -745,6 +746,40 @@ class MonasteriumDataset(VisionDataset):
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
 
+
+#class Resize( object ):
+#
+#    def __init__( self, max_output_size ):
+#        assert isinstance( max_output_size, tuple)
+#        self.max_h, self.max_w = max_output_size
+#
+#    def __call__(self, sample):
+#        t = sample[0]
+#        _, height, width = t.shape
+#        ratio = width / height
+#        if height > max_h:
+#            # resize to max_height while keeping ratio
+#            t = v2.Resize(size=(max_h, int(max_h*ratio)), antialias=True)( t )
+#        width = t.shape[2]
+#        if width > max_w:
+#            t = v2.Resize(size=(int(max_w/ratio), max_w), antialias=True)( t )
+#        _, height, width = t.shape
+#        return {'img': t, 'height': height, 'width': width }
+#
+#class Pad( object):
+#
+#    def __init__( self, max_output_size ):
+#        assert isinstance( max_output_size, tuple)
+#        self.max_h, self.max_w = max_output_size
+#
+#    def __call__( self, sample ):
+#        t, h, w = sample['img'], sample['height'], sample['width']
+#        if h>mh or w>mw:
+#            return ts
+#        new_t = torch.zeros( (c,mh,mw) )
+#        new_t[:,:h,:w]=ts
+#        return {'img': new_t, 'height': h, 'width': w }
+#
 
 
 # check that the module is testable

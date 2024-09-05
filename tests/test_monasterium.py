@@ -25,10 +25,10 @@ def data_set( data_path ):
 
 def test_size_fit_transform():
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    img, h, w = monasterium.MonasteriumDataset.size_fit_transform( img_to_resize, 30, 200 )
-    assert img.shape == torch.Size([3,30,200])
-    assert h == 30
-    assert w == 150
+    sample_dict = monasterium.MonasteriumDataset.size_fit_transform( img_to_resize, 30, 200 )
+    assert sample_dict['img'].shape == torch.Size([3,30,200])
+    assert sample_dict['height'] == 30
+    assert sample_dict['width'] == 150
 
 def test_default_transform( data_set ):
     """Testing default transform"""
@@ -39,9 +39,9 @@ def test_default_transform( data_set ):
     timg = data_set.transform( ToPILImage()( img_to_resize ))
     #print("timg=", timg, " with type=", type(timg))
     assert len(timg) == 3
-    assert timg[0].equal( final_img )
-    assert timg[1] == 100
-    assert timg[2] == 500
+    assert timg['img'].equal( final_img )
+    assert timg['height'] == 100
+    assert timg['width'] == 500
     #assert timg[4] == 500
 
 
@@ -50,11 +50,11 @@ def test_load_from_tsv( data_path ):
     assert len(samples) == 20
 
 
-
 def test_dataset_from_tsv_item_type( data_set ):
     assert len(data_set)==20
     assert type(data_set[0]) is dict
     assert len(data_set[0]) == 4
+
 
 def test_load_from_tsv_item_subtypes( data_set ):
     assert type(data_set[0]['img']) is Tensor # img tensor
