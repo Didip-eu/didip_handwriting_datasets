@@ -42,9 +42,16 @@ def test_default_transform( data_set ):
     assert timg[0].equal( final_img )
     assert timg[1] == 100
     assert timg[2] == 500
+    #assert timg[4] == 500
 
 
-def test_load_from_tsv_item_type( data_set ):
+def test_load_from_tsv( data_path ):
+    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('20_ms.tsv'))
+    assert len(samples) == 20
+
+
+
+def test_dataset_from_tsv_item_type( data_set ):
     assert len(data_set)==20
     assert type(data_set[0]) is dict
     assert len(data_set[0]) == 4
@@ -54,6 +61,7 @@ def test_load_from_tsv_item_subtypes( data_set ):
     assert type(data_set[0]['transcription']) is str    # transcription
     assert type(data_set[0]['height']) is int    # img height (after resizing)
     assert type(data_set[0]['width']) is int    # img width  (after resizing)
+    #assert type(data_set[0]['mask']) is Tensor    # img width  (after resizing)
 
 def test_load_from_tsv_img_properties( data_set ):
     assert len(data_set)==20

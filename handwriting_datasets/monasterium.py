@@ -298,7 +298,8 @@ class MonasteriumDataset(VisionDataset):
                                             
 
 
-    def load_from_tsv(self, file_path: Path) -> list:
+    @staticmethod
+    def load_from_tsv(file_path: Path) -> list:
         """
         Load pairs (<line image path>, transcription) from an existing TSV file.
 
