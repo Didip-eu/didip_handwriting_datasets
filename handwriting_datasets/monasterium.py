@@ -79,7 +79,8 @@ class MonasteriumDataset(VisionDataset):
                 self,
                 root: str=str(Path.home().joinpath('tmp', 'data', 'Monasterium')),
                 work_folder: str = '', # here further files are created, for any particular task
-                subset: str = 'all',
+                subset: str = 'train',
+                subset_ratios: Tuple[float,float,float]=(.7, .1, .2),
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
@@ -95,7 +96,8 @@ class MonasteriumDataset(VisionDataset):
                         is to be created.
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
-            subset (str): 'all' (default), 'train', 'validate' or 'test'.
+            subset (str): 'train' (default), 'validate' or 'test'.
+            subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
             transform (Callable): Function to apply to the PIL image at loading time.
             target_transform (Callable): Function to apply to the transcription ground truth at loading time.
             extract_pages (bool): if True, extract the archive's content into the base folder no matter what;
@@ -132,23 +134,28 @@ class MonasteriumDataset(VisionDataset):
 
         if (task != ''):
             build_ok = build_items if from_tsv_file == '' else False
-            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, work_folder=work_folder, count=count )
+            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, subset_ratios=subset_ratios, work_folder=work_folder, count=count )
 
 
     def build_task( self, 
-                   task: str='htr', 
+                   task: str='htr',
                    build_items: bool=True, 
                    from_tsv_file: str='',
-                   subset: str='all', 
+                   subset: str='train', 
+                   subset_ratios: Tuple[float,float,float]=(.7, .1, .2),
                    shape: str='polygons', 
                    count: int=0, 
                    work_folder: str='', 
                    crop=False):
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
+        + only creates the files needed for a particular task (train, validate, or test): if more than one subset is needed, just initialize a new dataset with desired parameters (work directory, subset)
+        + by default, 'train' subset contains 60% of the samples, 'validate', 10%, and 'test', 20%.
+        + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
         Args:
-            subset (str): 'all' (default), 'train' (default), 'validate' or 'test'.
+            subset (str): 'train', 'validate' or 'test'.
+            subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
             build_items (bool): if True (default), extract and store images for the task from the pages; 
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
             shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
@@ -179,10 +186,12 @@ class MonasteriumDataset(VisionDataset):
             else:
                 self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
                 if not self.work_folder_path.is_dir():
-                    self.work_folder_path.mkdir() 
-                self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, count=count, shape=shape ), subset )
+                    self.work_folder_path.mkdir()
+
+                self.data = self.split_set( self.extract_lines( self.base_folder_path, self.work_folder_path, count=count, shape=shape ), ratios=subset_ratios, subset=subset )
+                
                 # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv( Path(self.work_folder_path.joinpath('monasterium_ds.tsv')) )
+                self.dump_data_to_tsv( Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self.generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
 
@@ -279,7 +288,7 @@ class MonasteriumDataset(VisionDataset):
 
     def dump_data_to_tsv(self, file_path: str='', all_path_style=False):
         """
-        Create a CSV file with all pairs (<line image absolute path>, <transcription>).
+        Create a CSV file with all tuples (<line image absolute path>, <transcription>, <original height>, <original width>).
 
         Args:
             file_path (str): A TSV (absolute) file path 
@@ -291,42 +300,54 @@ class MonasteriumDataset(VisionDataset):
                       gt if not all_path_style else Path(img_path).with_suffix('.gt')))
             return
         with open( file_path, 'w' ) as of:
-            for img_path, gt in self.data:
-                #print('{}\t{}'.format( img_path, gt ))
-                of.write( '{}\t{}\n'.format( img_path,
-                                             gt if not all_path_style else Path(img_path).with_suffix('.gt')))
+            for sample in self.data:
+                img_path, gt, height, width = sample['img'], sample['transcription'], sample['height'], sample['width']
+                #print('{}\t{}'.format( img_path, gt, height, width ))
+                of.write( '{}\t{}\t{}\t{}\n'.format( img_path,
+                                             gt if not all_path_style else Path(img_path).with_suffix('.gt'),
+                                             height, width ))
                                             
-
 
     @staticmethod
     def load_from_tsv(file_path: Path) -> list:
         """
-        Load pairs (<line image path>, transcription) from an existing TSV file.
+        Load samples (as dictionaries) from an existing TSV file.
 
         Args:
             file_path (pathlib.Path): A file path (relative to the caller's pwd), where each line
-                                      is either a pair (<img file path>, <transcription text>) or
-                                      a pair (img file path>, <transcription file path>).
+                                      is either a tuple 
+        
+            <img file path> <transcription text> <height> <width>
+            or
+            <img file path> <transcription file path> <height> <width>
 
         Returns:
-            list: A list of 2-tuples whose first element is the (relative) path of
-                  the line image and the second element is the _content_ of the transcription file.
+            list[dict]: A list of dictionaries of the form {'img': <img file path>,
+                                                      'transcription': <transcription text>,
+                                                      'height': <original height>,
+                                                      'width': <original width>}
         """
-        pairs=[]
+        samples=[]
         with open( file_path, 'r') as infile:
             # detect file style from first line
-            img_path, file_or_text = next( infile )[:-1].split('\t')
+            img_path, file_or_text, height, width = next( infile )[:-1].split('\t')
             all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
             if not all_path_style:
-                pairs = [ pair[:-1].split('\t') for pair in infile ]
+                def tsv_to_dict( tsv_line ):
+                    img, transcription, height, width = tsv_line[:-1].split('\t')
+                    return {'img': img, 'transcription': transcription,
+                            'height': height, 'width': width }
+
+                samples = [ tsv_to_dict(s) for s in infile ]
             else:
-                for pair in infile:
-                    img_file, gt_file = pair[:-1].split('\t')
+                for tsv_line in infile:
+                    img_file, gt_file, height, width = tsv_line[:-1].split('\t')
                     with open( gt_file, 'r') as igt:
                         gt_content = '\n'.join( igt.readlines())
-                        pairs.append( (img_file, gt_content) )
-        return pairs
+                        samples.append( {'img': img_file, 'transcription': gt_content,
+                                         'eight': height, 'width': width} )
+        return samples
 
 
     def build_page_lines_pairs(self, base_folder_path:Path, work_folder_path: Path, text_only:bool=False, count:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
@@ -539,7 +560,7 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='polygons', text_only=False, count=0) -> List[Tuple[str, str]]:
+    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='polygons', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
@@ -552,7 +573,10 @@ class MonasteriumDataset(VisionDataset):
             count (int): Stops after extracting {count} images (for testing purpose).
 
         Returns:
-            list of tuples: An array of pairs (<absolute img_file_path>, <transcription text>)
+            list[dict]: An array of dictionaries {'img': <absolute img_file_path>,
+                                                  'transcription': <transcription text>,
+                                                  'height': <original height>,
+                                                  'width': <original width>}
 
         """
         # filtering out Godzilla-sized images (a couple of them)
@@ -565,7 +589,8 @@ class MonasteriumDataset(VisionDataset):
         img_sizes = []
         cnt = 0 # for testing purpose
 
-        items = []
+        samples = [] # each sample is a dictionary {'img': <img file path> , 'transcription': str,
+                     #                              'height': int, 'width': int}
 
         for page in self.pagexmls:
 
@@ -591,7 +616,7 @@ class MonasteriumDataset(VisionDataset):
 
                 for textline_elt in page_root.findall( './/pc:TextLine', ns ):
                     if count and cnt == count:
-                        return items
+                        return samples
 
                     textline = dict()
                     textline['id']=textline_elt.get("id")
@@ -604,13 +629,14 @@ class MonasteriumDataset(VisionDataset):
                     polygon_string=textline_elt.find('./pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
                     textline['bbox'] = IP.Path( coordinates ).getbbox()
-                    #img_sizes.append( [ textline['bbox'][i+2]-textline['bbox'][i] for i in (0,1) ])
+                    
+                    x_left, y_up, x_right, y_low = textline['bbox']
+                    textline['width'], textline['height'] = x_right-x_left, y_low-y_up
                     
                     img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
 
-                    items.append( (textline['img_path'], textline['transcription']) ) 
-                    #print("extract_lines():", items[-1])
+                    #print("extract_lines():", samples[-1])
                     if not text_only:
                         bbox_img = page_image.crop( textline['bbox'] )
 
@@ -631,82 +657,89 @@ class MonasteriumDataset(VisionDataset):
                             # composite
                             Image.composite(bbox_img, bg, mask).save( Path( textline['img_path'] ))
 
+                    samples.append( {'img': textline['img_path'], 'transcription': textline['transcription'], 'height': textline['height'], 'width': textline['width'] } )
+
                     with open( img_path_prefix.with_suffix('.gt'), 'w') as gt_file:
                         gt_file.write( textline['transcription'] )
                         gt_lengths.append(len( textline['transcription']))
 
                     cnt += 1
 
-        return items
+        return samples
     
 
 
-    def split_set(self, pairs: List[Tuple[str, str]], subset: str = 'all') -> List[ Tuple[str, str]]:
+    @staticmethod
+    def split_set(samples: object, ratios: Tuple[float, float, float], subset) -> List[object]:
         """
-        Split a set of pairs (<line image filename>, transcription>) into 3 sets: train (70%),
-        validation (10%), and test (20%).
+        Split a dataset into 3 sets: train, validation, test.
 
         Args:
-            pairs (List[tuple]): A list of all pairs (<line image filename>, <transcription content>)
-                           in the dataset.
-            subset (str): Subset to return: 'all' (default), 'train', 'validate', or 'test'.
+            samples (object): any dataset sample.
+            ratios Tuple[float, float, float]: respective proportions for possible subsets
+            subset (str): subset to be build  ('train', 'validate', or 'test')
 
         Returns:
-            list: A list of pairs, either for training, validation, or testing.
+            list[object]: a list of samples.
         """
 
         random.seed(10)
-        test_count = int( len(pairs)*.2 )
-        validation_count = int( len(pairs)*.1 )
 
-        all_pairs = set( pairs )
+        if 1.0 in ratios:
+            return list( samples )
+
+        subset_2_count = int( len(samples)* ratios[1])
+        subset_3_count = int( len(samples)* ratios[2] )
+
+        subset_1_indices = set( range(len(samples)))
         
-        if subset == 'all':
-            return list(all_pairs)
+        if ratios[1] != 0:
+            subset_2_indices = set( random.sample( subset_1_indices, subset_2_count))
+            subset_1_indices -= subset_2_indices
 
-        test_pairs = set( random.sample( all_pairs, test_count) )
-        all_pairs -= test_pairs
+        if ratios[2] != 0:
+            subset_3_indices = set( random.sample( subset_1_indices, subset_3_count))
+            subset_1_indices -= subset_3_indices
 
-        validation_pairs = set( random.sample( all_pairs, validation_count))
-        all_pairs -= validation_pairs
-
+        if subset == 'train':
+            return [ samples[i] for i in subset_1_indices ]
         if subset == 'validate':
-            return validation_pairs
+            return [ samples[i] for i in subset_2_indices ]
         if subset == 'test':
-            return test_pairs
-        return list( all_pairs )
+            return [ samples[i] for i in subset_3_indices ]
 
 
-    def __getitem__(self, index) -> Tuple[Tensor, str, int, int]:
+    def __getitem__(self, index) -> dict:
         """
         Returns:
-            tuple: A pair (image, transcription)
+            dict[str,Union[Tensor,int,str]]: dictionary
         """
-        transcr = self.data[index][1]
-        sample_dict = self.transform( Image.open(self.data[index][0], 'r') )
-        sample_dict['transcription'] = transcr
-        #print("transcr=", transcr, "\nheight=", height, "\nwidth=", width)
-        return sample_dict
+        img_path, height, width, transcription = self.data[index]['img'], self.data[index]['height'],\
+                                                 self.data[index]['width'], self.data[index]['transcription']
+        return self.transform( {'img': Image.open( img_path, 'r'), 'height': height, 
+                                         'width': width, 'transcription': transcription } )
 
 
     def __len__(self) -> int:
         """
         Returns:
-            tuple: A pair (image, transcription)
+            int: number of data points.
         """
         return len( self.data )
 
 
     @staticmethod
-    def size_fit_transform( t: Tensor, max_h: int=2000, max_w: int=300 ) -> Dict[str, Union[Tensor,int]]:
+    def size_fit_transform( sample: dict, max_h: int=2000, max_w: int=300 ) -> Dict[str, Union[Tensor,int]]:
         """
         A reasonable default transform for a line-based dataset:
 
         + fit a maximum size, with resizing and/or padding when needed
-        + preserver size ratio
+        + preserve size ratio
+        TODO: a composition of two simpler functtions
+
 
         Input:
-            t (Tensor): a multi-channel image.
+            sample (dict): sample dictionary
             max_h (int): maximum height
             max_w (int): maximum weight
 
@@ -715,6 +748,7 @@ class MonasteriumDataset(VisionDataset):
                                      + 'img': a ( c × max_h × max_w ) tensor, 0-padded
                                      + 'height': image height (without padding)
                                      + 'width': image width (without padding)
+                                     + 'transcription': transcription
         """
      
         def pad(ts, mh=0, mw=0):
@@ -726,6 +760,8 @@ class MonasteriumDataset(VisionDataset):
             new_t[:,:h,:w]=ts
             return new_t
    
+        t, transcr = sample['img'], sample['transcription']
+
         _, height, width = t.shape
         ratio = width / height
         if height > max_h:
@@ -737,7 +773,7 @@ class MonasteriumDataset(VisionDataset):
         _, height, width = t.shape
         t = pad( t, max_h, max_w )
         #return t
-        return {'img':t, 'height':height, 'width':width}
+        return {'img':t, 'height':height, 'width':width, 'transcription': transcr}
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:

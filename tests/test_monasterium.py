@@ -19,16 +19,26 @@ def data_path():
 def data_set( data_path ):
     return monasterium.MonasteriumDataset(
             task='htr', shape='bbox',
-            from_tsv_file=data_path.joinpath('20_ms.tsv'),
+            from_tsv_file=data_path.joinpath('monasterium_ds_train.tsv'),
             transform=partial( monasterium.MonasteriumDataset.size_fit_transform, max_h=300, max_w=2000))
+
+@pytest.mark.parametrize(
+        "subset, set_length",
+        [('train', 5), ('validate', 3), ('test', 2)])
+def test_split_set( subset, set_length):
+    samples = [ {'a':1.2, 'b':(4,5), 'c':'some' } for i in range(10) ]
+    s = monasterium.MonasteriumDataset.split_set( samples, (.5,.3,.2), subset )
+    assert len(s) == set_length
+    assert s[0]['b'] == (4,5)
 
 
 def test_size_fit_transform():
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.MonasteriumDataset.size_fit_transform( img_to_resize, 30, 200 )
+    sample_dict = monasterium.MonasteriumDataset.size_fit_transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'}, 30, 200 )
     assert sample_dict['img'].shape == torch.Size([3,30,200])
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
+    assert sample_dict['transcription'] == 'abc'
 
 def test_default_transform( data_set ):
     """Testing default transform"""
@@ -36,17 +46,18 @@ def test_default_transform( data_set ):
     final_img = torch.zeros((3,300,2000))
     final_img[:,:100,:500]=img_to_resize
 
-    timg = data_set.transform( ToPILImage()( img_to_resize ))
+    timg = data_set.transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     #print("timg=", timg, " with type=", type(timg))
-    assert len(timg) == 3
+    assert len(timg) == 4
     assert timg['img'].equal( final_img )
     assert timg['height'] == 100
     assert timg['width'] == 500
-    #assert timg[4] == 500
+    assert timg['transcription'] == 'abc'
+    
 
 
 def test_load_from_tsv( data_path ):
-    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('20_ms.tsv'))
+    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('monasterium_ds_train.tsv'))
     assert len(samples) == 20
 
 
