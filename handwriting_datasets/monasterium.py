@@ -305,7 +305,7 @@ class MonasteriumDataset(VisionDataset):
                 #print('{}\t{}'.format( img_path, gt, height, width ))
                 of.write( '{}\t{}\t{}\t{}\n'.format( img_path,
                                              gt if not all_path_style else Path(img_path).with_suffix('.gt'),
-                                             height, width ))
+                                             int(height), int(width) ))
                                             
 
     @staticmethod
@@ -337,7 +337,7 @@ class MonasteriumDataset(VisionDataset):
                 def tsv_to_dict( tsv_line ):
                     img, transcription, height, width = tsv_line[:-1].split('\t')
                     return {'img': img, 'transcription': transcription,
-                            'height': height, 'width': width }
+                            'height': int(height), 'width': int(width) }
 
                 samples = [ tsv_to_dict(s) for s in infile ]
             else:
@@ -346,7 +346,7 @@ class MonasteriumDataset(VisionDataset):
                     with open( gt_file, 'r') as igt:
                         gt_content = '\n'.join( igt.readlines())
                         samples.append( {'img': img_file, 'transcription': gt_content,
-                                         'eight': height, 'width': width} )
+                                         'eight': int(height), 'width': int(width)} )
         return samples
 
 
@@ -714,10 +714,14 @@ class MonasteriumDataset(VisionDataset):
         Returns:
             dict[str,Union[Tensor,int,str]]: dictionary
         """
-        img_path, height, width, transcription = self.data[index]['img'], self.data[index]['height'],\
+        img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
                                                  self.data[index]['width'], self.data[index]['transcription']
+        assert type(img_path) is str and type(height) is int and type(width) is int and type(gt) is str
+
+        # goal: transform image, while returning not only the image but also the unpadded size
+        # -> meta-information has to be passed along in the sample; 
         return self.transform( {'img': Image.open( img_path, 'r'), 'height': height, 
-                                         'width': width, 'transcription': transcription } )
+                                         'width': width, 'transcription': gt } )
 
 
     def __len__(self) -> int:
@@ -728,54 +732,6 @@ class MonasteriumDataset(VisionDataset):
         return len( self.data )
 
 
-    @staticmethod
-    def size_fit_transform( sample: dict, max_h: int=2000, max_w: int=300 ) -> Dict[str, Union[Tensor,int]]:
-        """
-        A reasonable default transform for a line-based dataset:
-
-        + fit a maximum size, with resizing and/or padding when needed
-        + preserve size ratio
-        TODO: a composition of two simpler functtions
-
-
-        Input:
-            sample (dict): sample dictionary
-            max_h (int): maximum height
-            max_w (int): maximum weight
-
-        Output:
-            dict[str, Union[Tensor,int]]]: a dictionary with 
-                                     + 'img': a ( c × max_h × max_w ) tensor, 0-padded
-                                     + 'height': image height (without padding)
-                                     + 'width': image width (without padding)
-                                     + 'transcription': transcription
-        """
-     
-        def pad(ts, mh=0, mw=0):
-            #print(f"pad({mh}, {mw})")
-            c,h,w = ts.shape
-            if h>mh or w>mw:
-                return ts
-            new_t = torch.zeros( (c,mh,mw) )
-            new_t[:,:h,:w]=ts
-            return new_t
-   
-        t, transcr = sample['img'], sample['transcription']
-
-        _, height, width = t.shape
-        ratio = width / height
-        if height > max_h:
-            # resize to max_height while keeping ratio
-            t = v2.Resize(size=(max_h, int(max_h*ratio)), antialias=True)( t )
-        width = t.shape[2]
-        if width > max_w:
-            t = v2.Resize(size=(int(max_w/ratio), max_w), antialias=True)( t )
-        _, height, width = t.shape
-        t = pad( t, max_h, max_w )
-        #return t
-        return {'img':t, 'height':height, 'width':width, 'transcription': transcr}
-
-
     def count_line_items(self, folder) -> Tuple[int, int]:
         return (
                 len( [ i for i in Path(folder).glob('*.gt') ] ),
@@ -783,38 +739,34 @@ class MonasteriumDataset(VisionDataset):
                 )
 
 
-#class Resize( object ):
-#
-#    def __init__( self, max_output_size ):
-#        assert isinstance( max_output_size, tuple)
-#        self.max_h, self.max_w = max_output_size
-#
-#    def __call__(self, sample):
-#        t = sample[0]
-#        _, height, width = t.shape
-#        ratio = width / height
-#        if height > max_h:
-#            # resize to max_height while keeping ratio
-#            t = v2.Resize(size=(max_h, int(max_h*ratio)), antialias=True)( t )
-#        width = t.shape[2]
-#        if width > max_w:
-#            t = v2.Resize(size=(int(max_w/ratio), max_w), antialias=True)( t )
-#        _, height, width = t.shape
-#        return {'img': t, 'height': height, 'width': width }
-#
-#class Pad( object):
-#
-#    def __init__( self, max_output_size ):
-#        assert isinstance( max_output_size, tuple)
-#        self.max_h, self.max_w = max_output_size
-#
-#    def __call__( self, sample ):
-#        t, h, w = sample['img'], sample['height'], sample['width']
-#        if h>mh or w>mw:
-#            return ts
-#        new_t = torch.zeros( (c,mh,mw) )
-#        new_t[:,:h,:w]=ts
-#        return {'img': new_t, 'height': h, 'width': w }
+class ResizeToMax():
+
+    def __init__( self, max_h, max_w ):
+        self.max_h, self.max_w = max_h, max_w
+
+    def __call__(self, sample):
+        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        if h <= self.max_h and w <= self.max_w:
+            return sample
+        t = v2.Resize(size=self.max_h, max_size=self.max_w, antialias=True)( t )
+        h_new, w_new = [ int(d) for d in t.shape[1:] ]
+
+        return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
+
+class PadToSize():
+
+    def __init__( self, max_h, max_w ):
+        self.max_h, self.max_w = max_h, max_w
+
+    def __call__( self, sample ):
+        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        if h > self.max_h or w > self.max_w:
+            warnings.warn("Cannot pad an image that is larger ({}x{}) than the padding size ({}x{})".format(
+                h, w, self.max_h, self.max_w))
+            return sample
+        new_t = torch.zeros( (t.shape[0], self.max_h, self.max_w) )
+        new_t[:,:h,:w]=t
+        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt }
 #
 
 
