@@ -105,7 +105,7 @@ class MonasteriumDataset(VisionDataset):
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
                         = cropped TextRegion images, with corresponding PageXML files. If '' (default),
                         the dataset archive is extracted but no actual data get built.
-            shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
+            shape (str): 'bbox' (default) for line bounding boxes or 'polygons' 
             build_items (bool): if True (default), extract and store images for the task from the pages; 
                      otherwise, just extract the original data from the archive.
             from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
@@ -143,7 +143,7 @@ class MonasteriumDataset(VisionDataset):
                    from_tsv_file: str='',
                    subset: str='train', 
                    subset_ratios: Tuple[float,float,float]=(.7, .1, .2),
-                   shape: str='polygons', 
+                   shape: str='bbox', 
                    count: int=0, 
                    work_folder: str='', 
                    crop=False):
@@ -158,7 +158,7 @@ class MonasteriumDataset(VisionDataset):
             subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
             build_items (bool): if True (default), extract and store images for the task from the pages; 
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
-            shape (str): 'bbox' for line bounding boxes or 'polygons' (default)
+            shape (str): 'bbox' (default) for line bounding boxes or 'polygons'
             crop (bool): (for segmentation set only) crop text regions from both image and PageXML file.
             count (int): Stops after extracting {count} image items (for testing purpose only).
             from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
@@ -560,7 +560,7 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='polygons', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
+    def extract_lines(self, base_folder_path: Path,  work_folder_path: Path, shape='bbox', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
@@ -568,7 +568,7 @@ class MonasteriumDataset(VisionDataset):
         Args:
             base_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            shape (str): Extract lines as polygon-within-bbox (default) or as bboxes ('bbox').
+            shape (str): Extract lines as bboxes (default) or as polygon-within-bbox.
             text_only (bool): Store only the transcriptions (*.gt files).
             count (int): Stops after extracting {count} images (for testing purpose).
 
@@ -644,6 +644,22 @@ class MonasteriumDataset(VisionDataset):
                             bbox_img.save( textline['img_path'] )
 
                         else:
+                            # This takes care of saving line images, but not of computing
+                            # useful information for training and inference, such as masks.
+                            #
+                            # Options:
+                            # 1. Compute mask at this stage and add it to the sample: added complexity
+                            # 2. Compute mask in __getitem()__: consistent with having all tensor processing
+                            #    at sample use stage, but need at least polygon definition
+                            # 3. Find way to save mask in TSV? Related to...
+                            # 4. Add another import/export format (pickled tensors?)
+
+                            # Solution = everything :))
+                            # 1. Add polygon sequence to raw sample
+                            # 2. Serialize and deserialize same seq. to/fro TSV
+                            # 3. Use __getitem__ to compute the tensor from it
+                            # 4. Ideally: import/export to pickled tensors
+
                             # mask (=line polygon)
                             mask = Image.new("L", bbox_img.size, 0)
                             drawer = ImageDraw.Draw(mask)
@@ -750,7 +766,7 @@ class ResizeToMax():
             return sample
         t = v2.Resize(size=self.max_h, max_size=self.max_w, antialias=True)( t )
         h_new, w_new = [ int(d) for d in t.shape[1:] ]
-
+        
         return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
 class PadToSize():
@@ -766,8 +782,11 @@ class PadToSize():
             return sample
         new_t = torch.zeros( (t.shape[0], self.max_h, self.max_w) )
         new_t[:,:h,:w]=t
-        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt }
-#
+
+        # add a field
+        mask = torch.zeros( new_t.shape, dtype=torch.bool)
+        mask[:,:h,:w]=1
+        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
 
 # check that the module is testable

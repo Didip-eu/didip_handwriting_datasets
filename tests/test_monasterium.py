@@ -36,28 +36,82 @@ def test_split_set( subset, set_length):
     assert s[0]['b'] == (4,5)
 
 
-def test_ResizeToMax():
+def test_ResizeToMax_img_field():
     """
     Raw transform
     """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
     sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['img'].shape == torch.Size([3,30,150])
+
+def test_ResizeToMax_heigh_width_fields():
+    """
+    Raw transform
+    """
+    img_to_resize = torch.randint(10,255, (3, 100, 500))
+    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
+
+
+def test_ResizeToMax_transcription_field():
+    """
+    Raw transform
+    """
+    img_to_resize = torch.randint(10,255, (3, 100, 500))
+    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['transcription'] == 'abc'
 
-
-def test_PadToSize_transform():
+def test_PadToSize_img_field():
     """
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
     sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['img'].shape == torch.Size([3,200,600])
+
+def test_PadToSize_height_width_fields():
+    """
+    Raw transform
+    """
+    img_to_pad = torch.randint(10,255, (3, 100, 500))
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['height'] == 100
     assert sample_dict['width'] == 500
+
+def test_PadToSize_transcription_field():
+    """
+    Raw transform
+    """
+    img_to_pad = torch.randint(10,255, (3, 100, 500))
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['transcription'] == 'abc'
+
+def test_PadToSize_mask_field():
+    """
+    Raw transform
+    """
+    img_to_pad = torch.randint(10,255, (3, 100, 500))
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc'} )
+    mask = torch.zeros((3,200,600), dtype=torch.bool)
+    mask[:,:100,:500]=1
+    assert sample_dict['mask'].shape == torch.Size( [3,200,600])
+    assert sample_dict['mask'].dtype is torch.bool
+    assert sample_dict['mask'].equal( mask )
+
+def test_PadToSize_mask_field_handling_holes():
+    """
+    Raw transform
+    """
+    img_to_pad = torch.randint(10,255, (3, 100, 500))
+    img_to_pad[:,30:60, 2:10]=0
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc'} )
+    mask = torch.zeros((3,200,600), dtype=torch.bool)
+    mask[:,:100,:500]=1
+    assert sample_dict['mask'].shape == torch.Size( [3,200,600])
+    assert sample_dict['mask'].dtype is torch.bool
+    assert sample_dict['mask'].equal( mask )
+
 
 def test_ResizePadCompose():
     """ Resize and Pad """
@@ -82,19 +136,21 @@ def test_default_transform( data_set ):
 
     sample = data_set.transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     #print("sample=", timg, " with type=", type(timg))
-    assert len(sample) == 4
+    assert len(sample) == 5
     assert sample['img'].equal( final_img )
     assert sample['height'] == 100
     assert sample['width'] == 500
     assert sample['transcription'] == 'abc'
+    assert type(sample['mask']) is Tensor
     
 def test_getitem( data_set):
     sample = data_set[0]
-    assert len(sample) == 4
+    assert len(sample) == 5
     assert type(sample['img']) is Tensor
     assert type(sample['transcription']) is str
     assert type(sample['height']) is int
     assert type(sample['width']) is int
+    assert type(sample['mask']) is Tensor
 
 def test_load_from_tsv( data_path ):
     samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('monasterium_ds_train.tsv'))
@@ -104,7 +160,7 @@ def test_load_from_tsv( data_path ):
 def test_dataset_from_tsv_item_type( data_set ):
     assert len(data_set)==20
     assert type(data_set[0]) is dict
-    assert len(data_set[0]) == 4
+    assert len(data_set[0]) == 5
 
 
 def test_load_from_tsv_item_subtypes( data_set ):
