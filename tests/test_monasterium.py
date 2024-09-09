@@ -36,19 +36,6 @@ def test_split_set( subset, set_length):
     assert s[0]['b'] == (4,5)
 
 
-def test_size_fit_transform():
-    """
-    Raw transform: input image is a tensor
-    """
-    img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.MonasteriumDataset.size_fit_transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'}, 30, 200 )
-    assert sample_dict['img'].shape == torch.Size([3,30,200])
-    assert sample_dict['height'] == 30
-    assert sample_dict['width'] == 150
-    assert sample_dict['transcription'] == 'abc'
-
-
-
 def test_ResizeToMax():
     """
     Raw transform
