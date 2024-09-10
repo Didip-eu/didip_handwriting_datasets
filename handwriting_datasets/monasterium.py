@@ -136,6 +136,7 @@ class MonasteriumDataset(VisionDataset):
             build_ok = build_items if from_tsv_file == '' else False
             self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, subset_ratios=subset_ratios, work_folder=work_folder, count=count )
 
+            #print("\nbuild_task(): data=", self.data[:6])
 
     def build_task( self, 
                    task: str='htr',
@@ -183,7 +184,8 @@ class MonasteriumDataset(VisionDataset):
                     self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
-                    print(self.data[0]['height'], "type=", type(self.data[0]['height']))
+                    #print("\nbuild_task(): data=", self.data[:6])
+                    #print(self.data[0]['height'], "type=", type(self.data[0]['height']))
                     #print(self.data[0]['polygon_mask'])
             else:
                 self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
@@ -331,7 +333,8 @@ class MonasteriumDataset(VisionDataset):
             list[dict]: A list of dictionaries of the form {'img': <img file path>,
                                                       'transcription': <transcription text>,
                                                       'height': <original height>,
-                                                      'width': <original width>}
+                                                      'width': <original width>,
+                                                      'mask': <mask for unpadded part of the img>}}
         """
         samples=[]
         with open( file_path, 'r') as infile:
@@ -339,16 +342,15 @@ class MonasteriumDataset(VisionDataset):
             # - is the transcription passed as a filepath or as text?
             # - is there a polygon path
 
-            img_path, file_or_text, height, width, polygon_mask = [ None ] * 5
+            img_path, file_or_text, height, width, polygon_mask = [None] * 5
             has_polygon = False
             fields = next( infile )[:-1].split('\t')
+            print(fields)
+            img_path, file_or_text, height, width = fields[:4]
             if len(fields) > 4:
-                img_path, file_or_text, height, width, polygon_mask = fields
-                print('load_from_tsv(): type(height)=', type(height))
+                polygon_mask = fields[4]
                 has_polygon = True
-            else:
-                print('load_from_tsv(): type(height)=', type(height))
-                img_path, file_or_text, height, width = fields
+            print('load_from_tsv(): type(img_path)=', type(img_path), 'type(height)=', type(height))
             all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
             if not all_path_style:
@@ -356,20 +358,21 @@ class MonasteriumDataset(VisionDataset):
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
                         img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
-                        print('tsv_to_dict(): type(height)=', type(height))
+                        #print('tsv_to_dict(): type(height)=', type(height))
 
                         s = {'img': img, 'transcription': transcription,
                                 'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
-                        print('tsv_to_dict(): type(s[height]=', type(s['height']))
+                        print('tsv_to_dict(): type(img_path)=', type(img_path), 'type(s[height]=', type(s['height']))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
                         s = {'img': img, 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
-                        print('tsv_to_dict(): type(s[height]=', type(s['height']))
+                        #print('tsv_to_dict(): type(img_path)=', type(img_path), 'type(s[height]=', type(s['height']))
                         return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
+                #print("tsv_to_dict(): samples=", samples)
             else:
                 for tsv_line in infile:
                     img_file, gt_file, height, width = tsv_line[:-1].split('\t')
@@ -712,6 +715,7 @@ class MonasteriumDataset(VisionDataset):
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
                                'height': textline['height'], 'width': textline['width'] }
+                    print("extract_lines(): sample=", sample)
                     if textline['polygon'] is not None:
                         sample['polygon_mask'] = textline['polygon']
                     samples.append( sample )
@@ -773,6 +777,7 @@ class MonasteriumDataset(VisionDataset):
         """
         img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
                                                  self.data[index]['width'], self.data[index]['transcription']
+        #print('__getitem__(): data[{}]={}'.format(index, self.data[index]))
         #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
 
         assert isinstance(img_path, Path) or isinstance(img_path, str)
@@ -783,10 +788,10 @@ class MonasteriumDataset(VisionDataset):
 
         # goal: transform image, while returning not only the image but also the unpadded size
         # -> meta-information has to be passed along in the sample; :
-        sample = self.data[index]
-        sample['img'] = Image.open( sample['img'], 'r')
-        print('__getitem__({}): sample='.format(index), sample)
-        return self.transform( sample )
+        sample_with_img_file = self.data[index].copy()
+        sample_with_img_file['img'] = Image.open( sample_with_img_file['img'], 'r')
+        #print('__getitem__({}): sample='.format(index), sample_with_img_file)
+        return self.transform( sample_with_img_file )
 
 
     def __len__(self) -> int:

@@ -26,7 +26,7 @@ def bbox_data_set( data_path ):
 @pytest.fixture(scope="session")
 def polygon_data_set( data_path ):
     return monasterium.MonasteriumDataset(
-            task='htr', shape='polygon',
+            task='htr', shape='polygons',
             from_tsv_file=data_path.joinpath('polygons', 'monasterium_ds_train.tsv'),
             transform=Compose([ monasterium.ResizeToMax(300,2000), monasterium.PadToSize(300,2000) ]))
 
@@ -151,6 +151,15 @@ def test_default_transform( bbox_data_set ):
     assert sample['transcription'] == 'abc'
     assert type(sample['mask']) is Tensor
     
+    
+def test_data_point_bbox( bbox_data_set ):
+    dp = bbox_data_set.data[0]
+    assert len(dp) == 4
+    assert type(dp['img']) is str
+    assert type(dp['transcription']) is str
+    assert type(dp['height']) is int
+    assert type(dp['width']) is int
+
 def test_getitem_bbox( bbox_data_set ):
     sample = bbox_data_set[0]
     assert len(sample) == 5
@@ -159,6 +168,16 @@ def test_getitem_bbox( bbox_data_set ):
     assert type(sample['height']) is int
     assert type(sample['width']) is int
     assert type(sample['mask']) is Tensor
+
+def test_data_point_polygons( polygon_data_set ):
+    dp = polygon_data_set.data[0]
+    print(dp)
+    assert len(dp) == 5
+    assert type(dp['img']) is str
+    assert type(dp['transcription']) is str
+    assert type(dp['height']) is int
+    assert type(dp['width']) is int
+    assert type(dp['polygon_mask']) is list
 
 def test_getitem_polygons( polygon_data_set ):
     sample = polygon_data_set[0]
@@ -169,7 +188,7 @@ def test_getitem_polygons( polygon_data_set ):
     assert type(sample['height']) is int
     assert type(sample['width']) is int
     assert type(sample['mask']) is Tensor
-    assert type(sample['polygon_mask']) is Tensor
+    assert 'polygon_mask' in sample and type(sample['polygon_mask']) is Tensor
 
 def test_load_from_tsv_bbox( data_path ):
     samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv'))
@@ -182,7 +201,7 @@ def test_load_from_tsv_polygons( data_path ):
 def test_dataset_from_tsv_item_type_bbox( bbox_data_set ):
     assert len(bbox_data_set)==20
     assert type(bbox_data_set[0]) is dict
-    assert len(bbox_data_set[0]) == 6
+    assert len(bbox_data_set[0]) == 5
 
 
 def test_dataset_from_tsv_item_type_polygons( polygon_data_set ):
