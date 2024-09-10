@@ -183,6 +183,8 @@ class MonasteriumDataset(VisionDataset):
                     self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
+                    print(self.data[0]['height'], "type=", type(self.data[0]['height']))
+                    #print(self.data[0]['polygon_mask'])
             else:
                 self.work_folder_path = Path('.', work_folder_name+'HTR') if work_folder=='' else Path( work_folder )
                 if not self.work_folder_path.is_dir():
@@ -288,24 +290,28 @@ class MonasteriumDataset(VisionDataset):
 
     def dump_data_to_tsv(self, file_path: str='', all_path_style=False):
         """
-        Create a CSV file with all tuples (<line image absolute path>, <transcription>, <original height>, <original width>).
+        Create a CSV file with all tuples (<line image absolute path>, <transcription>, <original height>, <original width> [<polygon points]).
 
         Args:
             file_path (str): A TSV (absolute) file path 
             all_path_style (bool): list GT file name instead of GT content.
         """
         if file_path == '':
-            for img_path, gt in self.data:
-                print("{}\t{}".format( img_path, 
-                      gt if not all_path_style else Path(img_path).with_suffix('.gt')))
+            for sample in self.data:
+                img_path, gt, height, width = sample['img'], sample['transcription'], sample['height'], sample['width']
+                print("{}\t{}\t{}\t{}".format( img_path, 
+                      gt if not all_path_style else Path(img_path).with_suffix('.gt'), int(height), int(width)))
             return
         with open( file_path, 'w' ) as of:
             for sample in self.data:
                 img_path, gt, height, width = sample['img'], sample['transcription'], sample['height'], sample['width']
                 #print('{}\t{}'.format( img_path, gt, height, width ))
-                of.write( '{}\t{}\t{}\t{}\n'.format( img_path,
+                of.write( '{}\t{}\t{}\t{}'.format( img_path,
                                              gt if not all_path_style else Path(img_path).with_suffix('.gt'),
                                              int(height), int(width) ))
+                if 'polygon_mask' in sample and sample['polygon_mask'] is not None:
+                    of.write('\t{}'.format( sample['polygon_mask'] ))
+                of.write('\n')
                                             
 
     @staticmethod
@@ -317,9 +323,9 @@ class MonasteriumDataset(VisionDataset):
             file_path (pathlib.Path): A file path (relative to the caller's pwd), where each line
                                       is either a tuple 
         
-            <img file path> <transcription text> <height> <width>
+            <img file path> <transcription text> <height> <width> [<polygon points>]
             or
-            <img file path> <transcription file path> <height> <width>
+            <img file path> <transcription file path> <height> <width> [<polygon points>]
 
         Returns:
             list[dict]: A list of dictionaries of the form {'img': <img file path>,
@@ -329,15 +335,39 @@ class MonasteriumDataset(VisionDataset):
         """
         samples=[]
         with open( file_path, 'r') as infile:
-            # detect file style from first line
-            img_path, file_or_text, height, width = next( infile )[:-1].split('\t')
+            # Detection: 
+            # - is the transcription passed as a filepath or as text?
+            # - is there a polygon path
+
+            img_path, file_or_text, height, width, polygon_mask = [ None ] * 5
+            has_polygon = False
+            fields = next( infile )[:-1].split('\t')
+            if len(fields) > 4:
+                img_path, file_or_text, height, width, polygon_mask = fields
+                print('load_from_tsv(): type(height)=', type(height))
+                has_polygon = True
+            else:
+                print('load_from_tsv(): type(height)=', type(height))
+                img_path, file_or_text, height, width = fields
             all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
             if not all_path_style:
                 def tsv_to_dict( tsv_line ):
-                    img, transcription, height, width = tsv_line[:-1].split('\t')
-                    return {'img': img, 'transcription': transcription,
-                            'height': int(height), 'width': int(width) }
+                    img, transcription, height, width, polygon_mask = [ None ] * 5
+                    if has_polygon:
+                        img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
+                        print('tsv_to_dict(): type(height)=', type(height))
+
+                        s = {'img': img, 'transcription': transcription,
+                                'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
+                        print('tsv_to_dict(): type(s[height]=', type(s['height']))
+                        return s
+                    else:
+                        img, transcription, height, width = tsv_line[:-1].split('\t')
+                        s = {'img': img, 'transcription': transcription,
+                                'height': int(height), 'width': int(width) }
+                        print('tsv_to_dict(): type(s[height]=', type(s['height']))
+                        return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
             else:
@@ -345,8 +375,12 @@ class MonasteriumDataset(VisionDataset):
                     img_file, gt_file, height, width = tsv_line[:-1].split('\t')
                     with open( gt_file, 'r') as igt:
                         gt_content = '\n'.join( igt.readlines())
-                        samples.append( {'img': img_file, 'transcription': gt_content,
-                                         'eight': int(height), 'width': int(width)} )
+                        if has_polygon:
+                            samples.append( {'img': img_file, 'transcription': gt_content,
+                                             'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) })
+                        else:
+                            samples.append( {'img': img_file, 'transcription': gt_content,
+                                             'height': int(height), 'width': int(width) })
         return samples
 
 
@@ -635,6 +669,7 @@ class MonasteriumDataset(VisionDataset):
                     
                     img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
+                    textline['polygon'] = None
 
                     #print("extract_lines():", samples[-1])
                     if not text_only:
@@ -666,6 +701,7 @@ class MonasteriumDataset(VisionDataset):
                             leftx, topy = textline['bbox'][:2]
                             transposed_coordinates = [ (x-leftx, y-topy) for x,y in coordinates ]
                             drawer.polygon( transposed_coordinates, fill=255 )
+                            textline['polygon']=transposed_coordinates
 
                             # background
                             bg = Image.new("RGB", bbox_img.size, color=0)
@@ -673,7 +709,12 @@ class MonasteriumDataset(VisionDataset):
                             # composite
                             Image.composite(bbox_img, bg, mask).save( Path( textline['img_path'] ))
 
-                    samples.append( {'img': textline['img_path'], 'transcription': textline['transcription'], 'height': textline['height'], 'width': textline['width'] } )
+
+                    sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
+                               'height': textline['height'], 'width': textline['width'] }
+                    if textline['polygon'] is not None:
+                        sample['polygon_mask'] = textline['polygon']
+                    samples.append( sample )
 
                     with open( img_path_prefix.with_suffix('.gt'), 'w') as gt_file:
                         gt_file.write( textline['transcription'] )
@@ -732,12 +773,20 @@ class MonasteriumDataset(VisionDataset):
         """
         img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
                                                  self.data[index]['width'], self.data[index]['transcription']
-        assert type(img_path) is str and type(height) is int and type(width) is int and type(gt) is str
+        #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
+
+        assert isinstance(img_path, Path) or isinstance(img_path, str)
+        print("type(height)=", type(height))
+        assert type(height) is int
+        assert type(width) is int
+        assert type(gt) is str
 
         # goal: transform image, while returning not only the image but also the unpadded size
-        # -> meta-information has to be passed along in the sample; 
-        return self.transform( {'img': Image.open( img_path, 'r'), 'height': height, 
-                                         'width': width, 'transcription': gt } )
+        # -> meta-information has to be passed along in the sample; :
+        sample = self.data[index]
+        sample['img'] = Image.open( sample['img'], 'r')
+        print('__getitem__({}): sample='.format(index), sample)
+        return self.transform( sample )
 
 
     def __len__(self) -> int:
