@@ -13,6 +13,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+dependencies = [ "fusexml" ]
+
 [project.urls]
 Homepage = "https://github.com/nicolasrenet/handwriting_datasets"
 

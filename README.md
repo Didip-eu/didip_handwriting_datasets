@@ -1,3 +1,9 @@
+
+~~~~
+cd handwriting_datasets
+pip install .
+~~~~~~~~~~
+
 The lifecycle of a dataset instance relies on 3 folders:
 
 |    | Step              | Folder option           |                                                   | Configurable                                                               |
@@ -11,6 +17,7 @@ The lifecycle of a dataset instance relies on 3 folders:
 3. For most use cases, it is sufficient to specify the work folder (option `work_folder`), where the ready-to-use data (line images and ground truth files) for the task at hand are to be created. By default, a folder named `MonasteriumHandwritingDatasetHTR` is created in the current work directory.
 
 Examples for HTR:
+
 ~~~python
 
 from handwriting_datasets import monasterium
