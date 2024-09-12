@@ -192,20 +192,20 @@ def test_getitem_polygons( polygon_data_set ):
 
 def test_load_from_tsv_bbox( data_path ):
     samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv'))
-    assert len(samples) == 20
+    assert len(samples) == 10
 
 def test_load_from_tsv_polygons( data_path ):
     samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('polygons', 'monasterium_ds_train.tsv'))
-    assert len(samples) == 20
+    assert len(samples) == 10
 
 def test_dataset_from_tsv_item_type_bbox( bbox_data_set ):
-    assert len(bbox_data_set)==20
+    assert len(bbox_data_set) == 10
     assert type(bbox_data_set[0]) is dict
     assert len(bbox_data_set[0]) == 5
 
 
 def test_dataset_from_tsv_item_type_polygons( polygon_data_set ):
-    assert len(polygon_data_set)==20
+    assert len(polygon_data_set) == 10
     assert type(polygon_data_set[0]) is dict
     assert len(polygon_data_set[0]) == 6
 
@@ -224,12 +224,12 @@ def test_load_from_tsv_item_subtypes_polygons( polygon_data_set ):
     assert type(polygon_data_set[0]['mask']) is Tensor    # img width  (after resizing)
 
 def test_load_from_tsv_img_properties_bbox( bbox_data_set ):
-    assert len(bbox_data_set)==20
+    assert len(bbox_data_set) == 10
     assert bbox_data_set[0]['img'].shape[1] == 300    # img height (after resizing)
     assert bbox_data_set[0]['img'].shape[2] == 2000    # img width  (after resizing)
 
 def test_load_from_tsv_img_properties_polygons( polygon_data_set ):
-    assert len(polygon_data_set)==20
+    assert len(polygon_data_set) == 10
     assert polygon_data_set[0]['img'].shape[1] == 300    # img height (after resizing)
     assert polygon_data_set[0]['img'].shape[2] == 2000    # img width  (after resizing)
 
