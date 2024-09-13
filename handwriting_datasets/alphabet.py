@@ -29,7 +29,10 @@ class Alphabet:
         many-to-one
 
     """
-    nullchar = '\u2205'
+    null_symbol = '\u2205'
+    start_of_seq_symbol = 'SoS'
+    end_of_seq_symbol = 'EoS'
+
 
     def __init__( self, alpha_repr: Union[str,dict]=''):
 
@@ -44,14 +47,32 @@ class Alphabet:
                 self._utf_2_code = self.from_tsv( alpha_repr )  
             else:
                 self._utf_2_code = self.from_string( alpha_repr )
+        elif type(alpha_repr) is list:
+            self._utf_2_code = self.from_list( alpha_repr )
+
+        self.add_virtual_symbols()
+
         self._code_2_utf = { c:s for (s,c) in self._utf_2_code.items() }
         print(self._code_2_utf)
-        self.default_symbol = '.'
-        self.default_code = self._utf_2_code[ self.nullchar ]
+        self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
+
+
+    
+    def add_virtual_symbols( self ):
+        self._utf_2_code[ self.null_symbol ] = 0
+        if self.start_of_seq_symbol not in self._utf_2_code:
+            self._utf_2_code[ self.start_of_seq_symbol ] = self.maxcode+1
+        if self.end_of_seq_symbol not in self._utf_2_code:
+            self._utf_2_code[ self.end_of_seq_symbol ] = self.maxcode+1 
+        
 
     @classmethod
     def from_tsv(cls, tsv_filename: str) -> dict:
         """
+        Assumption: the TSV file always contains a correct mapping, but the symbols may need
+        to be sorted before building the dictionary, to ensure a deterministic mapping of
+        codes to symbols.
+
         Input:
             tsv_filename (str): a TSV file of the form
                                 <symbol>     <code>
@@ -60,16 +81,28 @@ class Alphabet:
         """
         alphadict = {}
         with open( tsv_filename, 'r') as infile:
-            for line in infile:
-                s,c = line[:-1].split('\t')
-                alphadict[s] = int(c)
-        alphadict[cls.nullchar]=0
+            alphadict.update( { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) })
+        return alphadict
+
+    @classmethod
+    def from_list(cls, symbol_list: List[Union[List,str]]) -> dict:
+        """
+        Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
+        symbols in the same sublist are assigned the same label.
+
+        TODO: multi-symbol tokens
+        Eg. [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c']] -> ?
+        """
+        # ensure deterministic encoding
+        # Eg. [['A','a'], 'b', ['ü', 'u', 'U'], 'c']] -> ['Aa', 'Uuü', 'b', 'c']
+        plain_strings = sorted([ ''.join( item ) if type(item) is list else item for item in symbol_list ])
+
+        alphadict =dict( sorted( { s:c for (c,item) in enumerate(plain_strings, start=1) for s in sorted(item) if not s.isspace() or s==' ' }.items()) ) 
         return alphadict
 
     @classmethod
     def from_dict(cls, mapping: dict) -> dict:
-        alphadict = mapping.copy()
-        alphadict[cls.nullchar]=0
+        alphadict = dict(sorted(mapping.items()))
         return alphadict
 
     @classmethod
@@ -79,7 +112,6 @@ class Alphabet:
             dict[str,int]: a { code: symbol } mapping.
         """
         alphadict = { s:c for (c,s) in enumerate(sorted(set( [ s for s in stg if not s.isspace() or s==' ' ])), start=1) }
-        alphadict[cls.nullchar]=0
         return alphadict
         
     @classmethod
@@ -123,8 +155,8 @@ class Alphabet:
     def __str__( self ) -> str:
         """ A TSV representation of the alphabet
         """
-        one_symbol_per_line = '\n'.join( [ f'{s}\t{c}' for (s,c) in sorted( self._utf_2_code.items()) ] )
-        return one_symbol_per_line.replace( self.nullchar, '\u2205' )
+        one_symbol_per_line = '\n'.join( [ f'{s}\t{c}' for (s,c) in  sorted(self._utf_2_code.items()) ] )
+        return one_symbol_per_line.replace( self.null_symbol, '\u2205' )
 
     def __repr__( self ) -> str:
         return repr( self._utf_2_code )
@@ -133,8 +165,8 @@ class Alphabet:
 
     @property
     def maxcode( self ):
-        print(self._code_2_utf.keys())
-        return max( list(self._code_2_utf.keys()) )
+        #print(self._code_2_utf.keys())
+        return max( list(self._utf_2_code.values()) )
     
     def __eq__( self, other ):
         return self._utf_2_code == other._utf_2_code

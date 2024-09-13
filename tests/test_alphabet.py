@@ -3,6 +3,7 @@ import sys
 import torch
 from torch import Tensor
 from pathlib import Path
+import random
 
 # Append app's root directory to the Python search path
 sys.path.append( str( Path(__file__).parents[1] ) )
@@ -15,66 +16,161 @@ def data_path():
 
 @pytest.fixture(scope="session")
 def alphabet_one_to_one_tsv(data_path):
-    return data_path.joinpath('alphabet_one_to_one_repr.tsv')
+    return data_path.joinpath('alphabet_one_to_one_repr_without_nullchar.tsv')
+
+@pytest.fixture(scope="session")
+def alphabet_one_to_one_tsv_nullchar(data_path):
+    return data_path.joinpath('alphabet_one_to_one_repr_with_nullchar.tsv')
+
+@pytest.fixture(scope="session")
+def alphabet_many_to_one_tsv(data_path):
+    return data_path.joinpath('alphabet_many_to_one_repr.tsv')
 
 
-def test_alphabet_from_string():
+def test_alphabet_dict_from_string():
     """
-    Unique characters, Unicode legit, sorted, nullspace, other space chars ignored
+    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, EoS, ...)
     """
-    # null char
-    alpha = alphabet.Alphabet.from_string('ßafdbce→')
-    assert alpha['∅']==0
     # unique symbols, sorted
-    assert alphabet.Alphabet.from_string('ßaafdbce →e') == { '∅': 0, ' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9}
+    assert alphabet.Alphabet.from_string('ßaafdbce →e') == {' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9, }
     # space chars ignored
-    assert alphabet.Alphabet.from_string('ßaf \u2009db\n\tce\t→') == { '∅': 0, ' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9}
+    assert alphabet.Alphabet.from_string('ßaf \u2009db\n\tce\t→') == {' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9}
 
 
-def test_alphabet_from_dict():
+def test_alphabet_dict_from_dict():
     """
-    Unique characters, Unicode legit, sorted, nullspace, other space chars ignored
+    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, EoS, ...)
     """
     # null char
     alpha = alphabet.Alphabet.from_dict( { ' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9})
     # unique symbols, sorted
-    assert alpha == { '∅': 0, ' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9}
+    assert alpha == {' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9}
 
 
-def test_alphabet_from_tsv( alphabet_one_to_one_tsv ):
+def test_alphabet_dict_from_tsv_with_null_char( alphabet_one_to_one_tsv_nullchar ):
     """
-    Unique characters, Unicode legit, sorted, nullspace, other space chars ignored
+    Raw dict contains everything than what is in the TSV
     """
     # null char
+    alpha = alphabet.Alphabet.from_tsv( str(alphabet_one_to_one_tsv_nullchar) )
+    # unique symbols, sorted
+    assert alpha == {'∅': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16, 'V': 17,
+                     'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34, 'w': 39, 
+                     'y': 40, 'z': 41, '¬': 42, 'ü': 43}
+
+def test_alphabet_dict_from_tsv_without_null_char( alphabet_one_to_one_tsv ):
+    """
+    Raw dict contains nothing more than what is in the TSV
+    """
     alpha = alphabet.Alphabet.from_tsv( str(alphabet_one_to_one_tsv) )
     # unique symbols, sorted
-    assert alpha == {'∅': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16, 'V': 17, 'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34, 'w': 39, 'y': 40, 'z': 41, '¬': 42, 'ü': 43}
+    assert alpha == {' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16, 'V': 17,
+                     'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34, 'w': 39, 
+                     'y': 40, 'z': 41, '¬': 42, 'ü': 43}
 
+
+def test_alphabet_from_list_one_to_one():
+    input_list = ['A', 'a', 'J', 'b', 'ö', 'o', 'O', 'ü', 'U', 'w', 'y', 'z', 'd', 'D']
+    alpha = alphabet.Alphabet.from_list( input_list )
+    assert alpha == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 6, 'b': 7, 'd': 8, 'o': 9, 'w': 10, 'y': 11, 'z': 12, 'ö': 13, 'ü': 14}
+
+def test_alphabet_from_list_many_to_one():
+    input_list = [['A', 'a'], 'J', 'b', ['ö', 'o', 'O'], 'ü', 'U', 'w', 'y', 'z', ['d', 'D']]
+    alpha = alphabet.Alphabet.from_list( input_list )
+    assert alpha == {'A': 1, 'D': 5, 'J': 2, 'O': 9, 'U': 3, 'a': 1, 'b': 4, 'd': 5, 'o': 9, 'w': 6, 'y': 7, 'z': 8, 'ö': 9, 'ü': 10}
+                    
+
+def test_alphabet_many_to_one_from_tsv( alphabet_many_to_one_tsv ):
+    alpha = alphabet.Alphabet.from_tsv( str(alphabet_many_to_one_tsv) )
+    # unique symbols, sorted
+    assert alpha == {'∅': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
+                     'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5}
+
+def test_alphabet_many_to_one_init( alphabet_many_to_one_tsv ):
+    alpha = alphabet.Alphabet( str(alphabet_many_to_one_tsv) )
+    # unique symbols, sorted
+    assert alpha._utf_2_code == {'∅': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
+            'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5, 'SoS': 11, 'EoS': 12}
+    assert alpha._code_2_utf == {0: '∅', 1: 'a', 10: 'd', 2: 'J', 4: 'ö', 6: 'U', 3: 'b', 7: 'w', 8: 'y', 9: 'z', 5: 'ü', 11: 'SoS', 12: 'EoS'}
+
+def test_alphabet_many_to_one_deterministic_tsv_init(data_path):
+    """ Given a code, a many-to-one alphabet from tsv consistently returns the same symbol,
+        no matter the order of the items in the input file.
+    """
+    # initialization from the same input (TSV here) give consistent results
+    symbols = set()
+    for i in range(10):
+        symbols.add( alphabet.Alphabet( str(data_path.joinpath('lol_many_to_one_shuffled_{}'.format(i))) ).get_symbol(1))
+    assert len(symbols) == 1
+
+
+def test_alphabet_many_to_one_deterministic_dict_init():
+    """
+    Initialization from dictionaries in different orders (but same mapping) gives consistent results
+    """
+    key_values = [ ('A',1), ('D',10), ('J',2), ('O',4), ('U',6), ('a',1), ('b',3), ('d',10), ('o',4), ('w',7), ('y',8), ('z',9), ('ö',4), ('ü',5) ]
+    symbols = set()
+    for i in range(10):
+        random.shuffle( key_values )
+        symbols.add( alphabet.Alphabet( { k:v for (k,v) in key_values } ).get_symbol(1) )
+    assert len(symbols) == 1
+
+
+def test_alphabet_many_to_one_deterministic_list_init():
+    """ 
+    Initialization from lists in different orders (but same k,v) give consistent results
+    """
+    list_of_lists = [['A', 'a'], 'J', 'b', ['ö', 'o', 'O'], 'ü', 'U', 'w', 'y', 'z', ['d', 'D']]
+    symbols = set()
+    for i in range(10):
+        random.shuffle( list_of_lists )
+        symbols.add( alphabet.Alphabet( list_of_lists ).get_symbol(1) )
+    assert len(symbols) == 1
+
+def test_alphabet_many_to_one_deterministic_different_input_methods( data_path ):
+    """
+    Different initialization methods yield deterministic code retrieval behaviour.
+    """
+    symbols = set()
+    list_of_lists = [['A', 'a'], 'J', 'b', ['ö', 'o', 'O'], 'ü', 'U', 'w', 'y', 'z', ['d', 'D']]
+    for i in range(5):
+        random.shuffle( list_of_lists )
+        symbols.add( alphabet.Alphabet( list_of_lists ).get_symbol(1) )
+
+    key_values = [ ('A',1), ('D',10), ('J',2), ('O',4), ('U',6), ('a',1), ('b',3), ('d',10), ('o',4), ('w',7), ('y',8), ('z',9), ('ö',4), ('ü',5) ]
+    for i in range(10):
+        random.shuffle( key_values )
+        symbols.add( alphabet.Alphabet( { k:v for (k,v) in key_values } ).get_symbol(1) )
+    assert len(symbols) == 1
 
 def test_alphabet_init_from_str():
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→')
-    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9, '∅':0}
-    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→', 0:'∅'}
+    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9, '∅':0,
+                                'SoS': 10, 'EoS': 11}
+    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→', 0:'∅',
+                                 10:'SoS', 11:'EoS'}
 
 
 def test_alphabet_init_from_tsv( alphabet_one_to_one_tsv ):
     alpha = alphabet.Alphabet( str(alphabet_one_to_one_tsv) )
     assert alpha._utf_2_code == {'∅': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16,
                                  'V': 17, 'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34,
-                                 'w': 39, 'y': 40, 'z': 41, '¬': 42, 'ü': 43}
+                                 'w': 39, 'y': 40, 'z': 41, '¬': 42, 'ü': 43, 'SoS': 44, 'EoS': 45}
     assert alpha._code_2_utf == {0:'∅', 1:' ', 2:',', 3:'A', 10:'J', 15:'R', 16:'S',
                                  17:'V', 20:'b', 21:'c', 22:'d', 32:'o', 33:'p', 34:'r',
-                                 39:'w', 40:'y', 41:'z', 42:'¬', 43:'ü'}
+                                 39:'w', 40:'y', 41:'z', 42:'¬', 43:'ü', 44:'SoS', 45:'EoS'}
     
 def test_alphabet_init_from_dict():
     alpha = alphabet.Alphabet( { ' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9} )
-    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→', 0:'∅'}
-    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9, '∅':0}
+    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9,
+                                 '∅':0, 'SoS': 10, 'EoS': 11}
+    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→',
+                                 0:'∅', 10:'SoS', 11:'EoS'}
 
 def test_alphabet_len():
 
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→') 
-    assert len( alpha ) == 10
+    assert len( alpha ) == 12
 
 
 def test_alphabet_contains_symbol():

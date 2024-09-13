@@ -303,14 +303,14 @@ class MonasteriumDataset(VisionDataset):
             for sample in self.data:
                 img_path, gt, height, width = sample['img'], sample['transcription'], sample['height'], sample['width']
                 print("{}\t{}\t{}\t{}".format( img_path, 
-                      gt if not all_path_style else Path(img_path).with_suffix('.gt'), int(height), int(width)))
+                      gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'), int(height), int(width)))
             return
         with open( file_path, 'w' ) as of:
             for sample in self.data:
                 img_path, gt, height, width = sample['img'], sample['transcription'], sample['height'], sample['width']
                 #print('{}\t{}'.format( img_path, gt, height, width ))
                 of.write( '{}\t{}\t{}\t{}'.format( img_path,
-                                             gt if not all_path_style else Path(img_path).with_suffix('.gt'),
+                                             gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'),
                                              int(height), int(width) ))
                 if 'polygon_mask' in sample and sample['polygon_mask'] is not None:
                     of.write('\t{}'.format( sample['polygon_mask'] ))
@@ -607,7 +607,7 @@ class MonasteriumDataset(VisionDataset):
             base_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
             shape (str): Extract lines as bboxes (default) or as polygon-within-bbox.
-            text_only (bool): Store only the transcriptions (*.gt files).
+            text_only (bool): Store only the transcriptions (*.gt.txt files).
             count (int): Stops after extracting {count} images (for testing purpose).
 
         Returns:
@@ -721,7 +721,7 @@ class MonasteriumDataset(VisionDataset):
                         sample['polygon_mask'] = textline['polygon']
                     samples.append( sample )
 
-                    with open( img_path_prefix.with_suffix('.gt'), 'w') as gt_file:
+                    with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
                         gt_file.write( textline['transcription'] )
                         gt_lengths.append(len( textline['transcription']))
 
@@ -805,7 +805,7 @@ class MonasteriumDataset(VisionDataset):
 
     def count_line_items(self, folder) -> Tuple[int, int]:
         return (
-                len( [ i for i in Path(folder).glob('*.gt') ] ),
+                len( [ i for i in Path(folder).glob('*.gt.txt') ] ),
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
 
