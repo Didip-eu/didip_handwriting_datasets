@@ -23,9 +23,8 @@ class Alphabet:
         - many-to-one code2utf always return the same code (the last): assume that at creation time,
         symbols have been sorted s.t.
         { 1: A, ..., 10: a, ... } -> {
+        - compound symbols
 
-    TODO:
-        compound symbols
 
     """
     null_symbol = '\u2205'
@@ -39,10 +38,10 @@ class Alphabet:
         if type(alpha_repr) is dict:
             self._utf_2_code = self.from_dict( alpha_repr )
         elif type(alpha_repr) is str:
-            print("__init__( str )")
+            #print("__init__( str )")
             alpha_path = Path( alpha_repr )
             if alpha_path.suffix == '.tsv' and alpha_path.exists():
-                print("__init__( tsv_path )")
+                #print("__init__( tsv_path )")
                 self._utf_2_code = self.from_tsv( alpha_repr )  
             else:
                 self._utf_2_code = self.from_string( alpha_repr )
@@ -52,7 +51,7 @@ class Alphabet:
         self.add_virtual_symbols()
 
         self._code_2_utf = { c:s for (s,c) in self._utf_2_code.items() }
-        print(self._code_2_utf)
+        #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
 
 
@@ -66,7 +65,7 @@ class Alphabet:
         
 
     @classmethod
-    def from_tsv(cls, tsv_filename: str) -> dict:
+    def from_tsv(cls, tsv_filename: str, prototype=False) -> dict:
         """
         Assumption: the TSV file always contains a correct mapping, but the symbols may need
         to be sorted before building the dictionary, to ensure a deterministic mapping of
@@ -75,12 +74,17 @@ class Alphabet:
         Input:
             tsv_filename (str): a TSV file of the form
                                 <symbol>     <code>
+            prototype (bool): if True, the TSV file only contains a proto-codes (-1); codes are
+                              to be generated.
         Output:
-            dict: { <symbol>: <code }
+            dict: { <symbol>: <code> }
         """
         alphadict = {}
         with open( tsv_filename, 'r') as infile:
-            alphadict.update( { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) })
+            if prototype:
+                alphadict.update( { s:c for (c,s) in enumerate(sorted([ line.split('\t')[0] for line in infile ])) })
+            else:
+                alphadict.update( { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) })
         return alphadict
 
     @classmethod
@@ -89,10 +93,9 @@ class Alphabet:
         Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
         symbols in the same sublist are assigned the same label.
 
-        TODO: compound symbols
+        Works on many-to-one, compound symbols:
         Eg. [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] -> { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
         """
-        
 
         # if list is not nested (one-to-one)
         if all( type(elt) is str for elt in symbol_list ):
@@ -120,7 +123,7 @@ class Alphabet:
         return alphadict
         
     @classmethod
-    def prototype(cls, paths: List[str]) -> str:
+    def prototype(cls, paths: List[str], out_format="list") -> Union[str,List[str]]:
         """
         Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
@@ -128,9 +131,12 @@ class Alphabet:
 
         Args:
             paths (List[str]): a list of file path (wildards accepted).
+            out_format (str): if 'list' (the default), output is a Python list, that can be fed to 
+                          the from_list() initialization method; if 'tsv', a TSV str, without
+                          the virtual symbols.
         Output:
-            str: alphabet representation in TSV form
-                 <symbol>   <code>
+            Union[list,str]: a list of symbols, or the alphabet representation in TSV form
+                             (<symbol>   -1) where -1 is a placeholder for the code.
 
         """
         charset = set()
@@ -141,17 +147,20 @@ class Alphabet:
                 file_paths.extend( path.parent.glob( path.name ))
             elif path.exists():
                 file_paths.append( path )
-        print(file_paths)
+        #print(file_paths)
 
         for fp in file_paths:
             with open(fp, 'r') as infile:
                 charset.update( set( char for line in infile for char in list(line.strip()) ))
-                print(charset)
+        #        print(charset)
         charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
         non_ascii_chars = [ char for char in charset if ord(char)>127 ]
         if non_ascii_chars:
             warnings.warn("The following characters are not in the ASCII set: {}".format( non_ascii_chars ))
-        return "\n".join( ["0\t\u2205"] + [f"{s}\t{c}" for (c,s) in enumerate(sorted(charset), start = 1) ] )
+        symbol_list = sorted(charset)
+        if out_format == 'tsv':
+            return "\n".join( [f"{s}\t-1" for s in symbol_list ] )
+        return symbol_list
 
         
     def __len__( self ):
