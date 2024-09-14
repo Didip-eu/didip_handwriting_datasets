@@ -74,10 +74,15 @@ def test_alphabet_from_list_one_to_one():
     alpha = alphabet.Alphabet.from_list( input_list )
     assert alpha == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 6, 'b': 7, 'd': 8, 'o': 9, 'w': 10, 'y': 11, 'z': 12, 'ö': 13, 'ü': 14}
 
+def test_alphabet_from_list_compound_symbols_one_to_one():
+    input_list = ['A', 'ae', 'J', 'ü', 'eu', 'w', 'y', 'z', '...', 'D']
+    alpha = alphabet.Alphabet.from_list( input_list )
+    assert alpha == {'...': 1, 'A': 2, 'D': 3, 'J': 4, 'ae': 5, 'eu': 6, 'w': 7, 'y': 8, 'z': 9, 'ü': 10 }
+
 def test_alphabet_from_list_many_to_one():
     input_list = [['A', 'a'], 'J', 'b', ['ö', 'o', 'O'], 'ü', 'U', 'w', 'y', 'z', ['d', 'D']]
     alpha = alphabet.Alphabet.from_list( input_list )
-    assert alpha == {'A': 1, 'D': 5, 'J': 2, 'O': 9, 'U': 3, 'a': 1, 'b': 4, 'd': 5, 'o': 9, 'w': 6, 'y': 7, 'z': 8, 'ö': 9, 'ü': 10}
+    assert alpha == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 10}
                     
 
 def test_alphabet_many_to_one_from_tsv( alphabet_many_to_one_tsv ):
@@ -121,6 +126,18 @@ def test_alphabet_many_to_one_deterministic_list_init():
     Initialization from lists in different orders (but same k,v) give consistent results
     """
     list_of_lists = [['A', 'a'], 'J', 'b', ['ö', 'o', 'O'], 'ü', 'U', 'w', 'y', 'z', ['d', 'D']]
+    symbols = set()
+    for i in range(10):
+        random.shuffle( list_of_lists )
+        symbols.add( alphabet.Alphabet( list_of_lists ).get_symbol(1) )
+    assert len(symbols) == 1
+
+def test_alphabet_many_to_one_compound_symbols_deterministic_list_init():
+    """
+    Initialization from lists in different orders (but same k,v) give consistent results
+    (testing with compound symbols)
+    """
+    list_of_lists = [['A', 'ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c']
     symbols = set()
     for i in range(10):
         random.shuffle( list_of_lists )
@@ -233,16 +250,16 @@ def test_encode_illegal_symbols():
 def test_encode_one_hot():
     alpha= alphabet.Alphabet('ßa fdbce→') 
     assert alpha.encode_one_hot('abc ß def ').equal( torch.tensor(
-        [[0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-         [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=torch.bool ))
+        [[0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+         [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+         [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=torch.bool ))
 
 def test_decode():
     alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 

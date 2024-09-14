@@ -25,8 +25,7 @@ class Alphabet:
         { 1: A, ..., 10: a, ... } -> {
 
     TODO:
-        SOS-EOS chars
-        many-to-one
+        compound symbols
 
     """
     null_symbol = '\u2205'
@@ -40,7 +39,7 @@ class Alphabet:
         if type(alpha_repr) is dict:
             self._utf_2_code = self.from_dict( alpha_repr )
         elif type(alpha_repr) is str:
-            print("__init__( tsv_path )")
+            print("__init__( str )")
             alpha_path = Path( alpha_repr )
             if alpha_path.suffix == '.tsv' and alpha_path.exists():
                 print("__init__( tsv_path )")
@@ -90,14 +89,20 @@ class Alphabet:
         Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
         symbols in the same sublist are assigned the same label.
 
-        TODO: multi-symbol tokens
-        Eg. [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c']] -> ?
+        TODO: compound symbols
+        Eg. [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] -> { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
         """
-        # ensure deterministic encoding
-        # Eg. [['A','a'], 'b', ['ü', 'u', 'U'], 'c']] -> ['Aa', 'Uuü', 'b', 'c']
-        plain_strings = sorted([ ''.join( item ) if type(item) is list else item for item in symbol_list ])
+        
 
-        alphadict =dict( sorted( { s:c for (c,item) in enumerate(plain_strings, start=1) for s in sorted(item) if not s.isspace() or s==' ' }.items()) ) 
+        # if list is not nested (one-to-one)
+        if all( type(elt) is str for elt in symbol_list ):
+            return {s:c for (c,s) in enumerate( sorted( symbol_list), start=1)}
+
+        # nested list (many-to-one)
+        def sort_and_label( lol ):
+            return [ (c,s) for (c,s) in enumerate(sorted([ sorted(sub) for sub in lol ], key=lambda x: x[0]), start=1)]
+
+        alphadict =dict( sorted( { s:c for (c,item) in sort_and_label( symbol_list ) for s in item if not s.isspace() or s==' ' }.items()) ) 
         return alphadict
 
     @classmethod
@@ -214,7 +219,7 @@ class Alphabet:
         One-hot encoding of a message string.
         """
         encode_int = self.encode( sample_s )
-        return torch.tensor([[ 0 if i+1!=c else 1 for i in range(len(self)) ] for c in encode_int ],
+        return torch.tensor([[ 0 if i!=c else 1 for i in range(len(self)) ] for c in encode_int ],
                 dtype=torch.bool)
 
     def encode_batch(self, samples_s: List[str] ) -> Tuple[Tensor, Tensor]:
