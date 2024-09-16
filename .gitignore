@@ -1,2 +1,6 @@
 *.png
+<<<<<<< HEAD
 *.gt.txt
+=======
+*.gt
+>>>>>>> 24e58fe (.gitignore file.)
