@@ -48,20 +48,52 @@ class Alphabet:
         elif type(alpha_repr) is list:
             self._utf_2_code = self.from_list( alpha_repr )
 
-        self.add_virtual_symbols()
+        self.finalize()
 
+    def finalize( self ):
+        """
+        - Add virtual symbols: EOS, SOS, null symbol
+        - compute the reverse dictionary
+        """
+
+        self._utf_2_code[ self.null_symbol ] = 0
+        for s in (self.start_of_seq_symbol, self.end_of_seq_symbol):
+            if s not in self._utf_2_code:
+                self._utf_2_code[ s ] = self.maxcode+1
+        
         self._code_2_utf = { c:s for (s,c) in self._utf_2_code.items() }
         #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
 
 
-    
-    def add_virtual_symbols( self ):
-        self._utf_2_code[ self.null_symbol ] = 0
-        if self.start_of_seq_symbol not in self._utf_2_code:
-            self._utf_2_code[ self.start_of_seq_symbol ] = self.maxcode+1
-        if self.end_of_seq_symbol not in self._utf_2_code:
-            self._utf_2_code[ self.end_of_seq_symbol ] = self.maxcode+1 
+    def remove_symbols( self, symbol_list: list ):
+        """
+        Suppress one or more symbol from the alphabet. The list format is used as convenient intermediary.
+
+        """
+        self._utf_2_code = self.from_list( self.to_list( exclude=symbol_list))
+        self.finalize()
+
+
+    def to_list( self, exclude: list=[] )-> List[Union[str,list]]:
+        """
+        Return a list representation of the alphabet, minus the virtual symbols, so that
+        it can be fed back to the initialization method.
+
+        Input:
+            exclude (list): list of symbols that should not be included into the resulting list.
+        Output:
+            list: a list of list or strings.
+        """
+        code_2_utfs = {}
+        for (s,c) in self._utf_2_code.items():
+            if s in (self.start_of_seq_symbol, self.end_of_seq_symbol, self.null_symbol) or s in exclude:
+                continue
+            if c in code_2_utfs:
+                code_2_utfs[c].add( s )
+            else:
+                code_2_utfs[c]=set([s])
+        return sorted([ sorted(list(l)) if len(l)>1 else list(l)[0] for l in code_2_utfs.values() ], key=lambda x: x[0])
         
 
     @classmethod
@@ -123,7 +155,7 @@ class Alphabet:
         return alphadict
         
     @classmethod
-    def prototype(cls, paths: List[str], out_format="list") -> Union[str,List[str]]:
+    def prototype(cls, paths: List[str], out_format="list", many_to_one=True) -> Union[str,List[str]]:
         """
         Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
@@ -149,18 +181,27 @@ class Alphabet:
                 file_paths.append( path )
         #print(file_paths)
 
+        char_to_file = {}
         for fp in file_paths:
             with open(fp, 'r') as infile:
-                charset.update( set( char for line in infile for char in list(line.strip()) ))
+                chars_in_this_file = set( char for line in infile for char in list(line.strip()) )
+                for c in chars_in_this_file:
+                    if c in char_to_file:
+                        char_to_file[ c ].append( fp.name )
+                    else:
+                        char_to_file[ c ] = [ fp.name ]
+                charset.update( chars_in_this_file )
         #        print(charset)
         charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
         non_ascii_chars = [ char for char in charset if ord(char)>127 ]
         if non_ascii_chars:
             warnings.warn("The following characters are not in the ASCII set: {}".format( non_ascii_chars ))
-        symbol_list = sorted(charset)
+        symbol_list = CharClass.build_subsets(charset) if many_to_one else sorted(charset)
         if out_format == 'tsv':
+            print(char_to_file)
             return "\n".join( [f"{s}\t-1" for s in symbol_list ] )
-        return symbol_list
+        print('symbol_list', symbol_list)
+        return (symbol_list, char_to_file)
 
         
     def __len__( self ):
@@ -280,6 +321,74 @@ class Alphabet:
             lengths = torch.full( (sample_count,), max_length )
         return [ self.decode( s, lgth ) for (s,lgth) in zip( samples_bw, lengths ) ]
         
+class CharClass():
+
+    character_categories = {
+        'a': 'aAáÁâÂãÃäÄåÅæÆāĂăĄą',
+        'b': 'bB',
+        'c': 'cCçÇĆćĈĉĊċČč',
+        'd': 'dDðÐĎďĐđ',
+        'e': 'eEèÈéÉêÊëËĒēĔĕĖėĘęĚě',
+        'f': 'fF',
+        'g': 'gGĜĝĞğĠġĢģ',
+        'h': 'hHĤĥĦħ',
+        'i': 'iIìÌíÍîÎïÏĨĩĪīĬĭĮįİıĲĳ',
+        'j': 'jJĴĵ',
+        'k': 'kKĶķĸ',
+        'l': 'lLĹĺĻļĽľĿŀŁł',
+        'm': 'mM',
+        'n': 'nNñÑŃńŅņŇňŉŊŋ',
+        'o': 'oOòÒóÓôÔõÕöÖŌōŎŏŐőŒœ',
+        'p': 'pP',
+        'q': 'qQ',
+        'r': 'rRŔŕŖŗŘř',
+        's': 'sSŚśŜŝŞşŠšß',
+        't': 'tTŢţŤťŦŧ',
+        'u': 'uUùÙúÚûÛüÜŨũŪūŬŭŮůŰűŲų',
+        'v': 'vV',
+        'w': 'wWŴŵ',
+        'x': 'xX',
+        'y': 'yYŶŷŸ',
+        'z': 'zZŹźŻżŽ'
+    }
+
+    @classmethod
+    def get_key(cls, char: str ):
+        """ Get key ("head character") for given character 
+
+        Input:
+            char (str): a UTF character. Eg. `'Ä'`
+
+        Output:
+            str: a UTF character, i.e. head-character for its category. Eg. `'a'`
+        """
+        for (k, cat) in cls.character_categories.items():
+            if char in cat:
+                return k
+        return None
+    
+    @classmethod
+    def build_subsets(cls, chars: set) -> List[Union[List,str]]:
+        """ From a set of chars, return a list of lists, where
+        each list matches one of the categories above.
+
+        Eg. 
+        
+        ~~~python
+        >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
+        {'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'}
+        ~~~
+        """
+        #{ self.get_key(),c for c in chars }
+        chardict = { k:set()  for k in cls.character_categories.keys() }
+        lone_chars = []
+        for (k,c) in [ (cls.get_key(c),c) for c in chars ]:
+            if k is None:
+                lone_chars.append(c)
+            else:
+                chardict[k].add(c)
+        return [ list(s) if len(s) > 1 else list(s)[0] for s in chardict.values() if len(s) ] + lone_chars
+
 
 def dummy():
     return True

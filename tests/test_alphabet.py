@@ -184,6 +184,26 @@ def test_alphabet_init_from_dict():
     assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→',
                                  0:'∅', 10:'SoS', 11:'EoS'}
 
+def test_alphabet_to_list():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'o', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+
+    #def deep_sorted(l):
+    #    return sorted([ sorted(item) if len(item)>1 else item[0] for item in l ],
+    #            key=lambda x: x[0])
+    assert alphabet.Alphabet( list_of_lists ).to_list() == list_of_lists
+
+def test_alphabet_to_list_minus_symbols():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'o', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+
+    assert alphabet.Alphabet( list_of_lists ).to_list(exclude=['o','w']) == [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'y', 'z', 'ü']
+
+
+def test_alphabet_remove_symbol():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'o', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+    alpha = alphabet.Alphabet( list_of_lists )
+    alpha.remove_symbols(['o', 'w'])
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, '∅': 0, 'SoS': 10, 'EoS': 11}
+
 def test_alphabet_len():
 
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→') 
