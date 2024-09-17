@@ -26,6 +26,9 @@ def alphabet_one_to_one_tsv_nullchar(data_path):
 def alphabet_many_to_one_tsv(data_path):
     return data_path.joinpath('alphabet_many_to_one_repr.tsv')
 
+@pytest.fixture(scope="session")
+def alphabet_many_to_one_prototype_tsv( data_path ):
+    return data_path.joinpath('alphabet_many_to_one_prototype.tsv')
 
 def test_alphabet_dict_from_string():
     """
@@ -68,7 +71,6 @@ def test_alphabet_dict_from_tsv_without_null_char( alphabet_one_to_one_tsv ):
                      'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34, 'w': 39, 
                      'y': 40, 'z': 41, '¬': 42, 'ü': 43}
 
-
 def test_alphabet_from_list_one_to_one():
     input_list = ['A', 'a', 'J', 'b', 'ö', 'o', 'O', 'ü', 'U', 'w', 'y', 'z', 'd', 'D']
     alpha = alphabet.Alphabet.from_list( input_list )
@@ -90,6 +92,12 @@ def test_alphabet_many_to_one_from_tsv( alphabet_many_to_one_tsv ):
     # unique symbols, sorted
     assert alpha == {'∅': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
                      'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5}
+
+def test_alphabet_many_to_one_prototype_tsv( alphabet_many_to_one_prototype_tsv ):
+    alpha = alphabet.Alphabet.from_tsv( str(alphabet_many_to_one_prototype_tsv), prototype=True)
+    assert alpha == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'ae': 1, 'b': 6, 'd': 2, 'o': 4,
+                    'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 10}
+
 
 def test_alphabet_many_to_one_init( alphabet_many_to_one_tsv ):
     alpha = alphabet.Alphabet( str(alphabet_many_to_one_tsv) )

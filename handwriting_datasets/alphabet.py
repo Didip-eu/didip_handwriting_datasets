@@ -99,25 +99,36 @@ class Alphabet:
     @classmethod
     def from_tsv(cls, tsv_filename: str, prototype=False) -> dict:
         """
-        Assumption: the TSV file always contains a correct mapping, but the symbols may need
-        to be sorted before building the dictionary, to ensure a deterministic mapping of
-        codes to symbols.
+        Assumption: if it is not a prototype, the TSV file always contains a correct mapping,
+        but the symbols need to be sorted before building the dictionary, to ensure a 
+        deterministic mapping of codes to symbols; if it is a prototype, the last column in each
+        line is -1 (a dummy for the code) and the previous columns store the symbols that should
+        map to the same code.
 
         Input:
             tsv_filename (str): a TSV file of the form
                                 <symbol>     <code>
-            prototype (bool): if True, the TSV file only contains a proto-codes (-1); codes are
+            prototype (bool): if True, the TSV file may store more than 1 symbol on the same
+                              line, as well as a proto-code at the end (-1); codes are
                               to be generated.
         Output:
             dict: { <symbol>: <code> }
         """
-        alphadict = {}
         with open( tsv_filename, 'r') as infile:
             if prototype:
-                alphadict.update( { s:c for (c,s) in enumerate(sorted([ line.split('\t')[0] for line in infile ])) })
-            else:
-                alphadict.update( { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) })
-        return alphadict
+                if next(infile).split('\t')[-1].rstrip() != '-1':
+                    raise ValueError("File is not a prototype TSV. Format expected:"
+                                     "<char1>    [<char2>,    ...]    -1")
+                infile.seek(0)
+                # prototype CSV may have more than one symbol on the same line, for many-to-one mapping
+                # Building list-of-list from TVS:
+                # A   ae   -1          
+                # O   o    ö    -1 ---> [['A', 'ae'], 'O', 'o', 'ö'], ... ]
+                lol = [ s if len(s)>1 else s[0] for s in [ line.split('\t')[:-1] for line in infile ]]
+                
+                return cls.from_list( lol )
+
+            return { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) }
 
     @classmethod
     def from_list(cls, symbol_list: List[Union[List,str]]) -> dict:
@@ -155,7 +166,7 @@ class Alphabet:
         return alphadict
         
     @classmethod
-    def prototype(cls, paths: List[str], out_format="list", many_to_one=True) -> Union[str,List[str]]:
+    def prototype(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], dict]:
         """
         Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
@@ -163,12 +174,14 @@ class Alphabet:
 
         Args:
             paths (List[str]): a list of file path (wildards accepted).
-            out_format (str): if 'list' (the default), output is a Python list, that can be fed to 
-                          the from_list() initialization method; if 'tsv', a TSV str, without
-                          the virtual symbols.
+            out_format (str): if 'list' (default) a Python list, that can be fed to the from_list() 
+                              initialization method; otherwise a TSV string, where tab-separated symbols
+                              on the same line map to the same code, and last element (-1) is a placeholder
+                              for the symbol's code.
         Output:
-            Union[list,str]: a list of symbols, or the alphabet representation in TSV form
-                             (<symbol>   -1) where -1 is a placeholder for the code.
+             Tuple[Union[list,str], dict[str,str]]: a pair with
+                          + a list of list or str 
+                          + a dictionary { symbol: [filepath, ... ]}
 
         """
         charset = set()
@@ -184,7 +197,7 @@ class Alphabet:
         char_to_file = {}
         for fp in file_paths:
             with open(fp, 'r') as infile:
-                chars_in_this_file = set( char for line in infile for char in list(line.strip()) )
+                chars_in_this_file = set( char for line in infile for char in list(line.strip()) if ord(char)>127 )
                 for c in chars_in_this_file:
                     if c in char_to_file:
                         char_to_file[ c ].append( fp.name )
@@ -198,9 +211,14 @@ class Alphabet:
             warnings.warn("The following characters are not in the ASCII set: {}".format( non_ascii_chars ))
         symbol_list = CharClass.build_subsets(charset) if many_to_one else sorted(charset)
         if out_format == 'tsv':
-            print(char_to_file)
-            return "\n".join( [f"{s}\t-1" for s in symbol_list ] )
-        print('symbol_list', symbol_list)
+            if many_to_one:
+                # A   a   -1
+                # D   d   -1
+                # J   -1
+                # ...
+                return ('\n'.join( [ '\t'.join(sorted(i))+'\t-1' for i in symbol_list ]), char_to_file)
+            return ("\n".join( [f"{s}\t-1" for s in symbol_list ] ), char_to_file)
+        
         return (symbol_list, char_to_file)
 
         
@@ -351,6 +369,14 @@ class CharClass():
         'y': 'yYŶŷŸ',
         'z': 'zZŹźŻżŽ'
     }
+
+    @classmethod
+    def is_ascii(cls, char: str) -> bool:
+        return ord(char) <= 127
+
+    @classmethod
+    def in_domain(cls, char: str) -> bool:
+        return cls.get_key( char ) is not None
 
     @classmethod
     def get_key(cls, char: str ):
