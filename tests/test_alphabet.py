@@ -30,6 +30,10 @@ def alphabet_many_to_one_tsv(data_path):
 def alphabet_many_to_one_prototype_tsv( data_path ):
     return data_path.joinpath('alphabet_many_to_one_prototype.tsv')
 
+@pytest.fixture(scope="session")
+def gt_transcription_samples( data_path ):
+    return [ str(data_path.joinpath(t)) for t in ('transcription_sample_1.gt.txt', 'transcription_sample_2.gt.txt') ]
+
 def test_alphabet_dict_from_string():
     """
     Raw dictionary reflects the given string: no less, no more; no virtual chars (null, EoS, ...)
@@ -253,6 +257,11 @@ def test_alphabet_eq():
     alpha3= alphabet.Alphabet('ßa db\n\tce\t→')
     assert alpha1 == alpha2
     assert alpha1 != alpha3
+
+def test_alphabet_prototype_ascii( gt_transcription_samples ):
+    list_of_list,_ = alphabet.Alphabet.prototype( gt_transcription_samples, many_to_one=True )
+    assert list_of_list == [' ', ',', '.', ['B', 'b'], ['E', 'e'], ['H', 'h'], ['K', 'k'], 'P', ['U', 'u'],
+                            ['W', 'w'], 'a', 'c', 'd', 'f', 'g', 'i', 'l', 'm', 'n', 'o', 'r', 's', 't', 'v', 'y', 'z']
 
 
 def test_encode_clean_sample():

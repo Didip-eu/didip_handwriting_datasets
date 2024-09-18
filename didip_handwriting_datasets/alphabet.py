@@ -1,9 +1,10 @@
 
-from typing import Union,Tuple,List
+from typing import Union,Tuple,List,Dict
 import torch
 from torch import Tensor
 from pathlib import Path
 import warnings
+from collections import Counter
 
 
 
@@ -31,12 +32,15 @@ class Alphabet:
     start_of_seq_symbol = 'SoS'
     end_of_seq_symbol = 'EoS'
 
-
-    def __init__( self, alpha_repr: Union[str,dict]=''):
+    def __init__( self, alpha_repr: Union[str,dict,list]=''):
 
         self._utf_2_code = {}
         if type(alpha_repr) is dict:
-            self._utf_2_code = self.from_dict( alpha_repr )
+            # in case the input dictionary already contains the special symbols 
+            cleaned = { s:c for s,c in alpha_repr.items() if s not in (self.null_symbol, 
+                                                                       self.start_of_seq_symbol, 
+                                                                       self.end_of_seq_symbol) }
+            self._utf_2_code = self.from_dict( cleaned )
         elif type(alpha_repr) is str:
             #print("__init__( str )")
             alpha_path = Path( alpha_repr )
@@ -49,6 +53,8 @@ class Alphabet:
             self._utf_2_code = self.from_list( alpha_repr )
 
         self.finalize()
+
+        self.many_to_one=not all(i==1 for i in Counter(self._utf_2_code.values()).values())
 
     def finalize( self ):
         """
@@ -77,13 +83,13 @@ class Alphabet:
 
     def to_list( self, exclude: list=[] )-> List[Union[str,list]]:
         """
-        Return a list representation of the alphabet, minus the virtual symbols, so that
-        it can be fed back to the initialization method.
+        Return a list representation of the alphabet, minus the virtual symbols, so that it can be fed back to the initialization method.
 
         Input:
             exclude (list): list of symbols that should not be included into the resulting list.
+
         Output:
-            list: a list of list or strings.
+            List[Union[str,list]]:  a list of lists or strings.
         """
         code_2_utfs = {}
         for (s,c) in self._utf_2_code.items():
@@ -97,7 +103,7 @@ class Alphabet:
         
 
     @classmethod
-    def from_tsv(cls, tsv_filename: str, prototype=False) -> dict:
+    def from_tsv(cls, tsv_filename: str, prototype=False) -> Dict[str,int]:
         """
         Assumption: if it is not a prototype, the TSV file always contains a correct mapping,
         but the symbols need to be sorted before building the dictionary, to ensure a 
@@ -112,7 +118,7 @@ class Alphabet:
                               line, as well as a proto-code at the end (-1); codes are
                               to be generated.
         Output:
-            dict: { <symbol>: <code> }
+            Dict[str, int]: { <symbol>: <code> }
         """
         with open( tsv_filename, 'r') as infile:
             if prototype:
@@ -131,13 +137,25 @@ class Alphabet:
             return { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) }
 
     @classmethod
-    def from_list(cls, symbol_list: List[Union[List,str]]) -> dict:
+    def from_list(cls, symbol_list: List[Union[List,str]]) -> Dict[str,int]:
         """
         Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
         symbols in the same sublist are assigned the same label.
 
         Works on many-to-one, compound symbols:
-        Eg. [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] -> { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
+        Eg. 
+
+        ```python
+        >>> from_list( [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] )
+        { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
+
+        ````
+
+        Input:
+            symbol_list (List[Union[List,str]]): a list of either symbols (possibly with more than one characters) or sublists of symbols that should map to the same code.
+
+        Output:
+            Dict[str,int]: a dictionary mapping symbols to codes.
         """
 
         # if list is not nested (one-to-one)
@@ -152,23 +170,36 @@ class Alphabet:
         return alphadict
 
     @classmethod
-    def from_dict(cls, mapping: dict) -> dict:
+    def from_dict(cls, mapping: Dict[str,int]) -> Dict[str,int]:
+        """
+        Construct an alphabet from a dictionary. The input dictionary need not be sorted.
+
+        Input:
+            mapping (Dict[str,int]): a dictionary of the form { <symbol>: <code> }; a symbol
+                                   may have one or more characters.
+        Output:
+            Dict[str,int]: a sorted dictionary.
+        """
         alphadict = dict(sorted(mapping.items()))
         return alphadict
 
     @classmethod
-    def from_string(cls, stg: str ) -> dict:
+    def from_string(cls, stg: str ) -> Dict[str,int]:
         """
+        Construct a one-to-one alphabet from a single string.
+
+        Input:
+            stg (str): a string of characters.
         Output:
-            dict[str,int]: a { code: symbol } mapping.
+            Dict[str,int]: a { code: symbol } mapping.
         """
         alphadict = { s:c for (c,s) in enumerate(sorted(set( [ s for s in stg if not s.isspace() or s==' ' ])), start=1) }
         return alphadict
         
     @classmethod
-    def prototype(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], dict]:
+    def prototype(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
         """
-        Given a list of GT transcription file paths, return a TSV representation of the alphabet.
+        ]]Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
         The output can be redirected on file, reworked and then fed back through `from_tsv()`.
 
@@ -179,11 +210,12 @@ class Alphabet:
                               on the same line map to the same code, and last element (-1) is a placeholder
                               for the symbol's code.
         Output:
-             Tuple[Union[list,str], dict[str,str]]: a pair with
-                          + a list of list or str 
+             Tuple[Union[list,str], Dict[str,str]]: a pair with
+                          + a list of lists or str (the mapping)
                           + a dictionary { symbol: [filepath, ... ]}
 
         """
+        assert type(paths) is list
         charset = set()
         file_paths = []
         for p in paths:
@@ -197,7 +229,7 @@ class Alphabet:
         char_to_file = {}
         for fp in file_paths:
             with open(fp, 'r') as infile:
-                chars_in_this_file = set( char for line in infile for char in list(line.strip()) if ord(char)>127 )
+                chars_in_this_file = set( char for line in infile for char in list(line.strip())  )
                 for c in chars_in_this_file:
                     if c in char_to_file:
                         char_to_file[ c ].append( fp.name )
@@ -206,9 +238,17 @@ class Alphabet:
                 charset.update( chars_in_this_file )
         #        print(charset)
         charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
-        non_ascii_chars = [ char for char in charset if ord(char)>127 ]
+
+        non_ascii_chars = set( char for char in charset if ord(char)>127 )
+        weird_chars = set( char for char in non_ascii_chars if not CharClass.in_domain( char ))
+        non_ascii_chars.difference_update( weird_chars )
+
         if non_ascii_chars:
-            warnings.warn("The following characters are not in the ASCII set: {}".format( non_ascii_chars ))
+            warnings.warn("The following characters are not in the ASCII set but look like reasonable Unicode symbols: {}".format( non_ascii_chars ))
+        if weird_chars:
+            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
+
+
         symbol_list = CharClass.build_subsets(charset) if many_to_one else sorted(charset)
         if out_format == 'tsv':
             if many_to_one:
@@ -219,21 +259,20 @@ class Alphabet:
                 return ('\n'.join( [ '\t'.join(sorted(i))+'\t-1' for i in symbol_list ]), char_to_file)
             return ("\n".join( [f"{s}\t-1" for s in symbol_list ] ), char_to_file)
         
-        return (symbol_list, char_to_file)
+        return (cls.deep_sorted(symbol_list), char_to_file)
 
         
     def __len__( self ):
         return len( self._code_2_utf )
 
     def __str__( self ) -> str:
-        """ A TSV representation of the alphabet
+        """ A summary
         """
         one_symbol_per_line = '\n'.join( [ f'{s}\t{c}' for (s,c) in  sorted(self._utf_2_code.items()) ] )
         return one_symbol_per_line.replace( self.null_symbol, '\u2205' )
 
     def __repr__( self ) -> str:
         return repr( self._utf_2_code )
-
 
 
     @property
@@ -339,6 +378,22 @@ class Alphabet:
             lengths = torch.full( (sample_count,), max_length )
         return [ self.decode( s, lgth ) for (s,lgth) in zip( samples_bw, lengths ) ]
         
+
+    @staticmethod
+    def deep_sorted(list_of_lists: List[Union[str,list]]) ->List[Union[str,list]]:
+        """
+        Sort a list that contains either lists of strings, or plain strings.
+
+        Eg.
+        ```python
+        >>> deep_sorted(['a', ['B', 'b'], 'c', 'd', ['e', 'E'], 'f'])
+        [['B', 'b'], ['E', 'e'], 'a', 'c', 'd', 'f']
+
+        `````
+        """
+        return sorted([sorted(i) if len(i)>1 else i for i in list_of_lists],
+                       key=lambda x: x[0])
+
 class CharClass():
 
     character_categories = {
@@ -366,7 +421,7 @@ class CharClass():
         'v': 'vV',
         'w': 'wWŴŵ',
         'x': 'xX',
-        'y': 'yYŶŷŸ',
+        'y': 'yYŶýÿŷŸ',
         'z': 'zZŹźŻżŽ'
     }
 
@@ -395,15 +450,17 @@ class CharClass():
     
     @classmethod
     def build_subsets(cls, chars: set) -> List[Union[List,str]]:
-        """ From a set of chars, return a list of lists, where
-        each list matches one of the categories above.
+        """
+        From a set of chars, return a list of lists, where
+        each sublist matches one of the categories above.
 
         Eg. 
         
-        ~~~python
+        ```python
         >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
-        {'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'}
-        ~~~
+        [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$'] 
+
+        ````
         """
         #{ self.get_key(),c for c in chars }
         chardict = { k:set()  for k in cls.character_categories.keys() }
@@ -414,7 +471,6 @@ class CharClass():
             else:
                 chardict[k].add(c)
         return [ list(s) if len(s) > 1 else list(s)[0] for s in chardict.values() if len(s) ] + lone_chars
-
 
 def dummy():
     return True
