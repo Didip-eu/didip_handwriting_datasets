@@ -1,27 +1,26 @@
 import sys
+import logging
+import warnings
+import random
+import tarfile
+import hashlib
+import json
+import shutil
+import re
+from pathlib import *
 from typing import *
+from tqdm import tqdm
 import defusedxml.ElementTree as ET
 #import xml.etree.ElementTree as ET
-from pathlib import *
-import warnings
 from PIL import Image, ImageDraw
 from PIL import ImagePath as IP
-import re
-import argparse
+
 import numpy as np
 import torch
 from torch import Tensor
 import torchvision
 from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
-import logging
-import random
-import shutil as sh
-import tarfile
-import subprocess
-import hashlib
-import json
-import shutil
 
 from . import download_utils as du
 from . import xml_utils as xu
@@ -202,7 +201,7 @@ class MonasteriumDataset(VisionDataset):
                 else:
                     # if work folder is an absolute path, it overrides the root
                     self.work_folder_path = self.root.joinpath( work_folder )
-                    print("Work folder: {}".format( self.work_folder ))
+                    print("Work folder: {}".format( self.work_folder_path ))
 
                 if not self.work_folder_path.is_dir():
                     self.work_folder_path.mkdir()
@@ -647,11 +646,11 @@ class MonasteriumDataset(VisionDataset):
         samples = [] # each sample is a dictionary {'img': <img file path> , 'transcription': str,
                      #                              'height': int, 'width': int}
 
-        for page in self.pagexmls:
+        for page in tqdm(self.pagexmls):
 
             xml_id = Path( page ).stem
             img_path = Path( raw_data_folder_path, f'{xml_id}.jpg')
-            print( img_path )
+            #print( img_path )
 
             with open(page, 'r') as page_file:
 
@@ -733,7 +732,7 @@ class MonasteriumDataset(VisionDataset):
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
                                'height': textline['height'], 'width': textline['width'] }
-                    print("extract_lines(): sample=", sample)
+                    #print("extract_lines(): sample=", sample)
                     if textline['polygon'] is not None:
                         sample['polygon_mask'] = textline['polygon']
                     samples.append( sample )
@@ -860,6 +859,26 @@ class PadToSize():
         mask[:,:h,:w]=1
         return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
+# unused for the moment
+class ResizeToMaxHeight():
+
+    def __init__( self, max_h ):
+        self.max_h = max_h
+
+    def __call__(self, sample):
+        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        if h <= self.max_h:
+            return sample
+        # freak case (marginal annotations): original height is the larger
+        # dimension -> specify the width too
+        if h > w and h > max_h:
+            t = v2.Resize( size=(self.max_h, int(w*self.max_h/h) ))
+        # default case: original height is the smaller dimension and gets
+        # gets picked up by Resize()
+        t = v2.Resize(size=self.max_h, antialias=True)( t )
+        h_new, w_new = [ int(d) for d in t.shape[1:] ]
+
+        return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
 # check that the module is testable
 def dummy():
