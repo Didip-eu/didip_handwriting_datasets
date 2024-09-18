@@ -1,5 +1,5 @@
 [project]
-name = "handwriting_datasets"
+name = "didip_handwriting_datasets"
 version = "1.0"
 authors = [
   { name="Nicolas Renet", email="nprenet@gmail.com" },
@@ -16,7 +16,7 @@ classifiers = [
 dependencies = [ "fusexml" ]
 
 [project.urls]
-Homepage = "https://github.com/nicolasrenet/handwriting_datasets"
+Homepage = "https://github.com/nicolasrenet/didip_handwriting_datasets"
 
 #[scripts]
 #pageconvert = pagexml2json:main

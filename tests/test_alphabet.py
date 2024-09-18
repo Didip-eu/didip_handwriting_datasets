@@ -8,7 +8,7 @@ import random
 # Append app's root directory to the Python search path
 sys.path.append( str( Path(__file__).parents[1] ) )
 
-from handwriting_datasets import alphabet
+from didip_handwriting_datasets import alphabet
 
 @pytest.fixture(scope="session")
 def data_path():

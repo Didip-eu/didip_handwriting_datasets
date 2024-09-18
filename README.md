@@ -1,6 +1,6 @@
 
 ~~~~
-cd handwriting_datasets
+cd didip_handwriting_datasets
 pip install .
 ~~~~~~~~~~
 
@@ -20,7 +20,7 @@ Examples for HTR:
 
 ~~~python
 
-from handwriting_datasets import monasterium
+from didip_handwriting_datasets import monasterium
 
 # create new dataset instance for HTR (line image and ground-truth files) in ~/tmp/data/MyHTRExperiment
 # The root folder is assumed to be the default location (/tmp/data/Monasterium/)

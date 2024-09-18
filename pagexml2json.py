@@ -5,7 +5,7 @@ import json
 import sys
 import argparse 
 
-from handwriting_datasets import xml_utils as xu
+from didip_handwriting_datasets import xml_utils as xu
 
 
 """

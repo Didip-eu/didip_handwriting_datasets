@@ -9,7 +9,7 @@ from functools import partial
 # Append app's root directory to the Python search path
 sys.path.append( str( Path(__file__).parents[1] ) )
 
-from handwriting_datasets import monasterium
+from didip_handwriting_datasets import monasterium
 
 @pytest.fixture(scope="session")
 def data_path():
