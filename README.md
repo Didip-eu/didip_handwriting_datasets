@@ -1,37 +1,55 @@
+## Install
 
 ~~~~
 cd didip_handwriting_datasets
 pip install .
 ~~~~~~~~~~
 
-The lifecycle of a dataset instance relies on 3 folders:
+## Creating a dataset instances: configuration
+
+
+
+The lifecycle of a dataset instance relies on 3 stages. With the Monasterium HW dataset as an example:
 
 |    | Step              | Folder option           |                                                   | Configurable                                                               |
 | -- | ----------------- | ----------------------- | ------------------------------------------------- |----------------------------------------------------------------------------|
-| 1  | Downloading       | `<root>`                | location where original archives are to be stored | Y (`root=`)                                                                |
-| 2  | Extract           | `<root>/<base_folder>`  | where archive's contents are extracted            | N (name hardcoded for dataset Eg. `'MonasteriumHandwritingDataset'`)       |
-| 3  | Instance creation | `<work_folder>`         | where input data for the task are created         | Y (default: <code>'./MonasteriumHandwritingDataset(HTR\|Segment)'</code>)  |
+| 1  | Downloading       | `<root>`                | location where original archives are to be stored | Y (`root=<path>`) Default: `./didip_handwriting_datasets/data/Monasterium` |
+| 2  | Extract           | `<root>/MonasteriumHandwritingDataset` | where archive's contents are extracted            | N        |
+| 3  | Instance creation | `<work_folder>`         | where input data for the task are created         | Y (default: `<root>/MonasteriumHandwritingDataset(HTR\|Segment)`  |
 
-1. By default, the root folder (default: `~/tmp/data/Monasterium)` is checked first for a valid archive before downloading;
+1. By default, the root folder is checked first for a valid archive before downloading;
 2. The base folder is automatically created when expanding the archive (default: `<root>/MonasteriumHandwritingDataset`); this location is checked for a valid file tree (checksums). To force the extraction of the archive's content, pass the `extract_pages=True` flag. 
-3. For most use cases, it is sufficient to specify the work folder (option `work_folder`), where the ready-to-use data (line images and ground truth files) for the task at hand are to be created. By default, a folder named `MonasteriumHandwritingDatasetHTR` is created in the current work directory.
+3. The work folder is the place where the ready-to-use data (line images and ground truth files) for the task at hand are to be created
 
-Examples for HTR:
+    + if no work folder is specified, a folder `MonasteriumHandwritingDatasetHTR` (for an HTR task) or `MonasteriumHandwritingDatasetSegment` (for a segmentation task) will be created under the `root` folder.
+    + if the option `work_folder`) is passed an absolute path, such a folder will be created (including missing parents)
+    + if the option `work_folder`) is passed a relative path, a corresponding folder (including missing parents) is created under the `root` folder.
+ 
 
-~~~python
+## Use cases 
 
-from didip_handwriting_datasets import monasterium
+Default root and work folders, no task defined (data points are not compiled):
 
-# create new dataset instance for HTR (line image and ground-truth files) in ~/tmp/data/MyHTRExperiment
-# The root folder is assumed to be the default location (/tmp/data/Monasterium/)
-myDataSet = monasterium.MonasteriumDataset(work_folder='~/tmp/data/MyHTRExperiment')
 
-# the following assumes that the dataset archive file is to be downloaded (if needed) and read from '/home/nicolas/tmp/didip'
-myDataSet = monasterium.MonasteriumDataset(root='/home/nicolas/tmp/didip', work_folder='~/tmp/data/MyHTRExperiment')
+    >>> ds=monasterium.MonasteriumDatase()
+    >>> print(ds)
+    Root folder:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium
+    Files extracted in:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium/MonasteriumTekliaGTDataset
+    Task: None defined.
+    Work folder:	None
+    Data points:	0
 
-# create a BBox segmentation dataset in the default work folder ('./MonasteriumHandwritingDatasetSegment')
-myDataSet = monasterium.MonasteriumDataset(task='segment', shape='bbox')
-~~~~~~~~
+
+Default root and work folders, HTR task: data points are `(<line img>, <transcription text>)` pairs; optional `count` option limits the number of pairs:
+
+    >>> ds=monasterium.MonasteriumDataset(task='htr',count=100)
+    >>> print(ds)
+    Root folder:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium
+    Files extracted in:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium/MonasteriumTekliaGTDataset
+    Task: HTR
+    Work folder:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium/MonasteriumHandwritingDatasetHTR
+    Data points:	10
+
 
 
 

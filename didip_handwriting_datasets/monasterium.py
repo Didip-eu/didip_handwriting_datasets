@@ -62,6 +62,7 @@ logger = logging.getLogger()
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
 tarball_root_name="MonasteriumTekliaGTDataset"    
 work_folder_name="MonasteriumHandwritingDataset"
+root_folder_basename="Monasterium"
 
 
 class MonasteriumDataset(VisionDataset):
@@ -81,7 +82,7 @@ class MonasteriumDataset(VisionDataset):
                 root: str='',
                 work_folder: str = '', # here further files are created, for any particular task
                 subset: str = 'train',
-                subset_ratios: Tuple[float,float,float]=(.7, .1, .2),
+                subset_ratios: Tuple[float,float,float]=(1., 0., 0.),
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
@@ -124,7 +125,7 @@ class MonasteriumDataset(VisionDataset):
 
         super().__init__(root, transform=trf, target_transform=target_transform )
 
-        self.root = Path(root) if root else Path(__file__).parent.joinpath('data', 'Monasterium')
+        self.root = Path(root) if root else Path(__file__).parent.joinpath('data', root_folder_basename)
         print("Root folder: {}".format( self.root ))
         if not self.root.exists():
             self.root.mkdir( parents=True )
@@ -147,7 +148,9 @@ class MonasteriumDataset(VisionDataset):
         # technical debt: remove hard-coded name/location for the default
         self.alphabet = alphabet.Alphabet( alphabet_tsv )
 
+        self._task = ''
         if (task != ''):
+            self._task = task # for self-documentation only
             build_ok = build_items if from_tsv_file == '' else False
             self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, subset_ratios=subset_ratios, work_folder=work_folder, count=count )
 
@@ -158,7 +161,7 @@ class MonasteriumDataset(VisionDataset):
                    build_items: bool=True, 
                    from_tsv_file: str='',
                    subset: str='train', 
-                   subset_ratios: Tuple[float,float,float]=(.7, .1, .2),
+                   subset_ratios: Tuple[float,float,float]=(1., 0., 0.),
                    shape: str='bbox', 
                    count: int=0, 
                    work_folder: str='', 
@@ -182,7 +185,6 @@ class MonasteriumDataset(VisionDataset):
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
         """
-        
         if task == 'htr':
             
             if crop:
@@ -831,6 +833,21 @@ class MonasteriumDataset(VisionDataset):
             int: number of data points.
         """
         return len( self.data )
+
+    @property
+    def task( self ):
+        if self._task == 'htr':
+            return "HTR"
+        if self._task == 'segment':
+            return "Segmentation"
+        return "None defined."
+
+    def __str__(self) -> str:
+        return (f"Root folder:\t{self.root}\n"
+               f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
+               f"Task: {self.task}\n"
+               f"Work folder:\t{self.work_folder_path}\n"
+               f"Data points:\t{len(self.data)}")
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
