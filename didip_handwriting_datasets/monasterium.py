@@ -333,25 +333,31 @@ class MonasteriumDataset(VisionDataset):
                                             
 
     @staticmethod
-    def load_from_tsv(file_path: Path) -> list:
+    def load_from_tsv(file_path: Path) -> List[dict]:
         """
         Load samples (as dictionaries) from an existing TSV file.
 
         Args:
-            file_path (pathlib.Path): A file path (relative to the caller's pwd), where each line
+            file_path (Path): A file path (relative to the caller's pwd), where each line
                                       is either a tuple 
-        
+
+            ```python
             <img file path> <transcription text> <height> <width> [<polygon points>]
+            ````
             or
+
+            ```python
             <img file path> <transcription file path> <height> <width> [<polygon points>]
+            ````
 
         Returns:
-            list[dict]: A list of dictionaries of the form {'img': <img file path>,
+            List[dict]: A list of dictionaries of the form {'img': <img file path>,
                                                       'transcription': <transcription text>,
                                                       'height': <original height>,
                                                       'width': <original width>,
                                                       'mask': <mask for unpadded part of the img>}}
         """
+        work_folder_path = file_path.parent
         samples=[]
         with open( file_path, 'r') as infile:
             # Detection: 
@@ -376,13 +382,13 @@ class MonasteriumDataset(VisionDataset):
                         img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
                         #print('tsv_to_dict(): type(height)=', type(height))
 
-                        s = {'img': self.work_folder_path.joinpath( img ), 'transcription': transcription,
+                        s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
                         print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
-                        s = {'img': self.work_folder_path.joinpath( img ), 'transcription': transcription,
+                        s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
                         print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
                         return s
@@ -392,13 +398,13 @@ class MonasteriumDataset(VisionDataset):
             else:
                 for tsv_line in infile:
                     img_file, gt_file, height, width = tsv_line[:-1].split('\t')
-                    with open( self.work_folder_path.joinpath( gt_file ), 'r') as igt:
+                    with open( work_folder_path.joinpath( gt_file ), 'r') as igt:
                         gt_content = '\n'.join( igt.readlines())
                         if has_polygon:
-                            samples.append( {'img': self.work_folder_path.joinpath( img_file ), 'transcription': gt_content,
+                            samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_content,
                                              'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) })
                         else:
-                            samples.append( {'img': self.work_folder_path.joinpath( img_file ), 'transcription': gt_content,
+                            samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_content,
                                              'height': int(height), 'width': int(width) })
         return samples
 

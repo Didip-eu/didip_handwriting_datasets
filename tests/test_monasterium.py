@@ -191,7 +191,7 @@ def test_getitem_polygons( polygon_data_set ):
     assert 'polygon_mask' in sample and type(sample['polygon_mask']) is Tensor
 
 def test_load_from_tsv_bbox( data_path ):
-    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv'))
+    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv') )
     assert len(samples) == 10
 
 def test_load_from_tsv_polygons( data_path ):
