@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-dependencies = [ "fusexml" ]
+dependencies = [ "defusedxml" ]
 
 [project.urls]
 Homepage = "https://github.com/nicolasrenet/didip_handwriting_datasets"
