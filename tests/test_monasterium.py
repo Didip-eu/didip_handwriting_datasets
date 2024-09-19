@@ -233,6 +233,13 @@ def test_load_from_tsv_img_properties_polygons( polygon_data_set ):
     assert polygon_data_set[0]['img'].shape[1] == 300    # img height (after resizing)
     assert polygon_data_set[0]['img'].shape[2] == 2000    # img width  (after resizing)
 
+
+def test_alphabet_initialization( bbox_data_set ):
+    assert bbox_data_set.alphabet is not None
+    # for what it's worth: just a sanity test
+    assert all( [ chr(i) in bbox_dataset.alphabet for i in range(ord('a')-ord('z'))] )
+    assert all( [ chr(i) in bbox_dataset.alphabet for i in range(ord('A')-ord('Z'))] )
+
 def test_dummy( data_path ):
     assert monasterium.dummy()
     assert isinstance(data_path, Path )

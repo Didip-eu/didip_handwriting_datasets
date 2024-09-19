@@ -25,6 +25,8 @@ import torchvision.transforms as transforms
 from . import download_utils as du
 from . import xml_utils as xu
 
+from . import alphabet
+
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
 
@@ -88,6 +90,7 @@ class MonasteriumDataset(VisionDataset):
                 task: str = '',
                 shape: str = '',
                 count: int = 0,
+                alphabet_tsv: str='monasterium_alphabet.tsv',
                 ):
         """
         Args:
@@ -112,6 +115,7 @@ class MonasteriumDataset(VisionDataset):
             from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
                                  assumed to be the work folder, superceding the work_folder option).
             count (int): Stops after extracting {count} image items (for testing purpose only).
+            alphabet_tsv (str): TSV file containing the alphabet
         """
         
         trf = v2.PILToTensor()
@@ -138,6 +142,10 @@ class MonasteriumDataset(VisionDataset):
         self.pagexmls = sorted( Path(self.root, tarball_root_name ).glob('*.xml'))
 
         self.data = []
+
+        # Used only for HTR tasks
+        # technical debt: remove hard-coded name/location for the default
+        self.alphabet = alphabet.Alphabet( alphabet_tsv )
 
         if (task != ''):
             build_ok = build_items if from_tsv_file == '' else False
