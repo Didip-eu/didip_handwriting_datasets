@@ -85,10 +85,10 @@ class Alphabet:
         """
         Return a list representation of the alphabet, minus the virtual symbols, so that it can be fed back to the initialization method.
 
-        Input:
+        Args:
             exclude (list): list of symbols that should not be included into the resulting list.
 
-        Output:
+        Returns:
             List[Union[str,list]]:  a list of lists or strings.
         """
         code_2_utfs = {}
@@ -111,13 +111,13 @@ class Alphabet:
         line is -1 (a dummy for the code) and the previous columns store the symbols that should
         map to the same code.
 
-        Input:
+        Args:
             tsv_filename (str): a TSV file of the form
                                 <symbol>     <code>
             prototype (bool): if True, the TSV file may store more than 1 symbol on the same
                               line, as well as a proto-code at the end (-1); codes are
                               to be generated.
-        Output:
+        Returns:
             Dict[str, int]: { <symbol>: <code> }
         """
         with open( tsv_filename, 'r') as infile:
@@ -151,10 +151,10 @@ class Alphabet:
 
         ````
 
-        Input:
+        Args:
             symbol_list (List[Union[List,str]]): a list of either symbols (possibly with more than one characters) or sublists of symbols that should map to the same code.
 
-        Output:
+        Returns:
             Dict[str,int]: a dictionary mapping symbols to codes.
         """
 
@@ -174,10 +174,10 @@ class Alphabet:
         """
         Construct an alphabet from a dictionary. The input dictionary need not be sorted.
 
-        Input:
+        Args:
             mapping (Dict[str,int]): a dictionary of the form { <symbol>: <code> }; a symbol
                                    may have one or more characters.
-        Output:
+        Returns:
             Dict[str,int]: a sorted dictionary.
         """
         alphadict = dict(sorted(mapping.items()))
@@ -188,9 +188,9 @@ class Alphabet:
         """
         Construct a one-to-one alphabet from a single string.
 
-        Input:
+        Args:
             stg (str): a string of characters.
-        Output:
+        Returns:
             Dict[str,int]: a { code: symbol } mapping.
         """
         alphadict = { s:c for (c,s) in enumerate(sorted(set( [ s for s in stg if not s.isspace() or s==' ' ])), start=1) }
@@ -209,7 +209,7 @@ class Alphabet:
                               initialization method; otherwise a TSV string, where tab-separated symbols
                               on the same line map to the same code, and last element (-1) is a placeholder
                               for the symbol's code.
-        Output:
+        Returns:
              Tuple[Union[list,str], Dict[str,str]]: a pair with
                           + a list of lists or str (the mapping)
                           + a dictionary { symbol: [filepath, ... ]}
@@ -306,10 +306,10 @@ class Alphabet:
         """ 
         Encode a message string with integers. 
 
-        Input:
+        Args:
             sample_s (str): message string; assume clean sample: no newlines nor tabs.
 
-        Output:
+        Returns:
             Tensor: a tensor of integers; symbols that are not in the alphabet yield
                     a default code (=max index) while generating a user warning.
         """
@@ -333,10 +333,10 @@ class Alphabet:
         """
         Encode a batch of messages.
 
-        Input:
+        Args:
             samples_s (list): a list of strings
 
-        Output:
+        Returns:
             tuple( Tensor, Tensor ): a pair of tensors, with encoded batch as first element
                                      and lengths as second element.
         """
@@ -351,10 +351,10 @@ class Alphabet:
         """ 
         Decode an integer-encoded sample.
 
-        Input:
+        Args:
             sample_t (Tensor): a tensor of integers.
             length (int): sample's length; if -1 (default), all symbols are decoded.
-        Output:
+        Returns:
             str: string of symbols.
         """
         length = len(sample_t) if length < 0 else length
@@ -365,12 +365,12 @@ class Alphabet:
         """
         Decode a batch of integer-encoded samples.
 
-        Input:
+        Args:
             sample_bw (Tensor): each row of integer encodes a string.
             lengths (int): length to be decoded in each sample; the default
                            is full-length decoding.
 
-        Output:
+        Returns:
             list: a sequence of strings.
         """
         if lengths == None:
@@ -437,10 +437,10 @@ class CharClass():
     def get_key(cls, char: str ):
         """ Get key ("head character") for given character 
 
-        Input:
+        Args:
             char (str): a UTF character. Eg. `'Ä'`
 
-        Output:
+        Returns:
             str: a UTF character, i.e. head-character for its category. Eg. `'a'`
         """
         for (k, cat) in cls.character_categories.items():
