@@ -48,7 +48,7 @@ Default root and work folders, HTR task: data points are `(<line img>, <transcri
     Files extracted in:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium/MonasteriumTekliaGTDataset
     Task: HTR
     Work folder:	/home/nicolas/graz/htr/didip_handwriting_datasets/didip_handwriting_datasets/data/Monasterium/MonasteriumHandwritingDatasetHTR
-    Data points:	10
+    Data points:	100
 
 
 
