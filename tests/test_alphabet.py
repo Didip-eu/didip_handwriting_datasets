@@ -216,6 +216,17 @@ def test_alphabet_remove_symbol():
     alpha.remove_symbols(['o', 'w'])
     assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, '∅': 0, 'SoS': 10, 'EoS': 11}
 
+
+
+def test_alphabet_add_symbol():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+    alpha = alphabet.Alphabet( list_of_lists )
+    alpha.add_symbols(['o', ['ÿ', 'ŷ'])
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, '∅': 0, 'SoS': 10, 'EoS': 11}
+
+
+
+
 def test_alphabet_len():
 
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→') 
