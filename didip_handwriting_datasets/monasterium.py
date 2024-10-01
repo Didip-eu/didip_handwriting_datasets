@@ -871,6 +871,24 @@ class ResizeToMax():
         
         return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
+class PadToHeight():
+
+    def __init__( self, max_h ):
+        self.max_h = max_h
+
+    def __call__(self, sample):
+        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        if h > self.max_h:
+            warnings.warn("Cannot pad an image that is higher ({}) than the padding size ({})".format( h, self.max_h))
+            return sample
+        new_t = torch.zeros( (t.shape[0], self.max_h, t.shape[2]))
+        new_t[:,:h,:] = t
+
+        # add a field
+        mask = torch.zeros( new_t.shape, dtype=torch.bool)
+        mask[:,:h,:]=1
+        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
+
 class PadToSize():
 
     def __init__( self, max_h, max_w ):
