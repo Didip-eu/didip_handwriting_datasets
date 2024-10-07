@@ -1,6 +1,7 @@
 import pytest
 import sys
 import torch
+import numpy as np
 from torch import Tensor
 from pathlib import Path
 import random
@@ -36,7 +37,7 @@ def gt_transcription_samples( data_path ):
 
 def test_alphabet_dict_from_string():
     """
-    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, EoS, ...)
+    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, eos, ...)
     """
     # unique symbols, sorted
     assert alphabet.Alphabet.from_string('ßaafdbce →e') == {' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9, }
@@ -46,7 +47,7 @@ def test_alphabet_dict_from_string():
 
 def test_alphabet_dict_from_dict():
     """
-    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, EoS, ...)
+    Raw dictionary reflects the given string: no less, no more; no virtual chars (null, eos, ...)
     """
     # null char
     alpha = alphabet.Alphabet.from_dict( { ' ': 1, 'a': 2, 'b': 3, 'c': 4, 'd': 5, 'e': 6, 'f': 7, 'ß': 8, '→': 9})
@@ -61,7 +62,7 @@ def test_alphabet_dict_from_tsv_with_null_char( alphabet_one_to_one_tsv_nullchar
     # null char
     alpha = alphabet.Alphabet.from_tsv( str(alphabet_one_to_one_tsv_nullchar) )
     # unique symbols, sorted
-    assert alpha == {'∅': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16, 'V': 17,
+    assert alpha == {'ϵ': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16, 'V': 17,
                      'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34, 'w': 39, 
                      'y': 40, 'z': 41, '¬': 42, 'ü': 43}
 
@@ -94,7 +95,7 @@ def test_alphabet_from_list_many_to_one():
 def test_alphabet_many_to_one_from_tsv( alphabet_many_to_one_tsv ):
     alpha = alphabet.Alphabet.from_tsv( str(alphabet_many_to_one_tsv) )
     # unique symbols, sorted
-    assert alpha == {'∅': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
+    assert alpha == {'ϵ': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
                      'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5}
 
 def test_alphabet_many_to_one_prototype_tsv( alphabet_many_to_one_prototype_tsv ):
@@ -106,9 +107,9 @@ def test_alphabet_many_to_one_prototype_tsv( alphabet_many_to_one_prototype_tsv 
 def test_alphabet_many_to_one_init( alphabet_many_to_one_tsv ):
     alpha = alphabet.Alphabet( str(alphabet_many_to_one_tsv) )
     # unique symbols, sorted
-    assert alpha._utf_2_code == {'∅': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
-            'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5, 'SoS': 11, 'EoS': 12}
-    assert alpha._code_2_utf == {0: '∅', 1: 'a', 10: 'd', 2: 'J', 4: 'ö', 6: 'U', 3: 'b', 7: 'w', 8: 'y', 9: 'z', 5: 'ü', 11: 'SoS', 12: 'EoS'}
+    assert alpha._utf_2_code == {'ϵ': 0, 'A': 1, 'D': 10, 'J': 2, 'O': 4, 'U': 6, 'a': 1, 'b': 3, 
+            'd': 10, 'o': 4, 'w': 7, 'y': 8, 'z': 9, 'ö': 4, 'ü': 5, 'sos': 11, 'eos': 12}
+    assert alpha._code_2_utf == {0: 'ϵ', 1: 'a', 10: 'd', 2: 'j', 4: 'o', 6: 'u', 3: 'b', 7: 'w', 8: 'y', 9: 'z', 5: 'ü', 11: 'sos', 12: 'eos'}
 
 def test_alphabet_many_to_one_deterministic_tsv_init(data_path):
     """ Given a code, a many-to-one alphabet from tsv consistently returns the same symbol,
@@ -174,27 +175,27 @@ def test_alphabet_many_to_one_deterministic_different_input_methods( data_path )
 
 def test_alphabet_init_from_str():
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→')
-    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9, '∅':0,
-                                'SoS': 10, 'EoS': 11}
-    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→', 0:'∅',
-                                 10:'SoS', 11:'EoS'}
+    assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9, 'ϵ':0,
+                                'sos': 10, 'eos': 11}
+    assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→', 0:'ϵ',
+                                 10:'sos', 11:'eos'}
 
 
 def test_alphabet_init_from_tsv( alphabet_one_to_one_tsv ):
     alpha = alphabet.Alphabet( str(alphabet_one_to_one_tsv) )
-    assert alpha._utf_2_code == {'∅': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16,
+    assert alpha._utf_2_code == {'ϵ': 0, ' ': 1, ',': 2, 'A': 3, 'J': 10, 'R': 15, 'S': 16,
                                  'V': 17, 'b': 20, 'c': 21, 'd': 22, 'o': 32, 'p': 33, 'r': 34,
-                                 'w': 39, 'y': 40, 'z': 41, '¬': 42, 'ü': 43, 'SoS': 44, 'EoS': 45}
-    assert alpha._code_2_utf == {0:'∅', 1:' ', 2:',', 3:'A', 10:'J', 15:'R', 16:'S',
+                                 'w': 39, 'y': 40, 'z': 41, '¬': 42, 'ü': 43, 'sos': 44, 'eos': 45}
+    assert alpha._code_2_utf == {0:'ϵ', 1:' ', 2:',', 3:'A', 10:'J', 15:'R', 16:'S',
                                  17:'V', 20:'b', 21:'c', 22:'d', 32:'o', 33:'p', 34:'r',
-                                 39:'w', 40:'y', 41:'z', 42:'¬', 43:'ü', 44:'SoS', 45:'EoS'}
+                                 39:'w', 40:'y', 41:'z', 42:'¬', 43:'ü', 44:'sos', 45:'eos'}
     
 def test_alphabet_init_from_dict():
     alpha = alphabet.Alphabet( { ' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9} )
     assert alpha._utf_2_code == {' ':1, 'a':2, 'b':3, 'c':4, 'd':5, 'e':6, 'f':7, 'ß':8, '→':9,
-                                 '∅':0, 'SoS': 10, 'EoS': 11}
+                                 'ϵ':0, 'sos': 10, 'eos': 11}
     assert alpha._code_2_utf == {1:' ', 2:'a', 3:'b', 4:'c', 5:'d', 6:'e', 7:'f', 8:'ß', 9:'→',
-                                 0:'∅', 10:'SoS', 11:'EoS'}
+                                 0:'ϵ', 10:'sos', 11:'eos'}
 
 def test_alphabet_to_list():
     list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'o', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
@@ -214,15 +215,15 @@ def test_alphabet_remove_symbol():
     list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'o', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
     alpha = alphabet.Alphabet( list_of_lists )
     alpha.remove_symbols(['o', 'w'])
-    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, '∅': 0, 'SoS': 10, 'EoS': 11}
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, 'ϵ': 0, 'sos': 10, 'eos': 11}
 
 
 
-def test_alphabet_add_symbol():
+def test_alphabet_add_symbols():
     list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
     alpha = alphabet.Alphabet( list_of_lists )
-    alpha.add_symbols(['o', ['ÿ', 'ŷ'])
-    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, '∅': 0, 'SoS': 10, 'EoS': 11}
+    alpha.add_symbols(['o', ['ÿ', 'ŷ']])
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, 'ϵ': 0, 'sos': 10, 'eos': 11}
 
 
 
@@ -349,8 +350,21 @@ def test_decode_batch():
                             [8, 6, 4, 3, 4, 2, 1, 0]], dtype=torch.int64),
              torch.tensor( [8, 7]))
     assert alpha.decode_batch( samples, lengths ) == ["abc def ", "ßecbca "]
-    assert alpha.decode_batch( samples, None ) == ["abc def ", "ßecbca ∅"]
+    assert alpha.decode_batch( samples, None ) == ["abc def ", "ßecbca ϵ"]
 
+
+def test_decode_ctc():
+    alpha = alphabet.Alphabet([' ', ',', '-', '.', '1', '2', '4', '5', '6', ':', ';', ['A', 'a', 'ä'],
+                              ['B', 'b'], ['C', 'c'], ['D', 'd'], ['E', 'e', 'é'], ['F', 'f'], ['G', 'g'],
+                              ['H', 'h'], ['I', 'i'], ['J', 'j'], ['K', 'k'], ['L', 'l'], ['M', 'm'],
+                              ['N', 'n'], ['O', 'o', 'Ö', 'ö'], ['P', 'p'], ['Q', 'q'], ['R', 'r', 'ř'],
+                              ['S', 's'], ['T', 't'], ['U', 'u', 'ü'], ['V', 'v'], ['W', 'w'], ['X', 'x'],
+                              ['Y', 'y', 'ÿ'], ['Z', 'z', 'Ž'], '¬', '…'])
+
+    decoded = alpha.decode_ctc( np.array([19, 19, 19, 0, 0, 16, 16, 0, 23, 23, 23, 23, 0, 0,
+                                23, 23, 0, 26, 26, 2, 0, 1, 34, 34, 26, 29, 29, 29, 
+                                23, 15]) )
+    assert decoded == 'hello, world'
 
 
 def test_dummy( data_path):

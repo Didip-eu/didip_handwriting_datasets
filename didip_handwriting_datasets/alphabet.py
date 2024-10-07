@@ -2,6 +2,7 @@
 from typing import Union,Tuple,List,Dict
 import torch
 from torch import Tensor
+import numpy as np
 from pathlib import Path
 import warnings
 from collections import Counter
@@ -19,7 +20,7 @@ class Alphabet:
     Features:
         - loads from tsv or string
         - white space char (U0020=32)
-        - null character (U2205)
+        - null character (U03f5)
         - default character for encoding (when dealing with unknown char)
         - many-to-one code2utf always return the same code (the last): assume that at creation time,
         symbols have been sorted s.t.
@@ -28,9 +29,10 @@ class Alphabet:
 
 
     """
-    null_symbol = '\u2205'
-    start_of_seq_symbol = 'SoS'
-    end_of_seq_symbol = 'EoS'
+    null_symbol = '\u03f5'
+    null_value = 0
+    start_of_seq_symbol = 'sos'
+    end_of_seq_symbol = 'eos'
 
     def __init__( self, alpha_repr: Union[str,dict,list]=''):
 
@@ -54,7 +56,36 @@ class Alphabet:
 
         self.finalize()
 
-        self.many_to_one=not all(i==1 for i in Counter(self._utf_2_code.values()).values())
+    @property
+    def many_to_one( self ):
+        return not all(i==1 for i in Counter(self._utf_2_code.values()).values())
+
+
+    def add_symbols( self, symbols ):
+        """
+        Add one or more symbol to the alphabet.
+
+        Args:
+            symbols (List[list,str]): a list whose elements can be individual chars or list of chars
+                                    that should map to the same code. A symbol (or group of symbols)
+                                    that should be merged with an existing group should be given a 
+                                    a list that comprise the new symbol(s) and any symbol that already
+                                    belong to the alphabet's group.
+        """
+        for addition in symbols:
+            if type(addition) is not list and addition not in self:
+                self._utf_2_code[addition]=self.maxcode+1
+            else:
+                # does the sublist contain a character that is already in the set?
+                hooks = [ s for s in addition if s in self ]
+                to_merge = set( addition ) - set( hooks )
+                for s in to_merge:
+                    # generate new code only if the sublist is made of new symbols
+                    code = self.maxcode+1 if not hooks else self.get_code( hooks[0] )
+                    self._utf_2_code[s]=code
+        self.finalize()
+
+
 
     def finalize( self ):
         """
@@ -62,12 +93,17 @@ class Alphabet:
         - compute the reverse dictionary
         """
 
-        self._utf_2_code[ self.null_symbol ] = 0
+        self._utf_2_code[ self.null_symbol ] = self.null_value
         for s in (self.start_of_seq_symbol, self.end_of_seq_symbol):
             if s not in self._utf_2_code:
                 self._utf_2_code[ s ] = self.maxcode+1
         
-        self._code_2_utf = { c:s for (s,c) in self._utf_2_code.items() }
+        if self.many_to_one:
+            self._code_2_utf = { c:s.lower() for (s,c) in sorted(self._utf_2_code.items(), reverse=True) }
+        else:
+            self._code_2_utf = { c:s for (s,c) in sorted(self._utf_2_code.items(), reverse=True) }
+            
+
         #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
 
@@ -269,7 +305,7 @@ class Alphabet:
         """ A summary
         """
         one_symbol_per_line = '\n'.join( [ f'{s}\t{c}' for (s,c) in  sorted(self._utf_2_code.items()) ] )
-        return one_symbol_per_line.replace( self.null_symbol, '\u2205' )
+        return one_symbol_per_line.replace( self.null_symbol, '\u03f5' )
 
     def __repr__( self ) -> str:
         return repr( self._utf_2_code )
@@ -377,6 +413,36 @@ class Alphabet:
             sample_count, max_length = samples_bw.shape
             lengths = torch.full( (sample_count,), max_length )
         return [ self.decode( s, lgth ) for (s,lgth) in zip( samples_bw, lengths ) ]
+
+
+    def decode_ctc(self, msg: np.ndarray ):
+        """
+        Decode the output labels of a CTC-trained network into a human-readable string.
+        Eg. 
+            ```python
+            >>> decode_ctc(np.array([0, 1, 1, 1, 2, 2, 5, 6, 6, 3, 3, 1, 7, 7, 7])
+
+            ``̀`
+
+
+        Args:
+            msg (np.ndarray): a sequence of labels, possibly with duplicates and null values.
+        
+        Outputs:
+            str: a string of characters.
+                              
+        """
+        # keep track of positions to keep
+        keep_idx = np.zeros( msg.shape, dtype='bool') 
+        if msg.size == 0:
+            return ''
+        # quick removal of duplicated values
+        keep_idx[0] = msg[0] != self.null_value 
+        keep_idx[1:] = msg[1:] != msg[:-1] 
+        # removal of null chars
+        keep_idx = np.logical_and( keep_idx, msg != self.null_value )
+
+        return ''.join( self.get_symbol( c ) for c in msg[ keep_idx ] )
         
 
     @staticmethod
