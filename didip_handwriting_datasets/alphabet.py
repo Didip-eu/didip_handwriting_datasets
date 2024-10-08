@@ -32,8 +32,8 @@ class Alphabet:
     """
     null_symbol = '\u03f5'
     null_value = 0
-    start_of_seq_symbol = 'sos'
-    end_of_seq_symbol = 'eos'
+    start_of_seq_symbol = '\u21A6' # '↦' i.e. '|->'
+    end_of_seq_symbol = '\u21E5' # '⇥' i.e. '->|'
 
     def __init__( self, alpha_repr: Union[str,dict,list]=''):
 
@@ -62,51 +62,6 @@ class Alphabet:
         return not all(i==1 for i in Counter(self._utf_2_code.values()).values())
 
 
-    def add_symbols( self, symbols ):
-        """
-        Add one or more symbol to the alphabet.
-
-        Args:
-            symbols (List[list,str]): a list whose elements can be individual chars or list of chars
-                                    that should map to the same code. A symbol (or group of symbols)
-                                    that should be merged with an existing group should be given a 
-                                    a list that comprise the new symbol(s) and any symbol that already
-                                    belong to the alphabet's group.
-        Returns:
-            Alphabet: the alphabet.
-        """
-        def argfind(lst, x):
-            for i,elt in enumerate(lst):
-                if x == elt:
-                    return i
-                if type(elt) is list and x in elt:
-                    return i
-            return None
-
-        list_form = self.to_list()
-        for addition in symbols:
-            if type(addition) is not list and addition not in self:
-                list_form.append( addition )
-            else:
-                hooks = [ s for s in addition if s in self ] 
-                if len(hooks) == 0:
-                    list_form.append( addition )
-                elif len(hooks) > 1 and len(list(itertools.groupby( [ self.get_code(h) for h in hooks ]))) > 1:
-                    raise ValueError("Merging distinct symbol groups is not allowed: check that that provided hooks are valid.")
-                else:
-                    to_merge = list(set( addition ) - set( hooks ))
-                    # find index to merge in
-                    i = argfind( list_form, hooks[0] )
-                    if type(list_form[i]) is list:
-                        list_form[i].extend( to_merge )
-                    else:
-                        list_form[i] = [list_form[i]] + to_merge 
-
-        self._utf_2_code = self.from_list( list_form )
-
-        self.finalize()
-        return self
-
 
 
     def finalize( self ):
@@ -129,14 +84,6 @@ class Alphabet:
         #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
 
-
-    def remove_symbols( self, symbol_list: list ):
-        """
-        Suppress one or more symbol from the alphabet. The list format is used as convenient intermediary.
-
-        """
-        self._utf_2_code = self.from_list( self.to_list( exclude=symbol_list))
-        self.finalize()
 
 
     def to_list( self, exclude: list=[] )-> List[Union[str,list]]:
@@ -222,6 +169,8 @@ class Alphabet:
 
         # nested list (many-to-one)
         def sort_and_label( lol ):
+            # remove SoS and EoS symbols first
+            lol = [ elt for elt in lol if type(elt) is list or (elt.lower() != cls.start_of_seq_symbol and elt.lower() != cls.end_of_seq_symbol) ]
             return [ (c,s) for (c,s) in enumerate(sorted([ sorted(sub) for sub in lol ], key=lambda x: x[0]), start=1)]
 
         alphadict =dict( sorted( { s:c for (c,item) in sort_and_label( symbol_list ) for s in item if not s.isspace() or s==' ' }.items()) ) 
@@ -360,6 +309,67 @@ class Alphabet:
     def get_code( self, symbol ) -> int:
         return self._utf_2_code[ symbol ] if symbol in self._utf_2_code else self.default_code
     
+    def add_symbols( self, symbols ):
+        """
+        Add one or more symbol to the alphabet.
+
+        Args:
+            symbols (List[list,str]): a list whose elements can be individual chars or list of chars
+                                    that should map to the same code. A symbol (or group of symbols)
+                                    that should be merged with an existing group should be given a 
+                                    a list that comprise the new symbol(s) and any symbol that already
+                                    belong to the alphabet's group.
+        Returns:
+            Alphabet: the alphabet.
+        """
+        def argfind(lst, x):
+            for i,elt in enumerate(lst):
+                if x == elt:
+                    return i
+                if type(elt) is list and x in elt:
+                    return i
+            return None
+        
+        if len(symbols) == 0:
+            return self
+
+        list_form = self.to_list()
+        for addition in symbols:
+            if type(addition) is not list and addition not in self:
+                list_form.append( addition )
+            else:
+                hooks = [ s for s in addition if s in self ] 
+                if len(hooks) == 0:
+                    list_form.append( addition )
+                elif len(hooks) > 1 and len(list(itertools.groupby( [ self.get_code(h) for h in hooks ]))) > 1:
+                    raise ValueError("Merging distinct symbol groups is not allowed: check that that provided hooks are valid.")
+                else:
+                    to_merge = list(set( addition ) - set( hooks ))
+                    # find index to merge in
+                    i = argfind( list_form, hooks[0] )
+                    if type(list_form[i]) is list:
+                        list_form[i].extend( to_merge )
+                    else:
+                        list_form[i] = [list_form[i]] + to_merge 
+
+        self._utf_2_code = self.from_list( list_form )
+
+        self.finalize()
+        return self
+
+    def remove_symbols( self, symbol_list: list ):
+        """
+        Suppress one or more symbol from the alphabet. The list format is used as convenient intermediary.
+
+        Args:
+            symbol_list (list): a list of symbols to be removed from the mapping.
+        Returns:
+            Alphabet: the alphabet itself.
+        """
+        self._utf_2_code = self.from_list( self.to_list( exclude=symbol_list))
+        self.finalize()
+        return self
+
     def encode(self, sample_s: str) -> Tensor:
         """ 
         Encode a message string with integers. 
