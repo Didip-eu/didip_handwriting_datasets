@@ -258,8 +258,6 @@ def test_alphabet_add_symbols_faulty_hooks():
         alpha.add_symbols([['B','b','w'], ['ÿ', 'ŷ']])
 
 
-
-
 def test_alphabet_len():
 
     alpha = alphabet.Alphabet('ßaf db\n\tce\t→') 
