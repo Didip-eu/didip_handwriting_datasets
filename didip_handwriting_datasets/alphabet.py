@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 import numpy as np
 from pathlib import Path
+import itertools
 import warnings
 from collections import Counter
 
@@ -71,19 +72,40 @@ class Alphabet:
                                     that should be merged with an existing group should be given a 
                                     a list that comprise the new symbol(s) and any symbol that already
                                     belong to the alphabet's group.
+        Returns:
+            Alphabet: the alphabet.
         """
+        def argfind(lst, x):
+            for i,elt in enumerate(lst):
+                if x == elt:
+                    return i
+                if type(elt) is list and x in elt:
+                    return i
+            return None
+
+        list_form = self.to_list()
         for addition in symbols:
             if type(addition) is not list and addition not in self:
-                self._utf_2_code[addition]=self.maxcode+1
+                list_form.append( addition )
             else:
-                # does the sublist contain a character that is already in the set?
-                hooks = [ s for s in addition if s in self ]
-                to_merge = set( addition ) - set( hooks )
-                for s in to_merge:
-                    # generate new code only if the sublist is made of new symbols
-                    code = self.maxcode+1 if not hooks else self.get_code( hooks[0] )
-                    self._utf_2_code[s]=code
+                hooks = [ s for s in addition if s in self ] 
+                if len(hooks) == 0:
+                    list_form.append( addition )
+                elif len(hooks) > 1 and len(list(itertools.groupby( [ self.get_code(h) for h in hooks ]))) > 1:
+                    raise ValueError("Merging distinct symbol groups is not allowed: check that that provided hooks are valid.")
+                else:
+                    to_merge = list(set( addition ) - set( hooks ))
+                    # find index to merge in
+                    i = argfind( list_form, hooks[0] )
+                    if type(list_form[i]) is list:
+                        list_form[i].extend( to_merge )
+                    else:
+                        list_form[i] = [list_form[i]] + to_merge 
+
+        self._utf_2_code = self.from_list( list_form )
+
         self.finalize()
+        return self
 
 
 

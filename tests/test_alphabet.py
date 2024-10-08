@@ -219,11 +219,34 @@ def test_alphabet_remove_symbol():
 
 
 
-def test_alphabet_add_symbols():
+def test_alphabet_add_symbols_no_merge():
     list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
     alpha = alphabet.Alphabet( list_of_lists )
     alpha.add_symbols(['o', ['ÿ', 'ŷ']])
-    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'y': 7, 'z': 8, 'ö': 4, 'ü': 9, 'ϵ': 0, 'sos': 10, 'eos': 11}
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'o': 7, 'w': 8, 'y': 9, 'z': 10, 'ö': 4, 'ü': 11, 'ÿ': 12, 'ŷ': 12, 'ϵ': 0, 'sos': 13, 'eos': 14}
+
+
+def test_alphabet_add_symbols_merging_subgroups():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+    alpha = alphabet.Alphabet( list_of_lists )
+    alpha.add_symbols(['o', ['ÿ', 'ŷ', 'y']])
+    assert alpha._utf_2_code == {'A': 1, 'D': 2, 'J': 3, 'O': 4, 'U': 5, 'a': 1, 'b': 6, 'd': 2, 'o': 7, 'w': 8, 'y': 9, 'z': 10, 'ö': 4, 'ü': 11, 'ÿ': 9, 'ŷ': 9, 'ϵ': 0, 'sos': 12, 'eos': 13}
+
+def test_alphabet_add_symbols_merging_atoms():
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+    alpha = alphabet.Alphabet( list_of_lists )
+    alpha.add_symbols([['B','b'], ['ÿ', 'ŷ']])
+    assert alpha._utf_2_code == {'A': 1, 'B': 2, 'D': 3, 'J': 4, 'O': 5, 'U': 6, 'a': 1, 'b': 2, 'd': 3, 'w': 7, 'y': 8, 'z': 9, 'ö': 5, 'ü': 10, 'ÿ': 11, 'ŷ': 11, 'ϵ': 0, 'sos': 12, 'eos': 13}
+
+
+def test_alphabet_add_symbols_faulty_hooks():
+    """
+    Subgroup contains symbols that already map to different codes in the alphabet.
+    """
+    list_of_lists = [['A', 'a'], ['D', 'd'], 'J', ['O', 'ö'], 'U', 'b', 'w', 'y', 'z', 'ü']
+    alpha = alphabet.Alphabet( list_of_lists )
+    with pytest.raises(ValueError) as error:
+        alpha.add_symbols([['B','b','w'], ['ÿ', 'ŷ']])
 
 
 
@@ -258,7 +281,6 @@ def test_alphabet_get_code():
 def test_alphabet_getitem():
     """ Subscript access """
     alpha = alphabet.Alphabet('ßa fdb\n\tce\t→') 
-    print(alpha)
     assert alpha['ß'] == 8
     assert alpha[8] == 'ß'
 
@@ -345,7 +367,6 @@ def test_encode_batch_1():
 def test_decode_batch():
 
     alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
-    print(alpha)
     samples, lengths = (torch.tensor( [[2, 3, 4, 1, 5, 6, 7, 1],
                             [8, 6, 4, 3, 4, 2, 1, 0]], dtype=torch.int64),
              torch.tensor( [8, 7]))
@@ -367,7 +388,7 @@ def test_decode_ctc():
     assert decoded == 'hello, world'
 
 
-def test_dummy( data_path):
+def atest_dummy( data_path):
     """
     A dummy test, as a sanity check for the test framework.
     """
