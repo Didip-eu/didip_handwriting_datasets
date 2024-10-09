@@ -394,13 +394,13 @@ class MonasteriumDataset(VisionDataset):
 
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
-                        print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
+                        #print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
-                        print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
+                        #print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
                         return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
@@ -814,7 +814,6 @@ class MonasteriumDataset(VisionDataset):
         #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
 
         assert isinstance(img_path, Path) or isinstance(img_path, str)
-        print("type(height)=", type(height))
         assert type(height) is int
         assert type(width) is int
         assert type(gt) is str
@@ -891,6 +890,24 @@ class PadToHeight():
         mask[:,:h,:]=1
         return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'transcription_len': gt_len, 'mask': mask }
 
+class PadToWidth():
+
+    def __init__( self, max_w ):
+        self.max_w = max_w
+
+    def __call__(self, sample):
+        t_chw, h, w, gt, gt_len = sample['img'], sample['height'], sample['width'], sample['transcription'], sample['transcription_len']
+        if w > self.max_w:
+            warnings.warn("Cannot pad an image that is wider ({}) than the padding size ({})".format( w, self.max_w))
+            return sample
+        new_t_chw = torch.zeros( t_chw.shape[:2] + (self.max_w,))
+        new_t_chw[:,:,:w] = t_chw
+
+        # add a field
+        mask = torch.zeros( new_t_chw.shape, dtype=torch.bool)
+        mask[:,:,:w] = 1
+        return {'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'transcription_len': gt_len, 'mask': mask }
+
 class PadToSize():
 
     def __init__( self, max_h, max_w ):
@@ -923,13 +940,44 @@ class ResizeToMaxHeight():
         # freak case (marginal annotations): original height is the larger
         # dimension -> specify the width too
         if h > w and h > max_h:
-            t = v2.Resize( size=(self.max_h, int(w*self.max_h/h) ))
-        # default case: original height is the smaller dimension and gets
+            t = v2.Resize( size=(self.max_h, int(w*self.max_h/h) ), antialias=True)(t)
+        else:
+        # default case: original height is the smaller dimension and 
         # gets picked up by Resize()
-        t = v2.Resize(size=self.max_h, antialias=True)( t )
+            t = v2.Resize(size=self.max_h, antialias=True)( t )
         h_new, w_new = [ int(d) for d in t.shape[1:] ]
 
         return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt, 'transcription_len': gt_len }
+
+class ResizeToHeight():
+    """
+    Resize an image with fixed height, preserving aspect ratio as long as the resulting width does
+    not exceed the specified max. width. If that is the case, the image is horizontally squeezed 
+    to fix this.
+    """
+
+    def __init__( self, target_height, max_width ):
+        self.target_height = target_height
+        self.max_width = max_width
+
+    def __call__(self, sample):
+        t_chw, h, w, gt, gt_len = sample['img'], sample['height'], sample['width'], sample['transcription'], sample['transcription_len']
+        # freak case (marginal annotations): original height is the larger
+        # dimension -> specify the width too
+        if h > w:
+            t_chw = v2.Resize( size=(self.target_height, int(w*self.target_height/h) ), antialias=True)( t_chw )
+        # default case: original height is the smaller dimension and
+        # gets picked up by Resize()
+        else:
+            t_chw = v2.Resize(size=self.target_height, antialias=True)( t_chw )
+            
+        if t_chw.shape[-1] > self.max_width:
+            t_chw = v2.Resize(size=(self.target_height, self.max_width), antialias=True)( t_chw )
+        h_new, w_new = [ int(d) for d in t_chw.shape[1:] ]
+
+        mask = torch.zeros( t_chw.shape, dtype=torch.bool)
+        mask[:,:h,:w]=1
+        return {'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'transcription_len': gt_len, 'mask': mask }
 
 # check that the module is testable
 def dummy():
