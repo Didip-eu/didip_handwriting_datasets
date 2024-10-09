@@ -49,7 +49,7 @@ def test_ResizeToMax_img_field():
     Raw transform
     """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['img'].shape == torch.Size([3,30,150])
 
 def test_ResizeToMax_heigh_width_fields():
@@ -57,7 +57,7 @@ def test_ResizeToMax_heigh_width_fields():
     Raw transform
     """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
 
@@ -67,7 +67,7 @@ def test_ResizeToMax_transcription_field():
     Raw transform
     """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.ResizeToMax(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['transcription'] == 'abc'
 
 def test_PadToSize_img_field():
@@ -75,7 +75,7 @@ def test_PadToSize_img_field():
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['img'].shape == torch.Size([3,200,600])
 
 def test_PadToSize_height_width_fields():
@@ -83,7 +83,7 @@ def test_PadToSize_height_width_fields():
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['height'] == 100
     assert sample_dict['width'] == 500
 
@@ -92,16 +92,15 @@ def test_PadToSize_transcription_field():
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['transcription'] == 'abc'
-    assert sample_dict['transcription_len'] == 40
 
 def test_PadToSize_mask_field():
     """
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     mask = torch.zeros((3,200,600), dtype=torch.bool)
     mask[:,:100,:500]=1
     assert sample_dict['mask'].shape == torch.Size( [3,200,600])
@@ -114,7 +113,7 @@ def test_PadToSize_mask_field_handling_holes():
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
     img_to_pad[:,30:60, 2:10]=0
-    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample_dict = monasterium.PadToSize(200, 600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     mask = torch.zeros((3,200,600), dtype=torch.bool)
     mask[:,:100,:500]=1
     assert sample_dict['mask'].shape == torch.Size( [3,200,600])
@@ -127,12 +126,11 @@ def test_ResizePadCompose():
     img_to_resize = torch.randint(10,255, (3, 100, 500))
     sample_dict = Compose([ 
             monasterium.ResizeToMax(30, 200),
-            monasterium.PadToSize(200, 600)])( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+            monasterium.PadToSize(200, 600)])( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['img'].shape == torch.Size([3,200,600])
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
     assert sample_dict['transcription'] == 'abc'
-    assert sample_dict['transcription_len'] == 40
 
 
 
@@ -144,14 +142,13 @@ def test_default_transform( bbox_data_set ):
     final_img = torch.zeros((3,300,2000))
     final_img[:,:100,:500]=img_to_resize
 
-    sample = bbox_data_set.transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc', 'transcription_len': 40} )
+    sample = bbox_data_set.transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     #print("sample=", timg, " with type=", type(timg))
     assert len(sample) == 6
     assert sample['img'].equal( final_img )
     assert sample['height'] == 100
     assert sample['width'] == 500
     assert sample['transcription'] == 'abc'
-    assert sample['transcription_len'] == 40
     assert type(sample['mask']) is Tensor
     
     
@@ -169,7 +166,6 @@ def test_getitem_bbox( bbox_data_set ):
     assert type(sample['img']) is Tensor
     assert type(sample['transcription']) is str
     # generated from the raw data
-    assert type(sample['transcription_len']) is int
     assert type(sample['height']) is int
     assert type(sample['width']) is int
     assert type(sample['mask']) is Tensor
@@ -190,7 +186,6 @@ def test_getitem_polygons( polygon_data_set ):
     assert len(sample) == 6
     assert type(sample['img']) is Tensor
     assert type(sample['transcription']) is str
-    assert type(sample['transcription_len']) is int
     assert type(sample['height']) is int
     assert type(sample['width']) is int
     assert type(sample['mask']) is Tensor
@@ -218,7 +213,6 @@ def test_dataset_from_tsv_item_type_polygons( polygon_data_set ):
 def test_load_from_tsv_item_subtypes_bbox( bbox_data_set ):
     assert type(bbox_data_set[0]['img']) is Tensor # img tensor
     assert type(bbox_data_set[0]['transcription']) is str    # transcription
-    assert type(bbox_data_set[0]['transcription_len']) is int    # transcription length
     assert type(bbox_data_set[0]['height']) is int    # img height (after resizing)
     assert type(bbox_data_set[0]['width']) is int    # img width  (after resizing)
     assert type(bbox_data_set[0]['mask']) is Tensor    # img width  (after resizing)
@@ -226,7 +220,6 @@ def test_load_from_tsv_item_subtypes_bbox( bbox_data_set ):
 def test_load_from_tsv_item_subtypes_polygons( polygon_data_set ):
     assert type(polygon_data_set[0]['img']) is Tensor # img tensor
     assert type(polygon_data_set[0]['transcription']) is str    # transcription
-    assert type(polygon_data_set[0]['transcription_len']) is int    # transcription length
     assert type(polygon_data_set[0]['height']) is int    # img height (after resizing)
     assert type(polygon_data_set[0]['width']) is int    # img width  (after resizing)
     assert type(polygon_data_set[0]['mask']) is Tensor    # img width  (after resizing)
