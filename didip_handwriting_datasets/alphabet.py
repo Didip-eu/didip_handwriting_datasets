@@ -57,10 +57,11 @@ class Alphabet:
 
         self.finalize()
 
+        self.segment = self.segment_crude
+
     @property
     def many_to_one( self ):
         return not all(i==1 for i in Counter(self._utf_2_code.values()).values())
-
 
 
 
@@ -82,7 +83,7 @@ class Alphabet:
             
 
         #print(self._code_2_utf)
-        self.default_symbol, self.default_code = self.null_symbol, self._utf_2_code[ self.null_symbol ]
+        self.default_symbol, self.default_code = self.null_symbol, self.null_value
 
 
 
@@ -370,24 +371,18 @@ class Alphabet:
         self.finalize()
         return self
 
-    def encode(self, sample_s: str) -> Tensor:
+    def encode(self, sample_s: str) -> list:
         """ 
-        Encode a message string with integers. 
+        Encode a message string with integers: the string is segmented first.
 
         Args:
-            sample_s (str): message string; assume clean sample: no newlines nor tabs.
+            sample_s (str): message string, clean or not.
 
         Returns:
-            Tensor: a tensor of integers; symbols that are not in the alphabet yield
-                    a default code (=max index) while generating a user warning.
+            list: a list of integers; symbols that are not in the alphabet yield
+                    a default code while generating a user warning.
         """
-        if [ s for s in sample_s if s in '\n\t' ]:
-            raise ValueError("Sample contains illegal symbols: check for tabs and newlines chars.")
-        missing = [ s for s in sample_s if s not in self ]
-        if missing:
-                warnings.warn('The following chars are not in the alphabet: {}'\
-                          ' →  code defaults to {}'.format( missing, self.default_code ))
-        return torch.tensor([ self.get_code( s ) for s in sample_s ], dtype=torch.int64 )
+        return [ self.get_code( t ) for t in self.segment( sample_s ) ]
 
     def encode_one_hot( self, sample_s: List[str]) -> Tensor:
         """ 
@@ -408,10 +403,11 @@ class Alphabet:
             tuple( Tensor, Tensor ): a pair of tensors, with encoded batch as first element
                                      and lengths as second element.
         """
-        lengths = [ len(s) for s in samples_s ] 
-        batch_bw = torch.zeros( [len(samples_s), max(lengths)] )
-        for r,s in enumerate(samples_s):
-            batch_bw[r,:len(s)] = self.encode( s )
+        encoded_samples = [ self.encode( s ) for s in samples_s ]
+        lengths = [ len(s) for s in encoded_samples ] 
+        batch_bw = torch.zeros( [len(samples_s), max(lengths)], dtype=torch.int64 )
+        for r,s in enumerate(encoded_samples):
+            batch_bw[r,:len(s)] = torch.tensor( encoded_samples[r], dtype=torch.int64 )
         return (batch_bw, torch.tensor( lengths ))
 
 
@@ -454,7 +450,8 @@ class Alphabet:
             ```python
             >>> decode_ctc(np.array([0, 1, 1, 1, 2, 2, 5, 6, 6, 3, 3, 1, 7, 7, 7])
 
-            ``̀`
+            ```
+
 
 
         Args:
@@ -491,6 +488,34 @@ class Alphabet:
         """
         return sorted([sorted(i) if len(i)>1 else i for i in list_of_lists],
                        key=lambda x: x[0])
+
+
+    def segment_crude( self, mesg: str ):
+        """
+        Segment a string into tokens that are consistent with the provided alphabet.
+        A very crude splitting, as a provision for a proper segmenter.
+
+        Args:
+            mesg (str): a string
+
+        Returns:
+            list: a list of characters.
+        """
+        # normalize spaces
+        mesg = mesg.strip()
+        mesg = mesg.translate( str.maketrans( { c:' ' for c in ' \t\n\x0b\x0c\r\x85\xa0\u2000\u2001\u2008\u2009' } ))
+        # remove duplicate spaces and only those
+        duplicate_position = [False] + [ l == r for (l,r) in zip(mesg[1:], mesg[:-1]) ]
+        non_space_position = [ c != ' ' for c in mesg ]
+        mesg = [ mesg[i] for i in range(len(mesg)) if non_space_position[i] or not duplicate_position[i]] 
+
+        missing = [ s for s in mesg if s not in self ]
+        if missing:
+                warnings.warn('The following chars are not in the alphabet: {}'\
+                          ' →  code defaults to {}'.format( missing, self.default_code ))
+
+        return list( mesg )
+
 
 class CharClass():
 
