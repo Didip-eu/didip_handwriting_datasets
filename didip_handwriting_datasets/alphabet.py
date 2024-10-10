@@ -35,7 +35,7 @@ class Alphabet:
     start_of_seq_symbol = '\u21A6' # '↦' i.e. '|->'
     end_of_seq_symbol = '\u21E5' # '⇥' i.e. '->|'
 
-    def __init__( self, alpha_repr: Union[str,dict,list]=''):
+    def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None):
 
         self._utf_2_code = {}
         if type(alpha_repr) is dict:
@@ -57,7 +57,9 @@ class Alphabet:
 
         self.finalize()
 
-        self.segment = self.segment_crude
+        # crude, character-splitting function makes do for now
+        # TODO: a proper tokenizer that splits along the given alphabet
+        self.tokenize = self.tokenize_crude if tokenizer is None else tokenizer
 
     @property
     def many_to_one( self ):
@@ -382,7 +384,8 @@ class Alphabet:
             list: a list of integers; symbols that are not in the alphabet yield
                     a default code while generating a user warning.
         """
-        return [ self.get_code( t ) for t in self.segment( sample_s ) ]
+        sample_s = self.normalize_spaces( sample_s )
+        return [ self.get_code( t ) for t in self.tokenize( sample_s ) ]
 
     def encode_one_hot( self, sample_s: List[str]) -> Tensor:
         """ 
@@ -490,10 +493,11 @@ class Alphabet:
                        key=lambda x: x[0])
 
 
-    def segment_crude( self, mesg: str ):
+    def tokenize_crude( self, mesg: str ):
         """
-        Segment a string into tokens that are consistent with the provided alphabet.
-        A very crude splitting, as a provision for a proper segmenter.
+        Tokenize a string into tokens that are consistent with the provided alphabet.
+        A very crude splitting, as a provision for a proper tokenizer. Spaces
+        are normalized (only standard spaces - `' '=\x20`)), with duplicate spaces removed.
 
         Args:
             mesg (str): a string
@@ -501,14 +505,6 @@ class Alphabet:
         Returns:
             list: a list of characters.
         """
-        # normalize spaces
-        mesg = mesg.strip()
-        mesg = mesg.translate( str.maketrans( { c:' ' for c in ' \t\n\x0b\x0c\r\x85\xa0\u2000\u2001\u2008\u2009' } ))
-        # remove duplicate spaces and only those
-        duplicate_position = [False] + [ l == r for (l,r) in zip(mesg[1:], mesg[:-1]) ]
-        non_space_position = [ c != ' ' for c in mesg ]
-        mesg = [ mesg[i] for i in range(len(mesg)) if non_space_position[i] or not duplicate_position[i]] 
-
         missing = [ s for s in mesg if s not in self ]
         if missing:
                 warnings.warn('The following chars are not in the alphabet: {}'\
@@ -516,6 +512,34 @@ class Alphabet:
 
         return list( mesg )
 
+    @staticmethod
+    def normalize_spaces(mesg: str):
+        """
+        Normalize the spaces: 
+
+        + remove trailing spaces
+        + all spaces mapped to standard space (`' '=\x20`)
+        + duplicate spaces removed
+
+        Eg.
+            ```python
+            >>> normalize_spaces(' \t\n\u000Ba\u000C\u000Db\u0085c\u00A0\u2000\u2001d\u2008\u2009e')
+            ['a', ' ', 'b', ' ', 'c', ' ', 'd', ' ', 'e']
+            ```
+
+        Args:
+            mesg (str): a string
+
+        Returns:
+            str: a string
+        """
+        mesg = mesg.strip()
+        mesg = mesg.translate( str.maketrans( { c:' ' for c in ' \t\n\x0b\x0c\r\x85\xa0\u2000\u2001\u2008\u2009' } ))
+        # remove duplicate spaces and only those
+        duplicate_position = [False] + [ l == r for (l,r) in zip(mesg[1:], mesg[:-1]) ]
+        non_space_position = [ c != ' ' for c in mesg ]
+        return ''.join( mesg[i] for i in range(len(mesg)) if non_space_position[i] or not duplicate_position[i] )
+        
 
 class CharClass():
 

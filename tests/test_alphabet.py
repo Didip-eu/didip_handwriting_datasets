@@ -304,13 +304,18 @@ def test_alphabet_prototype_ascii( gt_transcription_samples ):
     assert list_of_list == [' ', ',', '.', ['B', 'b'], ['E', 'e'], ['H', 'h'], ['K', 'k'], 'P', ['U', 'u'],
                             ['W', 'w'], 'a', 'c', 'd', 'f', 'g', 'i', 'l', 'm', 'n', 'o', 'r', 's', 't', 'v', 'y', 'z']
 
-def test_segment_crude():
-    alpha= alphabet.Alphabet('ßa fdbce→')
-    assert alpha.segment_crude(' \t\n\u000Ba\u000C\u000Db\u0085c\u00A0\u2000\u2001d\u2008\u2009e') == ['a', ' ', 'b', ' ', 'c', ' ', 'd', ' ', 'e']
+def test_normalize_spaces():
+    assert alphabet.Alphabet.normalize_spaces(' \t\n\u000Ba\u000C\u000Db\u0085c\u00A0\u2000\u2001d\u2008\u2009e') == 'a b c d e'
 
 def test_encode_clean_sample():
+    """ Most common case: no trailing spaces, nor extra spaces."""
     alpha= alphabet.Alphabet('ßa fdbce→') 
-    assert alpha.encode('abc ß def ') == [2, 3, 4, 1, 8, 1, 5, 6, 7]
+    assert alpha.encode('abc ß def') == [2, 3, 4, 1, 8, 1, 5, 6, 7]
+
+def test_encode_normalized_spaces():
+    """ Encoding should normalize spaces: strip trailing spaces, homogeneize, merge duplicates. """
+    alpha= alphabet.Alphabet('ßa fdbce→') 
+    assert alpha.encode('\tabc ß  def ') == [2, 3, 4, 1, 8, 1, 5, 6, 7]
 
 def test_encode_missing_symbols():
     """Unknown symbols generate null char (and a warning)."""
