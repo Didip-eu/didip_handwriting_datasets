@@ -304,26 +304,20 @@ def test_alphabet_prototype_ascii( gt_transcription_samples ):
     assert list_of_list == [' ', ',', '.', ['B', 'b'], ['E', 'e'], ['H', 'h'], ['K', 'k'], 'P', ['U', 'u'],
                             ['W', 'w'], 'a', 'c', 'd', 'f', 'g', 'i', 'l', 'm', 'n', 'o', 'r', 's', 't', 'v', 'y', 'z']
 
+def test_segment_crude():
+    alpha= alphabet.Alphabet('ßa fdbce→')
+    assert alpha.segment_crude(' \t\n\u000Ba\u000C\u000Db\u0085c\u00A0\u2000\u2001d\u2008\u2009e') == ['a', ' ', 'b', ' ', 'c', ' ', 'd', ' ', 'e']
 
 def test_encode_clean_sample():
     alpha= alphabet.Alphabet('ßa fdbce→') 
-    encoded = alpha.encode('abc ß def ')
-    assert encoded.equal( torch.tensor([2, 3, 4, 1, 8, 1, 5, 6, 7, 1], dtype=torch.int64))
+    assert alpha.encode('abc ß def ') == [2, 3, 4, 1, 8, 1, 5, 6, 7]
 
 def test_encode_missing_symbols():
     """Unknown symbols generate null char (and a warning)."""
     alpha= alphabet.Alphabet('ßa fdbce→') 
     with pytest.warns(UserWarning):
-        encoded = alpha.encode('abc z def ')
-        assert encoded.equal( torch.tensor([2, 3, 4, 1, 0, 1, 5, 6, 7, 1], dtype=torch.int64))
+        assert alpha.encode('abc z def ') == [2, 3, 4, 1, 0, 1, 5, 6, 7]
 
-def test_encode_illegal_symbols():
-    """Illegal symbols raise an exception."""
-    alpha= alphabet.Alphabet('ßa fdbce→') 
-    with pytest.raises(ValueError):
-        encoded = alpha.encode('abc\n z def ')
-    with pytest.raises(ValueError):
-        encoded = alpha.encode('abc\t z def ')
 
 def test_encode_one_hot():
     alpha= alphabet.Alphabet('ßa fdbce→') 
@@ -336,8 +330,7 @@ def test_encode_one_hot():
          [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
          [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
          [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-         [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=torch.bool ))
+         [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]], dtype=torch.bool ))
 
 def test_decode():
     alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
@@ -361,14 +354,14 @@ def test_decode_unknown_code():
 def test_encode_batch_1():
     """ Batch with clean strings """
     alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
-    batch_str = [ 'abc def ', 'ßecbca ' ]
+    batch_str = [ 'abc def ', 'ßecbcaaß' ]
     encoded = alpha.encode_batch( batch_str )
 
     assert encoded[0].equal( 
-            torch.tensor( [[2, 3, 4, 1, 5, 6, 7, 1],
-                           [8, 6, 4, 3, 4, 2, 1, 0]], dtype=torch.int64))
+            torch.tensor( [[2, 3, 4, 1, 5, 6, 7, 0],
+                           [8, 6, 4, 3, 4, 2, 2, 8]], dtype=torch.int64))
     assert encoded[1].equal( 
-            torch.tensor([8,7], dtype=torch.int64 ))
+            torch.tensor([7,8], dtype=torch.int64 ))
 
 
 def test_decode_batch():
@@ -379,6 +372,7 @@ def test_decode_batch():
              torch.tensor( [8, 7]))
     assert alpha.decode_batch( samples, lengths ) == ["abc def ", "ßecbca "]
     assert alpha.decode_batch( samples, None ) == ["abc def ", "ßecbca ϵ"]
+
 
 
 def test_decode_ctc():
