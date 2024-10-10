@@ -396,12 +396,14 @@ class Alphabet:
         return torch.tensor([[ 0 if i!=c else 1 for i in range(len(self)) ] for c in encode_int ],
                 dtype=torch.bool)
 
-    def encode_batch(self, samples_s: List[str] ) -> Tuple[Tensor, Tensor]:
+    def encode_batch(self, samples_s: List[str], padded=True ) -> Tuple[Tensor, Tensor]:
         """
         Encode a batch of messages.
 
         Args:
             samples_s (list): a list of strings
+            padded (bool): if True (default), return a tensor of size (N,S) where S is the maximum 
+                           length of a sample mesg; otherwise, return an unpadded 1D-sequence of labels.
 
         Returns:
             tuple( Tensor, Tensor ): a pair of tensors, with encoded batch as first element
