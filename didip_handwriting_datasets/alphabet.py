@@ -3,6 +3,7 @@ from typing import Union,Tuple,List,Dict
 import torch
 from torch import Tensor
 import numpy as np
+import re
 from pathlib import Path
 import itertools
 import warnings
@@ -533,12 +534,7 @@ class Alphabet:
         Returns:
             str: a string
         """
-        mesg = mesg.strip()
-        mesg = mesg.translate( str.maketrans( { c:' ' for c in ' \t\n\x0b\x0c\r\x85\xa0\u2000\u2001\u2008\u2009' } ))
-        # remove duplicate spaces and only those
-        duplicate_position = [False] + [ l == r for (l,r) in zip(mesg[1:], mesg[:-1]) ]
-        non_space_position = [ c != ' ' for c in mesg ]
-        return ''.join( mesg[i] for i in range(len(mesg)) if non_space_position[i] or not duplicate_position[i] )
+        return re.sub( r'\s+', ' ', mesg.strip())
         
 
 class CharClass():
