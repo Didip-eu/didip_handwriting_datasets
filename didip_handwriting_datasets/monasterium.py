@@ -63,6 +63,7 @@ logger = logging.getLogger()
 tarball_root_name="MonasteriumTekliaGTDataset"    
 work_folder_name="MonasteriumHandwritingDataset"
 root_folder_basename="Monasterium"
+alphabet_tsv_name="monasterium_alphabet.tsv"
 
 
 class MonasteriumDataset(VisionDataset):
@@ -91,16 +92,18 @@ class MonasteriumDataset(VisionDataset):
                 task: str = '',
                 shape: str = '',
                 count: int = 0,
-                alphabet_tsv: str='monasterium_alphabet.tsv',
+                alphabet_tsv: str = None,
                 ):
         """
         Args:
-            root (str): Where the archive is to be downloaded and the subfolder containing original files 
-                        (pageXML documents and page images) is to be created.
+            root (str): Where the archive is to be downloaded and the subfolder containing original files
+                        (pageXML documents and page images) is to be created. Default: 
+                        subfolder `data/Monasterium' in this project's directory.
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: '<root>/MonasteriumHandwritingDatasetHTR'; if 
                                parameter is a relative path, the work folder is created under <root>; an
-                               absolute path overrides this.
+                               absolute path overrides this. For HTR task, the work folder also contains
+                               the alphabet in TSV form.
             subset (str): 'train' (default), 'validate' or 'test'.
             subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
             transform (Callable): Function to apply to the PIL image at loading time.
@@ -144,15 +147,16 @@ class MonasteriumDataset(VisionDataset):
 
         self.data = []
 
-        # Used only for HTR tasks
-        # technical debt: remove hard-coded name/location for the default
-        self.alphabet = alphabet.Alphabet( alphabet_tsv )
+        # Used only for HTR tasks: initialized by build_task()
+        self.alphabet = None
 
         self._task = ''
         if (task != ''):
             self._task = task # for self-documentation only
             build_ok = build_items if from_tsv_file == '' else False
-            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, subset=subset, shape=shape, subset_ratios=subset_ratios, work_folder=work_folder, count=count )
+            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
+                             subset=subset, shape=shape, subset_ratios=subset_ratios, 
+                             work_folder=work_folder, count=count, alphabet_tsv=alphabet_tsv )
 
             #print("\nbuild_task(): data=", self.data[:6])
 
@@ -165,7 +169,9 @@ class MonasteriumDataset(VisionDataset):
                    shape: str='bbox', 
                    count: int=0, 
                    work_folder: str='', 
-                   crop=False):
+                   crop=False,
+                   alphabet_tsv='',
+                   ):
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
         + only creates the files needed for a particular task (train, validate, or test): if more than one subset is needed, just initialize a new dataset with desired parameters (work directory, subset)
@@ -184,6 +190,7 @@ class MonasteriumDataset(VisionDataset):
                                  assumed to be the work folder, superceding the work_folder option).
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
+            alphabet_tsv (str): TSV file containing the alphabet
         """
         if task == 'htr':
             
@@ -223,6 +230,17 @@ class MonasteriumDataset(VisionDataset):
                 self.dump_data_to_tsv( Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self.generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
+
+                # copy the alphabet into the work folder
+                shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
+            
+            # load alphabet
+            alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( alphabet_tsv_name )
+            if not alphabet_tsv_input.exists():
+                raise FileNotFoundError("Alphabet file: {}".format( alphabet_tsv_input))
+            print('alphabet path:', alphabet_tsv_input)
+            self.alphabet = alphabet.Alphabet( alphabet_tsv_input )
+                
 
         elif task == 'segment':
             self.work_folder_path = Path('.', work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
@@ -416,6 +434,7 @@ class MonasteriumDataset(VisionDataset):
                         else:
                             samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_content,
                                              'height': int(height), 'width': int(width) })
+
         return samples
 
 

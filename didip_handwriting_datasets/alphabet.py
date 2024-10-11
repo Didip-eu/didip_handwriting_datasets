@@ -45,9 +45,9 @@ class Alphabet:
                                                                        self.start_of_seq_symbol, 
                                                                        self.end_of_seq_symbol) }
             self._utf_2_code = self.from_dict( cleaned )
-        elif type(alpha_repr) is str:
-            #print("__init__( str )")
-            alpha_path = Path( alpha_repr )
+
+        elif type(alpha_repr) is str or isinstance(alpha_repr, Path):
+            alpha_path = Path( alpha_repr ) if type(alpha_repr) is str else alpha_repr
             if alpha_path.suffix == '.tsv' and alpha_path.exists():
                 #print("__init__( tsv_path )")
                 self._utf_2_code = self.from_tsv( alpha_repr )  
@@ -87,6 +87,15 @@ class Alphabet:
 
         #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self.null_value
+
+
+    def to_tsv( self, filename: Union[str,Path]):
+        """
+        Dump to TSV file.
+
+        """
+        with open( filename, 'w') as of:
+            print(self, file=of)
 
 
 
@@ -135,15 +144,16 @@ class Alphabet:
                     raise ValueError("File is not a prototype TSV. Format expected:"
                                      "<char1>    [<char2>,    ...]    -1")
                 infile.seek(0)
-                # prototype CSV may have more than one symbol on the same line, for many-to-one mapping
+                # prototype TSV may have more than one symbol on the same line, for many-to-one mapping
                 # Building list-of-list from TVS:
                 # A   ae   -1          
                 # O   o    ö    -1 ---> [['A', 'ae'], 'O', 'o', 'ö'], ... ]
-                lol = [ s if len(s)>1 else s[0] for s in [ line.split('\t')[:-1] for line in infile ]]
+                print("Loading alphabet")
+                lol = [ s if len(s)>1 else s[0] for s in [ line.split('\t')[:-1] for line in infile if re.match(r'\s*$', line) is None ]]
                 
                 return cls.from_list( lol )
 
-            return { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile ]) }
+            return { s:int(c.rstrip()) for (s,c) in sorted([ line.split('\t') for line in infile if re.match(r'\s*$', line) is None]) }
 
     @classmethod
     def from_list(cls, symbol_list: List[Union[List,str]]) -> Dict[str,int]:
@@ -208,9 +218,9 @@ class Alphabet:
         return alphadict
         
     @classmethod
-    def prototype(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
+    def prototype_from_data(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
         """
-        ]]Given a list of GT transcription file paths, return a TSV representation of the alphabet.
+        Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
         The output can be redirected on file, reworked and then fed back through `from_tsv()`.
 
@@ -271,6 +281,54 @@ class Alphabet:
             return ("\n".join( [f"{s}\t-1" for s in symbol_list ] ), char_to_file)
         
         return (cls.deep_sorted(symbol_list), char_to_file)
+
+        
+    @classmethod
+    def prototype_from_scratch(cls, out_format='list', merge=[]) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
+        """
+        Builds a tentative, "universal", alphabet from scratch, without regard to the data: it 
+        maps classes of characters to common code, as described in the CharacterClass below.
+        The resulting encoding is rather short and lends itself to a variety of datasets.
+        The output can be redirected on file, reworked and then fed back through `from_tsv()`.
+
+        Args:
+            out_format (str): if 'list' (default) a Python list, that can be fed to the from_list() 
+                              initialization method; otherwise a TSV string, where tab-separated symbols
+                              on the same line map to the same code, and last element (-1) is a placeholder
+                              for the symbol's code.
+            merge (List[tuple]): for each of the provided subsequences, merge those output sublists that contain the characters
+                               in it. Eg. `merge=[(ij)]` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+        Returns:
+             Union[list,str]: a list of lists or str (the mapping)
+
+        """
+
+        symbol_list = CharClass.build_subsets()
+
+        # merge sublists
+        to_delete = []
+        to_add = []
+        for mgs in merge:
+            merged = set()
+            for charlist in symbol_list:
+                if set(charlist).intersection( set(mgs) ):
+                    merged.update( charlist )
+                    to_delete.append( charlist )
+            if len(merged):
+                to_add.append( list(merged) )
+        for deleted_subset in to_delete:
+            try:
+                symbol_list.remove( deleted_subset )
+            except ValueError:
+                print(f'Could not delete element {deleted_subset} from list of symbols.')
+        if len(to_add):
+            symbol_list.extend( to_add ) 
+                
+
+        if out_format == 'tsv':
+            return '\n'.join( [ '\t'.join(sorted(i))+'\t-1' for i in symbol_list ])
+        
+        return cls.deep_sorted(symbol_list)
 
         
     def __len__( self ):
@@ -402,6 +460,7 @@ class Alphabet:
 
         Args:
             samples_s (list): a list of strings
+
             padded (bool): if True (default), return a tensor of size (N,S) where S is the maximum 
                            length of a sample mesg; otherwise, return an unpadded 1D-sequence of labels.
 
@@ -411,10 +470,15 @@ class Alphabet:
         """
         encoded_samples = [ self.encode( s ) for s in samples_s ]
         lengths = [ len(s) for s in encoded_samples ] 
-        batch_bw = torch.zeros( [len(samples_s), max(lengths)], dtype=torch.int64 )
-        for r,s in enumerate(encoded_samples):
-            batch_bw[r,:len(s)] = torch.tensor( encoded_samples[r], dtype=torch.int64 )
-        return (batch_bw, torch.tensor( lengths ))
+
+        if padded:
+            batch_bw = torch.zeros( [len(samples_s), max(lengths)], dtype=torch.int64 )
+            for r,s in enumerate(encoded_samples):
+                batch_bw[r,:len(s)] = torch.tensor( encoded_samples[r], dtype=torch.int64 )
+            return (batch_bw, torch.tensor( lengths ))
+
+        concatenated_samples = list(itertools.chain( *encoded_samples ))
+        return ( torch.tensor( concatenated_samples ), torch.tensor(lengths))
 
 
     def decode(self, sample_t: Tensor, length: int=-1 ) -> str:
@@ -542,6 +606,8 @@ class Alphabet:
 class CharClass():
 
     character_categories = {
+        '0': '0', '1': '1', '2': '2', '3': '3', '4': '4', 
+        '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
         'a': 'aAáÁâÂãÃäÄåÅæÆāĂăĄą',
         'b': 'bB',
         'c': 'cCçÇĆćĈĉĊċČč',
@@ -567,7 +633,9 @@ class CharClass():
         'w': 'wWŴŵ',
         'x': 'xX',
         'y': 'yYŶýÿŷŸ',
-        'z': 'zZŹźŻżŽ'
+        'z': 'zZŹźŻżŽ',
+        '.': '.:;,',
+        '-': '-¬—',
     }
 
     @classmethod
@@ -594,10 +662,13 @@ class CharClass():
         return None
     
     @classmethod
-    def build_subsets(cls, chars: set) -> List[Union[List,str]]:
+    def build_subsets(cls, chars: set = None) -> List[Union[List,str]]:
         """
         From a set of chars, return a list of lists, where
         each sublist matches one of the categories above.
+
+        Args:
+            chars (set): build subsets of chars out of the given set.
 
         Eg. 
         
@@ -610,6 +681,10 @@ class CharClass():
         #{ self.get_key(),c for c in chars }
         chardict = { k:set()  for k in cls.character_categories.keys() }
         lone_chars = []
+
+        if chars is None:
+            return [ list(v) if len(v)>1 else v for v in cls.character_categories.values()]
+
         for (k,c) in [ (cls.get_key(c),c) for c in chars ]:
             if k is None:
                 lone_chars.append(c)

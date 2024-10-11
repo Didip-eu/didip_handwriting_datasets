@@ -356,8 +356,8 @@ def test_decode_unknown_code():
 
 
 
-def test_encode_batch_1():
-    """ Batch with clean strings """
+def test_encode_batch_default():
+    """ Batch with clean strings, padded by default """
     alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
     batch_str = [ 'abc def ', 'ßecbcaaß' ]
     encoded = alpha.encode_batch( batch_str )
@@ -365,6 +365,30 @@ def test_encode_batch_1():
     assert encoded[0].equal( 
             torch.tensor( [[2, 3, 4, 1, 5, 6, 7, 0],
                            [8, 6, 4, 3, 4, 2, 2, 8]], dtype=torch.int64))
+    assert encoded[1].equal( 
+            torch.tensor([7,8], dtype=torch.int64 ))
+
+def test_encode_batch_padded():
+    """ Batch with clean strings, padded explicit """
+    alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
+    batch_str = [ 'abc def ', 'ßecbcaaß' ]
+    encoded = alpha.encode_batch( batch_str, padded=True )
+
+    assert encoded[0].equal( 
+            torch.tensor( [[2, 3, 4, 1, 5, 6, 7, 0],
+                           [8, 6, 4, 3, 4, 2, 2, 8]], dtype=torch.int64))
+    assert encoded[1].equal( 
+            torch.tensor([7,8], dtype=torch.int64 ))
+
+
+def test_encode_batch_padded():
+    """ Batch with clean strings, unpadded explicit """
+    alpha= alphabet.Alphabet('ßa fdb\n\tce\t→') 
+    batch_str = [ 'abc def ', 'ßecbcaaß' ]
+    encoded = alpha.encode_batch( batch_str, padded=False )
+
+    assert encoded[0].equal( 
+            torch.tensor( [2, 3, 4, 1, 5, 6, 7, 8, 6, 4, 3, 4, 2, 2, 8], dtype=torch.int64))
     assert encoded[1].equal( 
             torch.tensor([7,8], dtype=torch.int64 ))
 
