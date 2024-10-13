@@ -63,7 +63,38 @@ logger = logging.getLogger()
 tarball_root_name="MonasteriumTekliaGTDataset"    
 work_folder_name="MonasteriumHandwritingDataset"
 root_folder_basename="Monasterium"
-alphabet_tsv_name="monasterium_alphabet.tsv"
+alphabet_tsv_name="alphabet.tsv"
+
+default_alphabet =[' ',
+ [',', '.', ':', ';'],
+ ['-', '¬', '—'],
+ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+ ['A', 'a', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'Ă', 'ă', 'Ą', 'ą'],
+ ['B', 'b'],
+ ['C', 'c', 'Ç', 'ç', 'Ć', 'ć', 'Ĉ', 'ĉ', 'Ċ', 'ċ', 'Č', 'č'],
+ ['D', 'd', 'Ð', 'ð', 'Ď', 'ď', 'Đ', 'đ'],
+ ['E', 'e', 'È', 'É', 'Ê', 'Ë', 'è', 'é', 'ê', 'ë', 'Ē', 'ē', 'Ĕ', 'ĕ', 'Ė', 'ė', 'Ę', 'ę', 'Ě', 'ě'],
+ ['F', 'f'],
+ ['G', 'g', 'Ĝ', 'ĝ', 'Ğ', 'ğ', 'Ġ', 'ġ', 'Ģ', 'ģ'],
+ ['H', 'h', 'Ĥ', 'ĥ', 'Ħ', 'ħ'],
+ ['I', 'J', 'i', 'j', 'Ì', 'Í', 'Î', 'Ï', 'ì', 'í', 'î', 'ï', 'Ĩ', 'ĩ', 'Ī', 'ī', 'Ĭ', 'ĭ', 'Į', 'į', 'İ', 'ı', 'Ĳ', 'ĳ', 'Ĵ', 'ĵ'],
+ ['K', 'k', 'Ķ', 'ķ', 'ĸ'],
+ ['L', 'l', 'Ĺ', 'ĺ', 'Ļ', 'ļ', 'Ľ', 'ľ', 'Ŀ', 'ŀ', 'Ł', 'ł'],
+ ['M', 'm'],
+ ['N', 'n', 'Ñ', 'ñ', 'Ń', 'ń', 'Ņ', 'ņ', 'Ň', 'ň', 'ŉ', 'Ŋ', 'ŋ'],
+ ['O', 'o', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'ò', 'ó', 'ô', 'õ', 'ö', 'Ō', 'ō', 'Ŏ', 'ŏ', 'Ő', 'ő', 'Œ', 'œ'],
+ ['P', 'p'],
+ ['Q', 'q'],
+ ['R', 'r', 'Ŕ', 'ŕ', 'Ŗ', 'ŗ', 'Ř', 'ř'],
+ ['S', 's', 'ß', 'Ś', 'ś', 'Ŝ', 'ŝ', 'Ş', 'ş', 'Š', 'š'],
+ ['T', 't', 'Ţ', 'ţ', 'Ť', 'ť', 'Ŧ', 'ŧ'],
+ ['U', 'u', 'Ù', 'Ú', 'Û', 'Ü', 'ù', 'ú', 'û', 'ü', 'Ũ', 'ũ', 'Ū', 'ū', 'Ŭ', 'ŭ', 'Ů', 'ů', 'Ű', 'ű', 'Ų', 'ų'],
+ ['V', 'v'],
+ ['W', 'w', 'Ŵ', 'ŵ'],
+ ['X', 'x'],
+ ['Y', 'y', 'ý', 'ÿ', 'Ŷ', 'ŷ', 'Ÿ'],
+ ['Z', 'z', 'Ź', 'ź', 'Ż', 'ż', 'Ž']]
+
 
 
 class MonasteriumDataset(VisionDataset):
@@ -197,11 +228,9 @@ class MonasteriumDataset(VisionDataset):
             if crop:
                 self.print("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
             
-            # when DS not created from scratch, try loading 
-            # - from an existing TSV file 
-            # - actual folder 
-            # - or pickled tensors?
-            # TO-DO: make generic for both tasks
+            # create from existing TSV files - passed directory that contains:
+            # + image to GT mapping (TSV)
+            # + alphabet.tsv
             if from_tsv_file != '':
                 tsv_path = Path( from_tsv_file )
                 if tsv_path.exists():
@@ -211,6 +240,7 @@ class MonasteriumDataset(VisionDataset):
                     #print("\nbuild_task(): data=", self.data[:6])
                     #print(self.data[0]['height'], "type=", type(self.data[0]['height']))
                     #print(self.data[0]['polygon_mask'])
+
             else:
                 if work_folder=='':
                     self.work_folder_path = Path(self.root, work_folder_name+'HTR') 
@@ -231,8 +261,10 @@ class MonasteriumDataset(VisionDataset):
                 self.generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
 
-                # copy the alphabet into the work folder
-                shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
+                # serialize the alphabet into the work folder
+                print("Using default alphabet:")
+                Alphabet( default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
+                #shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
             
             # load alphabet
             alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( alphabet_tsv_name )
@@ -836,7 +868,6 @@ class MonasteriumDataset(VisionDataset):
         assert type(height) is int
         assert type(width) is int
         assert type(gt) is str
-        assert type(gt_len) is int
 
         # goal: transform image, while returning not only the image but also the unpadded size
         # -> meta-information has to be passed along in the sample; :

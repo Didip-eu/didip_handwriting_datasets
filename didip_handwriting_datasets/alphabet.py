@@ -572,10 +572,10 @@ class Alphabet:
         Returns:
             list: a list of characters.
         """
-        missing = [ s for s in mesg if s not in self ]
+        missing = set( s for s in mesg if s not in self )
         if missing:
                 warnings.warn('The following chars are not in the alphabet: {}'\
-                          ' →  code defaults to {}'.format( missing, self.default_code ))
+                          ' →  code defaults to {}'.format( [ f"'{c}'={ord(c)}" for c in missing ], self.default_code ))
 
         return list( mesg )
 
