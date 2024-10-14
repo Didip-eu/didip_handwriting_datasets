@@ -39,7 +39,8 @@ def test_split_set( subset, set_length):
     the proper subset, with the proper size
     """
     samples = [ {'a':1.2, 'b':(4,5), 'c':'some' } for i in range(10) ]
-    s = monasterium.MonasteriumDataset.split_set( samples, (.5,.3,.2), subset )
+    s = monasterium.MonasteriumDataset._split_set( samples, (.5,.3,.2), subset )
+
     assert len(s) == set_length
     assert s[0]['b'] == (4,5)
 
@@ -144,7 +145,7 @@ def test_default_transform( bbox_data_set ):
 
     sample = bbox_data_set.transform( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     #print("sample=", timg, " with type=", type(timg))
-    assert len(sample) == 6
+    assert len(sample) == 5
     assert sample['img'].equal( final_img )
     assert sample['height'] == 100
     assert sample['width'] == 500
@@ -162,7 +163,7 @@ def test_data_point_bbox( bbox_data_set ):
 
 def test_getitem_bbox( bbox_data_set ):
     sample = bbox_data_set[0]
-    assert len(sample) == 6
+    assert len(sample) == 5
     assert type(sample['img']) is Tensor
     assert type(sample['transcription']) is str
     # generated from the raw data
@@ -202,13 +203,13 @@ def test_load_from_tsv_polygons( data_path ):
 def test_dataset_from_tsv_item_type_bbox( bbox_data_set ):
     assert len(bbox_data_set) == 10
     assert type(bbox_data_set[0]) is dict
-    assert len(bbox_data_set[0]) == 6
+    assert len(bbox_data_set[0]) == 5
 
 
 def test_dataset_from_tsv_item_type_polygons( polygon_data_set ):
     assert len(polygon_data_set) == 10
     assert type(polygon_data_set[0]) is dict
-    assert len(polygon_data_set[0]) == 7
+    assert len(polygon_data_set[0]) == 6
 
 def test_load_from_tsv_item_subtypes_bbox( bbox_data_set ):
     assert type(bbox_data_set[0]['img']) is Tensor # img tensor

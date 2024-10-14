@@ -55,9 +55,9 @@ TODO:
 
 """
 
-logging.basicConfig( level=logging.DEBUG )
+logging.basicConfig( level=logging.INFO, force=True )
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
 tarball_root_name="MonasteriumTekliaGTDataset"    
@@ -160,17 +160,21 @@ class MonasteriumDataset(VisionDataset):
         super().__init__(root, transform=trf, target_transform=target_transform )
 
         self.root = Path(root) if root else Path(__file__).parent.joinpath('data', root_folder_basename)
-        print("Root folder: {}".format( self.root ))
+        logger.debug("Root folder: {}".format( self.root ))
         if not self.root.exists():
             self.root.mkdir( parents=True )
-            print("Create root path: {}".format(self.root))
+            logger.debug("Create root path: {}".format(self.root))
 
         self.work_folder_path = None # task-dependent
         # tarball creates its own base folder
         self.raw_data_folder_path = self.root.joinpath( tarball_root_name )
 
+        self.from_tsv_file = ''
         if from_tsv_file == '':
             self.download_and_extract( self.root, self.root, self.dataset_file, extract_pages)
+        else:
+            # used only by __str__ method
+            self.from_tsv_file = from_tsv_file
 
         # input PageXML files are at the root of the resulting tree
         # (sorting is necessary for deterministic output)
@@ -178,20 +182,20 @@ class MonasteriumDataset(VisionDataset):
 
         self.data = []
 
-        # Used only for HTR tasks: initialized by build_task()
+        # Used only for HTR tasks: initialized by _build_task()
         self.alphabet = None
 
         self._task = ''
         if (task != ''):
             self._task = task # for self-documentation only
             build_ok = build_items if from_tsv_file == '' else False
-            self.build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
+            self._build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
                              subset=subset, shape=shape, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, alphabet_tsv=alphabet_tsv )
 
-            #print("\nbuild_task(): data=", self.data[:6])
+            logger.debug("_build_task(): data={}".format( self.data[:6]))
 
-    def build_task( self, 
+    def _build_task( self, 
                    task: str='htr',
                    build_items: bool=True, 
                    from_tsv_file: str='',
@@ -226,7 +230,7 @@ class MonasteriumDataset(VisionDataset):
         if task == 'htr':
             
             if crop:
-                self.print("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
+                self.logger.warning("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
             
             # create from existing TSV files - passed directory that contains:
             # + image to GT mapping (TSV)
@@ -237,32 +241,32 @@ class MonasteriumDataset(VisionDataset):
                     self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
-                    #print("\nbuild_task(): data=", self.data[:6])
-                    #print(self.data[0]['height'], "type=", type(self.data[0]['height']))
-                    #print(self.data[0]['polygon_mask'])
+                    logger.debug("_build_task(): data={}".format( self.data[:6]))
+                    logger.debug("_build_task(): height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
+                    #logger.debug(self.data[0]['polygon_mask'])
 
             else:
                 if work_folder=='':
                     self.work_folder_path = Path(self.root, work_folder_name+'HTR') 
-                    print("Setting default location for work folder: {}".format( self.work_folder_path ))
+                    logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
                 else:
                     # if work folder is an absolute path, it overrides the root
                     self.work_folder_path = self.root.joinpath( work_folder )
-                    print("Work folder: {}".format( self.work_folder_path ))
+                    logger.debug("Work folder: {}".format( self.work_folder_path ))
 
                 if not self.work_folder_path.is_dir():
                     self.work_folder_path.mkdir()
-                    print("Creating work folder = {}".format( self.work_folder_path ))
+                    logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
-                self.data = self.split_set( self.extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=shape ), ratios=subset_ratios, subset=subset )
+                self.data = self._split_set( self._extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=shape ), ratios=subset_ratios, subset=subset )
                 
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv( Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
-                self.generate_readme("README.md", 
+                self._generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
 
                 # serialize the alphabet into the work folder
-                print("Using default alphabet:")
+                logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
                 Alphabet( default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
                 #shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
             
@@ -270,7 +274,7 @@ class MonasteriumDataset(VisionDataset):
             alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( alphabet_tsv_name )
             if not alphabet_tsv_input.exists():
                 raise FileNotFoundError("Alphabet file: {}".format( alphabet_tsv_input))
-            print('alphabet path:', alphabet_tsv_input)
+            logger.debug('alphabet path: {}'.format( str(alphabet_tsv_input)))
             self.alphabet = alphabet.Alphabet( alphabet_tsv_input )
                 
 
@@ -281,31 +285,21 @@ class MonasteriumDataset(VisionDataset):
 
             if build_items:
                 if crop:
-                    self.data = self.extract_text_regions( self.raw_data_folder_path, self.work_folder_path, count=count )
+                    self.data = self._extract_text_regions( self.raw_data_folder_path, self.work_folder_path, count=count )
                 else:
-                    self.data = self.build_page_lines_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
+                    self.data = self._build_page_lines_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
 
 
-    def generate_readme( self, filename: str, params: dict ):
+    def _generate_readme( self, filename: str, params: dict ):
         """
         Create a metadata file in the work directory.
         """
         filepath = Path(self.work_folder_path, filename )
         
         with open( filepath, "w") as of:
-            print('Task was built with the following options:\n' + 
+            logger.debug('Task was built with the following options:\n' + 
                   '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
                   file=of)
-
-    def get_paths( self ):
-        return """
-        Archive: {}
-        Expanded archive: {}
-        Current task folder: {}
-        """.format( 
-                Path(self.root, self.dataset_file['filename']), 
-                self.raw_data_folder_path, 
-                self.work_folder_path if self.work_folder_path else '(no task defined)')
 
 #
     def download_and_extract(
@@ -326,36 +320,36 @@ class MonasteriumDataset(VisionDataset):
         output_file_path = root.joinpath( fl_meta['filename'])
 
         if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
-            print("Downloading archive...")
+            logger.info("Downloading archive...")
             du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
         else:
-            print("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_file['md5']))
+            logger.info("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_file['md5']))
 
         if not raw_data_folder_path.exists() or not raw_data_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
 
         # skip if archive already extracted (unless explicit override)
         if not extract and du.check_extracted( raw_data_folder_path.joinpath( tarball_root_name ) , fl_meta['full-md5'] ):
-            print('Found valid file tree in {}: skipping the extraction stage.'.format(str(raw_data_folder_path.joinpath( tarball_root_name ))))
+            logger.info('Found valid file tree in {}: skipping the extraction stage.'.format(str(raw_data_folder_path.joinpath( tarball_root_name ))))
             return
         if output_file_path.suffix == '.tgz' or output_file_path.suffixes == [ '.tar', '.gz' ] :
             with tarfile.open(output_file_path, 'r:gz') as archive:
-                print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
+                logger.info('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
                 archive.extractall( raw_data_folder_path )
         # task description
         elif output_file_path.suffix == '.zip':
             with zipfile.ZipFile(output_file_path, 'r' ) as archive:
-                print('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
+                logger.info('Extract {} ({})'.format(output_file_path, fl_meta["desc"]))
                 archive.extractall( raw_data_folder_path )
 
 
-    def purge(self, folder: str) -> int:
+    def _purge(self, folder: str) -> int:
         """
         Empty the line image subfolder: all line images and transcriptions are
         deleted, as well as the TSV file.
 
         Args:
-            folder (str): Name of the subfolder to purge (relative the caller's
+            folder (str): Name of the subfolder to _purge (relative the caller's
                           pwd
         """
         cnt = 0
@@ -377,13 +371,13 @@ class MonasteriumDataset(VisionDataset):
             for sample in self.data:
                 # note: TSV only contains the image file name (load_from_tsv() takes care of applying the correct path prefix)
                 img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
-                print("{}\t{}\t{}\t{}".format( img_path, 
+                logger.debug("{}\t{}\t{}\t{}".format( img_path, 
                       gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'), int(height), int(width)))
             return
         with open( file_path, 'w' ) as of:
             for sample in self.data:
                 img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
-                #print('{}\t{}'.format( img_path, gt, height, width ))
+                #logger.debug('{}\t{}'.format( img_path, gt, height, width ))
                 of.write( '{}\t{}\t{}\t{}'.format( img_path,
                                              gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'),
                                              int(height), int(width) ))
@@ -432,7 +426,7 @@ class MonasteriumDataset(VisionDataset):
             if len(fields) > 4:
                 polygon_mask = fields[4]
                 has_polygon = True
-            print('load_from_tsv(): type(img_path)=', type(img_path), 'type(height)=', type(height))
+            #logger.debug('load_from_tsv(): type(img_path)={} type(height)={}'.format( type(img_path), type(height)))
             all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
             if not all_path_style:
@@ -440,21 +434,21 @@ class MonasteriumDataset(VisionDataset):
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
                         img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
-                        #print('tsv_to_dict(): type(height)=', type(height))
+                        #logger.debug('tsv_to_dict(): type(height)=', type(height))
 
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
-                        #print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
+                        logger.debug('tsv_to_dict(): type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
-                        #print('tsv_to_dict(): type(img_path)=', type(s['img']), 'type(s[height]=', type(s['height']))
+                        logger.debug('tsv_to_dict(): type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
-                #print("tsv_to_dict(): samples=", samples)
+                #logger.debug("tsv_to_dict(): samples=", samples)
             else:
                 for tsv_line in infile:
                     img_file, gt_file, height, width = tsv_line[:-1].split('\t')
@@ -470,7 +464,7 @@ class MonasteriumDataset(VisionDataset):
         return samples
 
 
-    def build_page_lines_pairs(self, raw_data_folder_path:Path, work_folder_path: Path, text_only:bool=False, count:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
+    def _build_page_lines_pairs(self, raw_data_folder_path:Path, work_folder_path: Path, text_only:bool=False, count:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
         """
         Create a new dataset for segmentation that associate each page image with its metadata.
 
@@ -484,7 +478,7 @@ class MonasteriumDataset(VisionDataset):
             list: a list of pairs (<absolute img filepath>, <absolute transcription filepath>)
         """
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         items = []
 
@@ -503,7 +497,7 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
-    def extract_text_regions(self, raw_data_folder_path: Path, work_folder_path: Path, text_only=False, count=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
+    def _extract_text_regions(self, raw_data_folder_path: Path, work_folder_path: Path, text_only=False, count=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
         """
         Crop text regions from original files, and create a new dataset for segmentation where the text
         region image has a corresponding, new PageXML decriptor.
@@ -521,7 +515,7 @@ class MonasteriumDataset(VisionDataset):
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         cnt = 0 # for testing purpose
 
@@ -564,12 +558,12 @@ class MonasteriumDataset(VisionDataset):
                     #textregion['bbox'] = IP.Path( coordinates ).getbbox()
 
                     # fix bbox for given region, according to the line points it contains
-                    textregion['bbox'] = self.compute_bbox( page, textregion['id'] )
+                    textregion['bbox'] = self._compute_bbox( page, textregion['id'] )
                     if textregion['bbox'] == (0,0,0,0):
                         continue
                     img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textregion['id']}" )
                     textregion['img_path'] = img_path_prefix.with_suffix('.png')
-                    print('textregion["img_path"] =', textregion['img_path'], "type =", type(textregion['img_path']))
+                    logger.debug('textregion["img_path"] ={} type={}'.format( textregion['img_path'], type(textregion['img_path'])))
                     textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
 
                     if not text_only:
@@ -578,14 +572,14 @@ class MonasteriumDataset(VisionDataset):
 
                     # create a new descriptor file whose a single text region that covers the whole image, 
                     # where line coordinates have been shifted accordingly
-                    self.write_region_to_xml( page, ns, textregion )
+                    self._write_region_to_xml( page, ns, textregion )
 
                     cnt += 1
 
         return items
 
 
-    def compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
+    def _compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
         """
         In the raw Monasterium/Teklia PageXMl file, baseline and/or textline polygon points
         may be outside the nominal boundaries of their text region. This method computes a
@@ -619,23 +613,23 @@ class MonasteriumDataset(VisionDataset):
                 for elt_name in ['pc:Baseline', 'pc:Coords']:
                     elt = line_elt.find( elt_name, ns )
                     if elt_name == 'pc:Baseline' and elt is None:
-                        print('Page {}, region {}: could not find element {} for line {}'.format(
+                        logger.warning('Page {}, region {}: could not find element {} for line {}'.format(
                             page, region_elt.get('id'), elt_name, line_elt.get('id')))
                         continue
                     valid_lines += 1
-                    #print( elt.get('points').split(','))
+                    #logger.debug( elt.get('points').split(','))
                     all_points.extend( [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ])
             if not valid_lines:
                 return (0,0,0,0)
             not_ok = [ p for p in all_points if not within( p, original_bbox) ]
             if not_ok:
-                print("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, region_id, not_ok))
+                logger.warning("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, region_id, not_ok))
             bbox = IP.Path( all_points ).getbbox()
-            print("region {}, bbox={}".format( region_id, bbox))
+            logger.debug("region {}, bbox={}".format( region_id, bbox))
             return bbox
 
 
-    def write_region_to_xml( self, page: str, ns, textregion: dict ):
+    def _write_region_to_xml( self, page: str, ns, textregion: dict ):
         """
         From the given text region data, generates a new PageXML file.
 
@@ -680,7 +674,7 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def extract_lines(self, raw_data_folder_path: Path, work_folder_path: Path, shape='bbox', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
+    def _extract_lines(self, raw_data_folder_path: Path, work_folder_path: Path, shape='bbox', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
@@ -699,12 +693,12 @@ class MonasteriumDataset(VisionDataset):
                                                   'width': <original width>}
 
         """
-        print("extract_lines()")
+        logger.debug("_extract_lines()")
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
-        self.purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
@@ -717,7 +711,7 @@ class MonasteriumDataset(VisionDataset):
 
             xml_id = Path( page ).stem
             img_path = Path( raw_data_folder_path, f'{xml_id}.jpg')
-            #print( img_path )
+            #logger.debug( img_path )
 
             with open(page, 'r') as page_file:
 
@@ -758,7 +752,7 @@ class MonasteriumDataset(VisionDataset):
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
                     textline['polygon'] = None
 
-                    #print("extract_lines():", samples[-1])
+                    #logger.debug("_extract_lines():", samples[-1])
                     if not text_only:
                         bbox_img = page_image.crop( textline['bbox'] )
 
@@ -799,7 +793,7 @@ class MonasteriumDataset(VisionDataset):
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
                                'height': textline['height'], 'width': textline['width'] }
-                    #print("extract_lines(): sample=", sample)
+                    #logger.debug("_extract_lines(): sample=", sample)
                     if textline['polygon'] is not None:
                         sample['polygon_mask'] = textline['polygon']
                     samples.append( sample )
@@ -815,7 +809,7 @@ class MonasteriumDataset(VisionDataset):
 
 
     @staticmethod
-    def split_set(samples: object, ratios: Tuple[float, float, float], subset) -> List[object]:
+    def _split_set(samples: object, ratios: Tuple[float, float, float], subset) -> List[object]:
         """
         Split a dataset into 3 sets: train, validation, test.
 
@@ -861,7 +855,7 @@ class MonasteriumDataset(VisionDataset):
         """
         img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
                                                  self.data[index]['width'], self.data[index]['transcription']
-        #print('__getitem__(): data[{}]={}'.format(index, self.data[index]))
+        logger.debug('__getitem__(): data[{}]={}'.format(index, self.data[index]))
         #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
 
         assert isinstance(img_path, Path) or isinstance(img_path, str)
@@ -873,7 +867,7 @@ class MonasteriumDataset(VisionDataset):
         # -> meta-information has to be passed along in the sample; :
         sample_with_img_file = self.data[index].copy()
         sample_with_img_file['img'] = Image.open( sample_with_img_file['img'], 'r')
-        #print('__getitem__({}): sample='.format(index), sample_with_img_file)
+        logger.debug('__getitem__({}): sample='.format(index), sample_with_img_file)
         return self.transform( sample_with_img_file )
 
 
@@ -893,11 +887,16 @@ class MonasteriumDataset(VisionDataset):
         return "None defined."
 
     def __str__(self) -> str:
-        return (f"Root folder:\t{self.root}\n"
-               f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
-               f"Task: {self.task}\n"
-               f"Work folder:\t{self.work_folder_path}\n"
-               f"Data points:\t{len(self.data)}")
+        summary = (f"Root folder:\t{self.root}\n"
+                    f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
+                    f"Task: {self.task}\n"
+                    f"Work folder:\t{self.work_folder_path}\n"
+                    f"Data points:\t{len(self.data)}")
+        if self.from_tsv_file:
+             summary += "\nBuilt from TSV input:\t{}".format( self.from_tsv_file )
+        if self.task == 'HTR':
+            summary += "\nAlphabet:\t{}".format( self.work_folder_path.joinpath(alphabet_tsv_name))
+        return summary
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
