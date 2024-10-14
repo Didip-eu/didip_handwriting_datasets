@@ -1,9 +1,7 @@
 import sys
-import logging
 import warnings
 import random
 import tarfile
-import hashlib
 import json
 import shutil
 import re
@@ -55,8 +53,8 @@ TODO:
 
 """
 
-logging.basicConfig( level=logging.INFO, force=True )
-
+import logging
+logging.basicConfig( level=logging.DEBUG, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
 logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
@@ -193,7 +191,7 @@ class MonasteriumDataset(VisionDataset):
                              subset=subset, shape=shape, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, alphabet_tsv=alphabet_tsv )
 
-            logger.debug("_build_task(): data={}".format( self.data[:6]))
+            logger.debug("data={}".format( self.data[:6]))
 
     def _build_task( self, 
                    task: str='htr',
@@ -438,13 +436,13 @@ class MonasteriumDataset(VisionDataset):
 
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
-                        logger.debug('tsv_to_dict(): type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
+                        logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
-                        logger.debug('tsv_to_dict(): type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
+                        logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
@@ -896,7 +894,9 @@ class MonasteriumDataset(VisionDataset):
              summary += "\nBuilt from TSV input:\t{}".format( self.from_tsv_file )
         if self.task == 'HTR':
             summary += "\nAlphabet:\t{}".format( self.work_folder_path.joinpath(alphabet_tsv_name))
-        return summary
+        return ("\n________________________________\n"
+                f"\n{summary}"
+                "\n________________________________\n")
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
