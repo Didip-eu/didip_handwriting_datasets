@@ -112,7 +112,7 @@ class MonasteriumDataset(VisionDataset):
                 root: str='',
                 work_folder: str = '', # here further files are created, for any particular task
                 subset: str = 'train',
-                subset_ratios: Tuple[float,float,float]=(1., 0., 0.),
+                subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
@@ -198,7 +198,7 @@ class MonasteriumDataset(VisionDataset):
                    build_items: bool=True, 
                    from_tsv_file: str='',
                    subset: str='train', 
-                   subset_ratios: Tuple[float,float,float]=(1., 0., 0.),
+                   subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
                    shape: str='bbox', 
                    count: int=0, 
                    work_folder: str='', 
@@ -208,7 +208,7 @@ class MonasteriumDataset(VisionDataset):
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
         + only creates the files needed for a particular task (train, validate, or test): if more than one subset is needed, just initialize a new dataset with desired parameters (work directory, subset)
-        + by default, 'train' subset contains 60% of the samples, 'validate', 10%, and 'test', 20%.
+        + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
         + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
         Args:
@@ -256,7 +256,16 @@ class MonasteriumDataset(VisionDataset):
                     self.work_folder_path.mkdir()
                     logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
-                self.data = self._split_set( self._extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=shape ), ratios=subset_ratios, subset=subset )
+                # samples: all of them! (Splitting into subset happens in a ulterior step.)
+                if build_items:
+                    samples = self.extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=shape )
+                else:
+                    logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
+                    samples = self.load_line_items_from_dir( self.work_folder_path )
+
+                self.data = self._split_set( samples, ratios=subset_ratios, subset=subset)
+                logger.info(f"Subset contains {len(self.data)} samples.")
+
                 
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv( Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
@@ -265,7 +274,7 @@ class MonasteriumDataset(VisionDataset):
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
-                Alphabet( default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
+                alphabet.Alphabet( default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
                 #shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
             
             # load alphabet
@@ -288,6 +297,32 @@ class MonasteriumDataset(VisionDataset):
                     self.data = self._build_page_lines_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
 
 
+    @staticmethod
+    def load_line_items_from_dir( work_folder_path: Path ) -> List[dict]:
+        """
+        Construct a list of samples from a directory that has been populated with
+        line images and line transcriptions
+
+        Args:
+            work_folder_path (Path): a folder containing images (`*.png`) and transcription files (`*.gt.txt`)
+        """
+        samples = []
+        for img_file in work_folder_path.glob('*.png'):
+            sample=dict()
+            logger.debug(img_file)            
+            gt_file_name = img_file.with_suffix('.gt.txt')
+            sample['img']=img_file
+            img = Image.open( img_file, 'r')
+            sample['width'], sample['height'] = reversed(img.size)
+            
+            with open(gt_file_name, 'r') as gt_if:
+                sample['transcription']=gt_if.read().rstrip()
+            samples.append( sample )
+
+        logger.debug(f"Loaded {len(samples)} samples from {work_folder_path}")
+        return samples
+                
+
     def _generate_readme( self, filename: str, params: dict ):
         """
         Create a metadata file in the work directory.
@@ -295,7 +330,7 @@ class MonasteriumDataset(VisionDataset):
         filepath = Path(self.work_folder_path, filename )
         
         with open( filepath, "w") as of:
-            logger.debug('Task was built with the following options:\n' + 
+            print('Task was built with the following options:\n' + 
                   '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
                   file=of)
 
@@ -821,9 +856,12 @@ class MonasteriumDataset(VisionDataset):
         """
 
         random.seed(10)
+        logger.debug("Splitting set of {} samples with ratios {}".format( len(samples), ratios))
 
         if 1.0 in ratios:
             return list( samples )
+        if subset not in ('train', 'validate', 'test'):
+            raise ValueError("Incorrect subset type: choose among 'train', 'validate', and 'test'.")
 
         subset_2_count = int( len(samples)* ratios[1])
         subset_3_count = int( len(samples)* ratios[2] )
