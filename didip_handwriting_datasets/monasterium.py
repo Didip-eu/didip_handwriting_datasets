@@ -499,18 +499,23 @@ class MonasteriumDataset(VisionDataset):
                 def tsv_to_dict( tsv_line ):
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
+                        fields = tsv_line[:-1].split('\t')
+                        logger.debug("fields={}".format(fields))
+                        if len(fields)<5:
+                            raise ValueError("Incorrect number of fields: {}".format(fields))
+
                         img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
                         #logger.debug('tsv_to_dict(): type(height)=', type(height))
 
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
-                                'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) }
-                        logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
+                                'height': int(height), 'width': int(width), 'polygon_mask': 'None' if polygon_mask == '-' else eval(polygon_mask)  }
+                        #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
                     else:
                         img, transcription, height, width = tsv_line[:-1].split('\t')
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
-                        logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
+                        #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
 
                 samples = [ tsv_to_dict(s) for s in infile ]
