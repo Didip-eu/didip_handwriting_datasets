@@ -577,12 +577,12 @@ class Alphabet:
         return "".join( [self.get_symbol( c ) for c in sample_t.tolist()[:length] ] )
 
 
-    def decode_batch(self, samples_bw: Tensor, lengths: Tensor=None ) -> List[ str ]:
+    def decode_batch(self, samples_nw: Tensor, lengths: Tensor=None ) -> List[ str ]:
         """
         Decode a batch of integer-encoded samples.
 
         Args:
-            sample_bw (Tensor): each row of integer encodes a string.
+            sample_nw (Tensor): each row of integers encodes a string.
             lengths (int): length to be decoded in each sample; the default
                            is full-length decoding.
 
@@ -590,9 +590,9 @@ class Alphabet:
             list: a sequence of strings.
         """
         if lengths == None:
-            sample_count, max_length = samples_bw.shape
+            sample_count, max_length = samples_nw.shape
             lengths = torch.full( (sample_count,), max_length )
-        return [ self.decode( s, lgth ) for (s,lgth) in zip( samples_bw, lengths ) ]
+        return [ self.decode( s, lgth ) for (s,lgth) in zip( samples_nw, lengths ) ]
 
 
     def decode_ctc(self, msg: np.ndarray ):
@@ -603,8 +603,6 @@ class Alphabet:
             >>> decode_ctc(np.array([0, 1, 1, 1, 2, 2, 5, 6, 6, 3, 3, 1, 7, 7, 7])
 
             ```
-
-
 
         Args:
             msg (np.ndarray): a sequence of labels, possibly with duplicates and null values.
@@ -655,7 +653,7 @@ class Alphabet:
             list: a list of characters.
         """
         missing = set( s for s in mesg if s not in self )
-        if missing:
+        if len(missing)>0:
                 warnings.warn('The following chars are not in the alphabet: {}'\
                           ' →  code defaults to {}'.format( [ f"'{c}'={ord(c)}" for c in missing ], self.default_code ))
 

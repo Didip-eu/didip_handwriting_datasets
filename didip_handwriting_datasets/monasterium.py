@@ -268,7 +268,7 @@ class MonasteriumDataset(VisionDataset):
 
                 
                 # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv( Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
+                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
                                      {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
 
@@ -422,7 +422,8 @@ class MonasteriumDataset(VisionDataset):
         return cnt
 
 
-    def dump_data_to_tsv(self, file_path: str='', all_path_style=False):
+    @staticmethod
+    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False):
         """
         Create a CSV file with all tuples (<line image absolute path>, <transcription>, <original height>, <original width> [<polygon points]).
 
@@ -431,14 +432,14 @@ class MonasteriumDataset(VisionDataset):
             all_path_style (bool): list GT file name instead of GT content.
         """
         if file_path == '':
-            for sample in self.data:
+            for sample in samples:
                 # note: TSV only contains the image file name (load_from_tsv() takes care of applying the correct path prefix)
                 img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
                 logger.debug("{}\t{}\t{}\t{}".format( img_path, 
                       gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'), int(height), int(width)))
             return
         with open( file_path, 'w' ) as of:
-            for sample in self.data:
+            for sample in samples:
                 img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
                 #logger.debug('{}\t{}'.format( img_path, gt, height, width ))
                 of.write( '{}\t{}\t{}\t{}'.format( img_path,
