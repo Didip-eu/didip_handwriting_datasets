@@ -178,6 +178,8 @@ class MonasteriumDataset(VisionDataset):
         # (sorting is necessary for deterministic output)
         self.pagexmls = sorted( Path(self.root, tarball_root_name ).glob('*.xml'))
 
+        self.shape = shape
+
         self.data = []
 
         # Used only for HTR tasks: initialized by _build_task()
@@ -188,7 +190,7 @@ class MonasteriumDataset(VisionDataset):
             self._task = task # for self-documentation only
             build_ok = build_items if from_tsv_file == '' else False
             self._build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
-                             subset=subset, shape=shape, subset_ratios=subset_ratios, 
+                             subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, alphabet_tsv=alphabet_tsv )
 
             logger.debug("data={}".format( self.data[:6]))
@@ -199,7 +201,6 @@ class MonasteriumDataset(VisionDataset):
                    from_tsv_file: str='',
                    subset: str='train', 
                    subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
-                   shape: str='bbox', 
                    count: int=0, 
                    work_folder: str='', 
                    crop=False,
@@ -216,7 +217,6 @@ class MonasteriumDataset(VisionDataset):
             subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
             build_items (bool): if True (default), extract and store images for the task from the pages; 
             task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
-            shape (str): 'bbox' (default) for line bounding boxes or 'polygons'
             crop (bool): (for segmentation set only) crop text regions from both image and PageXML file.
             count (int): Stops after extracting {count} image items (for testing purpose only).
             from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
@@ -242,6 +242,8 @@ class MonasteriumDataset(VisionDataset):
                     logger.debug("_build_task(): data={}".format( self.data[:6]))
                     logger.debug("_build_task(): height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
                     #logger.debug(self.data[0]['polygon_mask'])
+                else:
+                    raise FileNotFoundError(f'File {tsv_path} does not exist!')
 
             else:
                 if work_folder=='':
@@ -258,7 +260,7 @@ class MonasteriumDataset(VisionDataset):
 
                 # samples: all of them! (Splitting into subset happens in a ulterior step.)
                 if build_items:
-                    samples = self.extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=shape )
+                    samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=self.shape )
                 else:
                     logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
                     samples = self.load_line_items_from_dir( self.work_folder_path )
@@ -270,7 +272,7 @@ class MonasteriumDataset(VisionDataset):
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
-                                     {'subset':subset, 'task':task, 'shape':shape, 'count':count, 'work_folder': work_folder })
+                                     {'subset':subset, 'task':task, 'shape':self.shape, 'count':count, 'work_folder': work_folder })
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
@@ -958,6 +960,7 @@ class MonasteriumDataset(VisionDataset):
         summary = (f"Root folder:\t{self.root}\n"
                     f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
                     f"Task: {self.task}\n"
+                    f"Line shape: {self.shape}\n"
                     f"Work folder:\t{self.work_folder_path}\n"
                     f"Data points:\t{len(self.data)}\n"
                     "Stats:\n"
