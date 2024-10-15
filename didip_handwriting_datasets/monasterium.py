@@ -298,7 +298,7 @@ class MonasteriumDataset(VisionDataset):
 
 
     @staticmethod
-    def load_line_items_from_dir( work_folder_path: Path ) -> List[dict]:
+    def load_line_items_from_dir( work_folder_path: Union[Path,str] ) -> List[dict]:
         """
         Construct a list of samples from a directory that has been populated with
         line images and line transcriptions
@@ -307,13 +307,15 @@ class MonasteriumDataset(VisionDataset):
             work_folder_path (Path): a folder containing images (`*.png`) and transcription files (`*.gt.txt`)
         """
         samples = []
+        if type(work_folder_path) is str:
+            work_folder_path = Path( work_folder_path )
         for img_file in work_folder_path.glob('*.png'):
             sample=dict()
             logger.debug(img_file)            
             gt_file_name = img_file.with_suffix('.gt.txt')
             sample['img']=img_file
             img = Image.open( img_file, 'r')
-            sample['width'], sample['height'] = reversed(img.size)
+            sample['width'], sample['height'] = img.size
             
             with open(gt_file_name, 'r') as gt_if:
                 sample['transcription']=gt_if.read().rstrip()
@@ -322,6 +324,34 @@ class MonasteriumDataset(VisionDataset):
         logger.debug(f"Loaded {len(samples)} samples from {work_folder_path}")
         return samples
                 
+
+    @staticmethod
+    def dataset_stats( samples: List[dict] ):
+        """
+        Compute basic stats about sample sets.
+
+        + avg, median, min, max on image heights and widths
+        + avg, median, min, max on transcriptions
+        + effective character set + which subset of the default alphabet is being used
+        """
+        heights = np.array([ s['height'] for s in samples  ], dtype=int)
+        widths = np.array([ s['width'] for s in samples  ], dtype=int)
+        gt_lengths = np.array([ len(s['transcription']) for s in samples  ], dtype=int)
+
+        height_stats = [ int(s) for s in(np.mean( heights ), np.median(heights), np.min(heights), np.max(heights))]
+        width_stats = [int(s) for s in (np.mean( widths ), np.median(widths), np.min(widths), np.max(widths))]
+        gt_length_stats = [int(s) for s in (np.mean( gt_lengths ), np.median(gt_lengths), np.min(gt_lengths), np.max(gt_lengths))]
+
+        stat_list = ('Mean', 'Median', 'Min', 'Max')
+        row_format = "{:>10}" * (len(stat_list) + 1)
+        return '\n'.join([
+            row_format.format("", *stat_list),
+            row_format.format("Img height", *height_stats),
+            row_format.format("Img width", *width_stats),
+            row_format.format("GT length", *gt_length_stats),
+        ])
+
+
 
     def _generate_readme( self, filename: str, params: dict ):
         """
@@ -923,15 +953,34 @@ class MonasteriumDataset(VisionDataset):
         return "None defined."
 
     def __str__(self) -> str:
+
         summary = (f"Root folder:\t{self.root}\n"
                     f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
                     f"Task: {self.task}\n"
                     f"Work folder:\t{self.work_folder_path}\n"
-                    f"Data points:\t{len(self.data)}")
+                    f"Data points:\t{len(self.data)}\n"
+                    "Stats:\n"
+                    f"{self.dataset_stats( self.data )}\n")
         if self.from_tsv_file:
              summary += "\nBuilt from TSV input:\t{}".format( self.from_tsv_file )
         if self.task == 'HTR':
-            summary += "\nAlphabet:\t{}".format( self.work_folder_path.joinpath(alphabet_tsv_name))
+            summary += "\nAlphabet:\t{} ({} codes)".format( self.work_folder_path.joinpath(alphabet_tsv_name), len(self.alphabet))
+        
+        prototype_alphabet = self.get_prototype_alphabet()
+
+        summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes."
+        
+        symbols_shared = self.alphabet.symbol_intersection( prototype_alphabet )
+        symbols_only_here, symbols_only_prototype = self.alphabet.symbol_differences( prototype_alphabet )
+
+
+        summary += f"\n + Dataset alphabet shares {len(symbols_shared)} symbols with a data-generated charset."
+        summary += f"\n + Dataset alphabet and a data-generated charset are identical: {self.alphabet == prototype_alphabet}"
+        if symbols_only_here:
+            summary += f"\n + Dataset alphabet's symbols that are not in a data-generated charset: {symbols_only_here}"
+        if symbols_only_prototype:
+            summary += f"\n + Data-generated charset's symbols that are not in the dataset alphabet: {symbols_only_prototype}"
+
         return ("\n________________________________\n"
                 f"\n{summary}"
                 "\n________________________________\n")
@@ -942,6 +991,31 @@ class MonasteriumDataset(VisionDataset):
                 len( [ i for i in Path(folder).glob('*.gt.txt') ] ),
                 len( [ i for i in Path(folder).glob('*.png') ] )
                 )
+
+
+    @staticmethod
+    def get_default_alphabet() -> alphabet.Alphabet:
+        """
+        Return an instance of the default alphabet.
+
+        Returns:
+            alphabet.Alphabet: an alphabet instance.
+        """
+        return alphabet.Alphabet( default_alphabet )
+
+
+    def get_prototype_alphabet( self ) -> alphabet.Alphabet:
+        """
+        Return a prototype alphabet, generated from the transcriptions.
+
+        Returns:
+            alphabet.Alphabet: a prototypical alphabet instance, generated from the transcriptions.
+        """
+        if self.data == []:
+            logger.warning("Sample set is empty!")
+            return None
+        return alphabet.Alphabet( alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ]))
+            
 
 
 class ResizeToMax():
@@ -1066,9 +1140,6 @@ class ResizeToHeight():
         mask[:,:h,:w]=1
         return {'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
 
-# check that the module is testable
-def dummy():
-    return True
 
 
 def dummy():

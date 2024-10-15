@@ -1,5 +1,6 @@
+from __future__ import annotations # to allow for type hints to reference the enclosing class
 
-from typing import Union,Tuple,List,Dict
+from typing import Union,Tuple,List,Dict  #,Self (>= 3.11)
 import torch
 from torch import Tensor
 import numpy as np
@@ -218,7 +219,7 @@ class Alphabet:
         return alphadict
         
     @classmethod
-    def prototype_from_data(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
+    def prototype_from_data_paths(cls, paths: List[str], out_format='list', many_to_one=True) -> Tuple[ Union[str,List[str]], Dict[str,str]]:
         """
         Given a list of GT transcription file paths, return a TSV representation of the alphabet.
         Normally not made for immediate consumption, it allows for a quick look at the character set.
@@ -281,6 +282,52 @@ class Alphabet:
             return ("\n".join( [f"{s}\t-1" for s in symbol_list ] ), char_to_file)
         
         return (cls.deep_sorted(symbol_list), char_to_file)
+
+    @classmethod
+    def prototype_from_data_samples(cls, transcriptions: List[str], out_format='list', many_to_one=True) ->  Union[str,List[str]]:
+        """
+        Given a list of GT transcription strings, return a TSV representation of the alphabet.
+        Normally not made for immediate consumption, it allows for a quick look at the character set.
+        The output can be redirected on file, reworked and then fed back through `from_tsv()`.
+
+        Args:
+            paths (List[str]): a list of transcriptions. 
+            out_format (str): if 'list' (default) a Python list, that can be fed to the from_list() 
+                              initialization method; otherwise a TSV string, where tab-separated symbols
+                              on the same line map to the same code, and last element (-1) is a placeholder
+                              for the symbol's code.
+        Returns:
+             Union[list,str]: a list of lists or str (the mapping)
+
+        """
+        charset = set()
+
+        for tr in transcriptions:
+            chars = set( list(tr.strip())  )
+            charset.update( chars )
+        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
+
+        non_ascii_chars = set( char for char in charset if ord(char)>127 )
+        weird_chars = set( char for char in non_ascii_chars if not CharClass.in_domain( char ))
+        non_ascii_chars.difference_update( weird_chars )
+
+        if non_ascii_chars:
+            warnings.warn("The following characters are not in the ASCII set but look like reasonable Unicode symbols: {}".format( non_ascii_chars ))
+        if weird_chars:
+            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
+
+
+        symbol_list = CharClass.build_subsets(charset) if many_to_one else sorted(charset)
+        if out_format == 'tsv':
+            if many_to_one:
+                # A   a   -1
+                # D   d   -1
+                # J   -1
+                # ...
+                return '\n'.join( [ '\t'.join(sorted(i))+'\t-1' for i in symbol_list ])
+            return "\n".join( [f"{s}\t-1" for s in symbol_list ] )
+        
+        return cls.deep_sorted(symbol_list)
 
         
     @classmethod
@@ -371,6 +418,41 @@ class Alphabet:
     def get_code( self, symbol ) -> int:
         return self._utf_2_code[ symbol ] if symbol in self._utf_2_code else self.default_code
     
+
+    def stats( self ) -> dict:
+        """
+        Basic statistics.
+        """
+        return { 'symbols': len(set(self._utf_2_code.values()))-3,
+                 'codes': len(set(self._utf_2_code.keys()))-3,
+               }
+
+
+    def symbol_intersection( self, alpha: Self )->set:
+        """
+        Returns a set of those symbols that can be encoded in both alphabets.
+
+        Args:
+            alpha (Alphabet): an Alphabet object.
+        Returns:
+            set: a set of symbols.
+        """
+        return set( self._utf_2_code.keys()).intersection( set( alpha._utf_2_code.keys()))
+
+    def symbol_differences( self, alpha: Self ) -> Tuple[set,set]:
+        """
+        Compute the differences of two alphabets.
+
+        Args:
+            alpha (Alphabet): an Alphabet object.
+        Returns:
+            Tuple[set, set]: a tuple with two sets - those symbols that can be encoded with the first alphabet, but
+                        not the second one; and conversely.
+
+        """
+        return ( set(self._utf_2_code.keys()).difference( set( alpha._utf_2_code.keys())),
+                 set(alpha._utf_2_code.keys()).difference( set( self._utf_2_code.keys())))
+
     def add_symbols( self, symbols ):
         """
         Add one or more symbol to the alphabet.
