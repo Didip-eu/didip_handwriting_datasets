@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-dependencies = [ "defusedxml" ]
+dependencies = [ "defusedxml", "tqdm", "torchvision", "gdown" ]
 
 [project.urls]
 Homepage = "https://github.com/nicolasrenet/didip_handwriting_datasets"

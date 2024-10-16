@@ -54,7 +54,7 @@ TODO:
 """
 
 import logging
-logging.basicConfig( level=logging.DEBUG, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
+logging.basicConfig( level=logging.INFO, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
 logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
@@ -940,6 +940,7 @@ class MonasteriumDataset(VisionDataset):
         # goal: transform image, while returning not only the image but also the unpadded size
         # -> meta-information has to be passed along in the sample; :
         sample_with_img_file = self.data[index].copy()
+        sample_with_img_file['id'] = Path(img_path).name
         sample_with_img_file['img'] = Image.open( sample_with_img_file['img'], 'r')
         logger.debug('__getitem__({}): sample='.format(index), sample_with_img_file)
         return self.transform( sample_with_img_file )
@@ -1033,13 +1034,13 @@ class ResizeToMax():
         self.max_h, self.max_w = max_h, max_w
 
     def __call__(self, sample):
-        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
         if h <= self.max_h and w <= self.max_w:
             return sample
         t = v2.Resize(size=self.max_h, max_size=self.max_w, antialias=True)( t )
         h_new, w_new = [ int(d) for d in t.shape[1:] ]
         
-        return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
+        return {'id': img_id, 'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
 class PadToHeight():
 
@@ -1047,7 +1048,7 @@ class PadToHeight():
         self.max_h = max_h
 
     def __call__(self, sample):
-        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
         if h > self.max_h:
             warnings.warn("Cannot pad an image that is higher ({}) than the padding size ({})".format( h, self.max_h))
             return sample
@@ -1057,7 +1058,7 @@ class PadToHeight():
         # add a field
         mask = torch.zeros( new_t.shape, dtype=torch.bool)
         mask[:,:h,:]=1
-        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
+        return {'id': img_id, 'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
 class PadToWidth():
 
@@ -1065,7 +1066,7 @@ class PadToWidth():
         self.max_w = max_w
 
     def __call__(self, sample):
-        t_chw, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t_chw, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
         if w > self.max_w:
             warnings.warn("Cannot pad an image that is wider ({}) than the padding size ({})".format( w, self.max_w))
             return sample
@@ -1075,7 +1076,7 @@ class PadToWidth():
         # add a field
         mask = torch.zeros( new_t_chw.shape, dtype=torch.bool)
         mask[:,:,:w] = 1
-        return {'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
+        return {'id': img_id, 'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
 
 class PadToSize():
@@ -1084,7 +1085,7 @@ class PadToSize():
         self.max_h, self.max_w = max_h, max_w
 
     def __call__( self, sample ):
-        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
         if h > self.max_h or w > self.max_w:
             warnings.warn("Cannot pad an image that is larger ({}x{}) than the padding size ({}x{})".format(
                 h, w, self.max_h, self.max_w))
@@ -1095,7 +1096,7 @@ class PadToSize():
         # add a field
         mask = torch.zeros( new_t.shape, dtype=torch.bool)
         mask[:,:h,:w]=1
-        return {'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
+        return {'id': img_id, 'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
 # unused for the moment
 class ResizeToMaxHeight():
@@ -1104,7 +1105,7 @@ class ResizeToMaxHeight():
         self.max_h = max_h
 
     def __call__(self, sample):
-        t, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
         if h <= self.max_h:
             return sample
         # freak case (marginal annotations): original height is the larger
@@ -1117,7 +1118,7 @@ class ResizeToMaxHeight():
             t = v2.Resize(size=self.max_h, antialias=True)( t )
         h_new, w_new = [ int(d) for d in t.shape[1:] ]
 
-        return {'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
+        return {'id': img_id, 'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
 class ResizeToHeight():
     """
@@ -1131,7 +1132,7 @@ class ResizeToHeight():
         self.max_width = max_width
 
     def __call__(self, sample):
-        t_chw, h, w, gt = sample['img'], sample['height'], sample['width'], sample['transcription']
+        img_id, t_chw, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription')]
         # freak case (marginal annotations): original height is the larger
         # dimension -> specify the width too
         if h > w:
@@ -1147,7 +1148,7 @@ class ResizeToHeight():
 
         mask = torch.zeros( t_chw.shape, dtype=torch.bool)
         mask[:,:h,:w]=1
-        return {'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
+        return {'id': img_id, 'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
 
 
 
