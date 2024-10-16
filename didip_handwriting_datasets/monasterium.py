@@ -929,7 +929,7 @@ class MonasteriumDataset(VisionDataset):
         """
         img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
                                                  self.data[index]['width'], self.data[index]['transcription']
-        logger.debug('__getitem__(): data[{}]={}'.format(index, self.data[index]))
+        logger.debug('data[{}]={}'.format(index, self.data[index]))
         #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
 
         assert isinstance(img_path, Path) or isinstance(img_path, str)
@@ -942,7 +942,7 @@ class MonasteriumDataset(VisionDataset):
         sample_with_img_file = self.data[index].copy()
         sample_with_img_file['id'] = Path(img_path).name
         sample_with_img_file['img'] = Image.open( sample_with_img_file['img'], 'r')
-        logger.debug('__getitem__({}): sample='.format(index), sample_with_img_file)
+        logger.debug('sample='.format(index), sample_with_img_file)
         return self.transform( sample_with_img_file )
 
 

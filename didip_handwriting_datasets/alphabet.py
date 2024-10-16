@@ -640,7 +640,7 @@ class Alphabet:
                        key=lambda x: x[0])
 
 
-    def tokenize_crude( self, mesg: str ):
+    def tokenize_crude( self, mesg: str, quiet=True ):
         """
         Tokenize a string into tokens that are consistent with the provided alphabet.
         A very crude splitting, as a provision for a proper tokenizer. Spaces
@@ -652,8 +652,9 @@ class Alphabet:
         Returns:
             list: a list of characters.
         """
-        missing = set( s for s in mesg if s not in self )
-        if len(missing)>0:
+        if not quiet:
+            missing = set( s for s in mesg if s not in self )
+            if len(missing)>0:
                 warnings.warn('The following chars are not in the alphabet: {}'\
                           ' →  code defaults to {}'.format( [ f"'{c}'={ord(c)}" for c in missing ], self.default_code ))
 
