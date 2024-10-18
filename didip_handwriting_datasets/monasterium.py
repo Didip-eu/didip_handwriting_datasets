@@ -393,7 +393,7 @@ class MonasteriumDataset(VisionDataset):
                   '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
                   file=of)
 
-#
+
     def download_and_extract(
             self,
             root: Path,
@@ -972,6 +972,17 @@ class MonasteriumDataset(VisionDataset):
         sample['id'] = Path(img_path).name
         logger.debug('sample='.format(index), sample)
         return sample
+
+    def __getitems__(self, indexes: list ) -> List[dict]:
+        """
+        Args:
+            indexes (list): a list of indexes.
+
+        Returns:
+            List[dict]: a list of samples.
+        """
+        print('getitems()')
+        return [ self.__getitem__( idx ) for idx in indexes ]
 
 
     def __len__(self) -> int:
