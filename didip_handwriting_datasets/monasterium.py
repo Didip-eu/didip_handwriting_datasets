@@ -954,23 +954,24 @@ class MonasteriumDataset(VisionDataset):
         Returns:
             dict[str,Union[Tensor,int,str]]: dictionary
         """
-        img_path, height, width, gt = self.data[index]['img'], self.data[index]['height'],\
-                                                 self.data[index]['width'], self.data[index]['transcription']
-        logger.debug('data[{}]={}'.format(index, self.data[index]))
+        img_path = self.data[index]['img']
+        
         #polygon_mask = self.data[index]['polygon_mask'] if 'polygon_mask' in self.data[index] else None
 
         assert isinstance(img_path, Path) or isinstance(img_path, str)
-        assert type(height) is int
-        assert type(width) is int
-        assert type(gt) is str
 
-        # goal: transform image, while returning not only the image but also the unpadded size
-        # -> meta-information has to be passed along in the sample; :
-        sample_with_img_file = self.data[index].copy()
-        sample_with_img_file['id'] = Path(img_path).name
-        sample_with_img_file['img'] = Image.open( sample_with_img_file['img'], 'r')
-        logger.debug('sample='.format(index), sample_with_img_file)
-        return self.transform( sample_with_img_file )
+        # In the sample, image filename replaced with 
+        # - file id ('id')
+        # - tensor ('img')
+        # - dimensions of transformed image ('height' and 'width')
+        # 
+        sample = self.data[index].copy()
+        sample['img'] = Image.open( img_path, 'r')
+        # if resized, should store new height and width
+        sample = self.transform( sample )
+        sample['id'] = Path(img_path).name
+        logger.debug('sample='.format(index), sample)
+        return sample
 
 
     def __len__(self) -> int:
@@ -1055,45 +1056,13 @@ class MonasteriumDataset(VisionDataset):
             
 
 
-class ResizeToMax():
-
-    def __init__( self, max_h, max_w ):
-        self.max_h, self.max_w = max_h, max_w
-
-    def __call__(self, sample):
-        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
-        if h <= self.max_h and w <= self.max_w:
-            return sample
-        t = v2.Resize(size=self.max_h, max_size=self.max_w, antialias=True)( t )
-        h_new, w_new = [ int(d) for d in t.shape[1:] ]
-        
-        return {'id': img_id, 'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
-
-class PadToHeight():
-
-    def __init__( self, max_h ):
-        self.max_h = max_h
-
-    def __call__(self, sample):
-        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
-        if h > self.max_h:
-            warnings.warn("Cannot pad an image that is higher ({}) than the padding size ({})".format( h, self.max_h))
-            return sample
-        new_t = torch.zeros( (t.shape[0], self.max_h, t.shape[2]))
-        new_t[:,:h,:] = t
-
-        # add a field
-        mask = torch.zeros( new_t.shape, dtype=torch.bool)
-        mask[:,:h,:]=1
-        return {'id': img_id, 'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
-
 class PadToWidth():
 
     def __init__( self, max_w ):
         self.max_w = max_w
 
     def __call__(self, sample):
-        img_id, t_chw, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
+        t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription') ]
         if w > self.max_w:
             warnings.warn("Cannot pad an image that is wider ({}) than the padding size ({})".format( w, self.max_w))
             return sample
@@ -1103,49 +1072,10 @@ class PadToWidth():
         # add a field
         mask = torch.zeros( new_t_chw.shape, dtype=torch.bool)
         mask[:,:,:w] = 1
-        return {'id': img_id, 'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
+        return {'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
 
-class PadToSize():
 
-    def __init__( self, max_h, max_w ):
-        self.max_h, self.max_w = max_h, max_w
-
-    def __call__( self, sample ):
-        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
-        if h > self.max_h or w > self.max_w:
-            warnings.warn("Cannot pad an image that is larger ({}x{}) than the padding size ({}x{})".format(
-                h, w, self.max_h, self.max_w))
-            return sample
-        new_t = torch.zeros( (t.shape[0], self.max_h, self.max_w) )
-        new_t[:,:h,:w]=t
-
-        # add a field
-        mask = torch.zeros( new_t.shape, dtype=torch.bool)
-        mask[:,:h,:w]=1
-        return {'id': img_id, 'img': new_t, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
-
-# unused for the moment
-class ResizeToMaxHeight():
-
-    def __init__( self, max_h ):
-        self.max_h = max_h
-
-    def __call__(self, sample):
-        img_id, t, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription') ]
-        if h <= self.max_h:
-            return sample
-        # freak case (marginal annotations): original height is the larger
-        # dimension -> specify the width too
-        if h > w and h > max_h:
-            t = v2.Resize( size=(self.max_h, int(w*self.max_h/h) ), antialias=True)(t)
-        else:
-        # default case: original height is the smaller dimension and 
-        # gets picked up by Resize()
-            t = v2.Resize(size=self.max_h, antialias=True)( t )
-        h_new, w_new = [ int(d) for d in t.shape[1:] ]
-
-        return {'id': img_id, 'img': t, 'height': h_new, 'width': w_new, 'transcription': gt }
 
 class ResizeToHeight():
     """
@@ -1159,7 +1089,7 @@ class ResizeToHeight():
         self.max_width = max_width
 
     def __call__(self, sample):
-        img_id, t_chw, h, w, gt = [ sample[k] for k in ('id', 'img', 'height', 'width', 'transcription')]
+        t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription')]
         # freak case (marginal annotations): original height is the larger
         # dimension -> specify the width too
         if h > w:
@@ -1175,7 +1105,7 @@ class ResizeToHeight():
 
         mask = torch.zeros( t_chw.shape, dtype=torch.bool)
         mask[:,:h,:w]=1
-        return {'id': img_id, 'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
+        return {'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
 
 
 

@@ -16,7 +16,7 @@ classifiers = [
 dependencies = [ "defusedxml", "tqdm", "torchvision", "gdown" ]
 
 [project.urls]
-Homepage = "https://github.com/nicolasrenet/didip_handwriting_datasets"
+Homepage = "https://github.com/Didip-eu/didip_handwriting_datasets"
 
 #[scripts]
 #pageconvert = pagexml2json:main
