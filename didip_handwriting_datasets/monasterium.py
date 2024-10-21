@@ -29,6 +29,7 @@ torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are sti
 from torchvision.transforms import v2
 
 class DataException( Exception ):
+    """ """
     pass
 
 
@@ -60,84 +61,20 @@ work_folder_name="MonasteriumHandwritingDataset"
 root_folder_basename="Monasterium"
 alphabet_tsv_name="alphabet.tsv"
 
-default_alphabet =[' ',
- [',', '.', ':', ';'],
- ['-', '¬', '—'],
- '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
- ['A', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ă', 'Ą'],
- 'B',
- ['C', 'Ç', 'Ć', 'Ĉ', 'Ċ', 'Č'],
- ['D', 'Ð', 'Ď', 'Đ'],
- ['E', 'È', 'É', 'Ê', 'Ë', 'Ē', 'Ĕ', 'Ė', 'Ę', 'Ě'],
- 'F',
- ['G', 'Ĝ', 'Ğ', 'Ġ', 'Ģ'],
- ['H', 'Ĥ', 'Ħ'],
- ['I', 'Ì', 'Í', 'Î', 'Ï', 'Ĩ', 'Ī', 'Ĭ', 'Į', 'İ', 'Ĳ'],
- ['J', 'Ĵ'],
- ['K', 'Ķ'],
- ['L', 'Ĺ', 'Ļ', 'Ľ', 'Ŀ', 'Ł'],
- 'M',
- ['N', 'Ñ', 'Ń', 'Ņ', 'Ň', 'Ŋ'],
- ['O', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Ō', 'Ŏ', 'Ő', 'Œ'],
- 'P',
- 'Q',
- ['R', 'Ŕ', 'Ŗ', 'Ř'],
- ['S', 'ß', 'Ś', 'Ŝ', 'Ş', 'Š'],
- ['T', 'Ţ', 'Ť', 'Ŧ'],
- ['U', 'Ù', 'Ú', 'Û', 'Ü', 'Ũ', 'Ū', 'Ŭ', 'Ů', 'Ű', 'Ų'],
- 'V',
- ['W', 'Ŵ'],
- 'X',
- ['Y', 'Ŷ', 'Ÿ'],
- ['Z', 'Ź', 'Ż', 'Ž'],
- ['a', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'ă', 'ą'],
- 'b',
- ['c', 'ç', 'ć', 'ĉ', 'ċ', 'č'],
- ['d', 'ð', 'ď', 'đ'],
- ['e', 'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě'],
- 'f',
- ['g', 'ĝ', 'ğ', 'ġ', 'ģ'],
- ['h', 'ĥ', 'ħ'],
- ['i', 'j', 'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı', 'ĳ', 'ĵ'],
- ['k', 'ķ', 'ĸ'],
- ['l', 'ĺ', 'ļ', 'ľ', 'ŀ', 'ł'],
- 'm',
- ['n', 'ñ', 'ń', 'ņ', 'ň', 'ŉ', 'ŋ'],
- ['o', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', 'ŏ', 'ő', 'œ'],
- 'p',
- 'q',
- ['r', 'ŕ', 'ŗ', 'ř'],
- ['s', 'ś', 'ŝ', 'ş', 'š'],
- ['t', 'ţ', 'ť', 'ŧ'],
- ['u', 'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų'],
- 'v',
- ['w', 'ŵ'],
- 'x',
- ['y', 'ý', 'ÿ', 'ŷ'],
- ['z', 'ź', 'ż', 'ž']]
-
 
 
 
 class MonasteriumDataset(VisionDataset):
-    """
-    Initialize a dataset instance.
+    """ Dataset for charters.
 
-    Args:
-        root (str): Where the archive is to be downloaded and the subfolder containing original files (pageXML documents and page images) is to be created. Default: subfolder `data/Monasterium' in this project's directory.
-        work_folder (str): Where line images and ground truth transcriptions fitting a particular task are to be created; default: '<root>/MonasteriumHandwritingDatasetHTR'; if parameter is a relative path, the work folder is created under <root>; an absolute path overrides this. For HTR task, the work folder also contains the alphabet in TSV form.
-        subset (str): 'train' (default), 'validate' or 'test'.
-        subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
-        transform (Callable): Function to apply to the PIL image at loading time.
-        target_transform (Callable): Function to apply to the transcription ground truth at loading time.
-        extract_pages (bool): if True, extract the archive's content into the base folder no matter what; otherwise (default), check first for a file tree with matching name and checksum.
-        task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation = cropped TextRegion images, with corresponding PageXML files. If '' (default), the dataset archive is extracted but no actual data get built.
-        shape (str): 'bbox' (default) for line bounding boxes or 'polygons' 
-        build_items (bool): if True (default), extract and store images for the task from the pages; otherwise, just extract the original data from the archive.
-        from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is assumed to be the work folder, superceding the work_folder option).
-        count (int): Stops after extracting {count} image items (for testing purpose only).
-        alphabet_tsv (str): TSV file containing the alphabet
-        """
+        :param dataset_file: 
+            meta-data (URL, archive name, type of repository).
+        :type dataset_file: dict
+
+        :param default_alphabet:
+            a many-to-one alphabet in list form, to be used if no other alphabet is passed to the initialization function.
+        :type default_alphabet: list
+    """
 
     dataset_file = {
             #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
@@ -148,6 +85,62 @@ class MonasteriumDataset(VisionDataset):
             'desc': 'Monasterium ground truth data (Teklia)',
             'origin': 'google',
     }
+
+    default_alphabet =[' ',
+     [',', '.', ':', ';'],
+     ['-', '¬', '—'],
+     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+     ['A', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ă', 'Ą'],
+     'B',
+     ['C', 'Ç', 'Ć', 'Ĉ', 'Ċ', 'Č'],
+     ['D', 'Ð', 'Ď', 'Đ'],
+     ['E', 'È', 'É', 'Ê', 'Ë', 'Ē', 'Ĕ', 'Ė', 'Ę', 'Ě'],
+     'F',
+     ['G', 'Ĝ', 'Ğ', 'Ġ', 'Ģ'],
+     ['H', 'Ĥ', 'Ħ'],
+     ['I', 'Ì', 'Í', 'Î', 'Ï', 'Ĩ', 'Ī', 'Ĭ', 'Į', 'İ', 'Ĳ'],
+     ['J', 'Ĵ'],
+     ['K', 'Ķ'],
+     ['L', 'Ĺ', 'Ļ', 'Ľ', 'Ŀ', 'Ł'],
+     'M',
+     ['N', 'Ñ', 'Ń', 'Ņ', 'Ň', 'Ŋ'],
+     ['O', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Ō', 'Ŏ', 'Ő', 'Œ'],
+     'P',
+     'Q',
+     ['R', 'Ŕ', 'Ŗ', 'Ř'],
+     ['S', 'ß', 'Ś', 'Ŝ', 'Ş', 'Š'],
+     ['T', 'Ţ', 'Ť', 'Ŧ'],
+     ['U', 'Ù', 'Ú', 'Û', 'Ü', 'Ũ', 'Ū', 'Ŭ', 'Ů', 'Ű', 'Ų'],
+     'V',
+     ['W', 'Ŵ'],
+     'X',
+     ['Y', 'Ŷ', 'Ÿ'],
+     ['Z', 'Ź', 'Ż', 'Ž'],
+     ['a', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'ă', 'ą'],
+     'b',
+     ['c', 'ç', 'ć', 'ĉ', 'ċ', 'č'],
+     ['d', 'ð', 'ď', 'đ'],
+     ['e', 'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě'],
+     'f',
+     ['g', 'ĝ', 'ğ', 'ġ', 'ģ'],
+     ['h', 'ĥ', 'ħ'],
+     ['i', 'j', 'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı', 'ĳ', 'ĵ'],
+     ['k', 'ķ', 'ĸ'],
+     ['l', 'ĺ', 'ļ', 'ľ', 'ŀ', 'ł'],
+     'm',
+     ['n', 'ñ', 'ń', 'ņ', 'ň', 'ŉ', 'ŋ'],
+     ['o', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', 'ŏ', 'ő', 'œ'],
+     'p',
+     'q',
+     ['r', 'ŕ', 'ŗ', 'ř'],
+     ['s', 'ś', 'ŝ', 'ş', 'š'],
+     ['t', 'ţ', 'ť', 'ŧ'],
+     ['u', 'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų'],
+     'v',
+     ['w', 'ŵ'],
+     'x',
+     ['y', 'ý', 'ÿ', 'ŷ'],
+     ['z', 'ź', 'ż', 'ž']]
 
     def __init__( self,
                 root: str='',
@@ -164,6 +157,55 @@ class MonasteriumDataset(VisionDataset):
                 count: int = 0,
                 alphabet_tsv: str = None,
                 ) -> None:
+        """Initialize a dataset instance.
+
+        :param root: 
+            Where the archive is to be downloaded and the subfolder containing original files (pageXML documents and page images)
+            is to be created. Default: subfolder `data/Monasterium' in this project's directory.
+        :type root: str
+        :param work_folder:
+            Where line images and ground truth transcriptions fitting a particular task are to be created;
+            default: '<root>/MonasteriumHandwritingDatasetHTR'; if parameter is a relative path, the work folder is created under <root>;
+            an absolute path overrides this. For HTR task, the work folder also contains the alphabet in TSV form.
+        :type work_folder: str
+        :param subset: 
+            'train' (default), 'validate' or 'test'.
+        :type subset: str
+        :param subset_ratios:
+            ratios for respective ('train', 'validate', ...) subsets
+        :type subset_ratios: Tuple[float, float, float]
+        :param transform: 
+            Function to apply to the PIL image at loading time.
+        :type transform: Callable
+        :param target_transform: 
+            Function to apply to the transcription ground truth at loading time.
+        :type target_transform: Callable
+        :param extract_pages: 
+            if True, extract the archive's content into the base folder no matter what; 
+            otherwise (default), check first for a file tree with matching name and checksum.
+        :type extract_pages: bool
+        :param task: 
+            'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation = cropped TextRegion images,
+            with corresponding PageXML files.  If '' (default), the dataset archive is extracted but no actual data get built.
+        :type task: str
+        :param shape: 
+            'bbox' (default) for line bounding boxes or 'polygons'
+        :type shape: str
+        :param build_items: 
+            if True (default), extract and store images for the task from the pages; otherwise,
+            just extract the original data from the archive.
+        :type build_items: bool
+        :param from_tsv_file: 
+            TSV file from which the data are to be loaded (containing folder is assumed to be the work folder,
+            superceding the work_folder option).
+        :type from_tsv_file: str
+        :param count: 
+            Stops after extracting {count} image items (for testing purpose only).
+        :type count: int
+        :param alphabet_tsv: 
+            TSV file containing the alphabet
+        :type alphabet_tsv: str
+        """
         
         trf = v2.PILToTensor()
         if transform:
@@ -220,24 +262,48 @@ class MonasteriumDataset(VisionDataset):
                    crop=False,
                    alphabet_tsv='',
                    )->None:
-        """
-        From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
-        + only creates the files needed for a particular task (train, validate, or test): if more than one subset is needed, just initialize a new dataset with desired parameters (work directory, subset)
+        """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
+
+        + only creates the files needed for a particular task (train, validate, or test): if more than one subset
+          is needed, just initialize a new dataset with desired parameters (work directory, subset)
         + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
         + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
-        Args:
-            subset (str): 'train', 'validate' or 'test'.
-            subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
-            build_items (bool): if True (default), extract and store images for the task from the pages; 
-            task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
-            crop (bool): (for segmentation set only) crop text regions from both image and PageXML file.
-            count (int): Stops after extracting {count} image items (for testing purpose only).
-            from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
-                                 assumed to be the work folder, superceding the work_folder option).
-            work_folder (str): Where line images and ground truth transcriptions fitting a particular task
+        :param task: 
+            'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation (Default value = 'htr')
+        :type task: str
+        :param build_items: 
+            if True (default), extract and store images for the task from the pages;
+        :type build_items: bool
+        :param from_tsv_file: 
+            TSV file from which the data are to be loaded (containing folder is
+                                 assumed to be the work folder, superceding the work_folder option). (Default value = '')
+        :type from_tsv_file: str
+        :param subset: 
+            'train', 'validate' or 'test'. (Default value = 'train')
+        :type subset: str
+        :param subset_ratios: 
+            ratios for respective ('train', 'validate', ...) subsets (Default value = (.7, 0.1, 0.2))
+        :type subset_ratios: Tuple[float,float,float]
+        :param count: 
+            Stops after extracting {count} image items (for testing purpose only). (Default value = 0)
+        :type count: int
+        :param work_folder: 
+            Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
-            alphabet_tsv (str): TSV file containing the alphabet
+        :type work_folder: str
+        :param crop: 
+            (for segmentation set only) crop text regions from both image and PageXML file. (Default value = False)
+        :type crop: bool
+        :param alphabet_tsv: 
+            TSV file containing the alphabet (Default value = '')
+        :type alphabet_tsv: str
+
+        :rtype: None
+
+        :raises FileNotFoundError: the TSV file passed to the `from_tsv_file` option does not exist, or
+               the specified TSV alphabet does not exist.
+
         """
         if task == 'htr':
             
@@ -269,7 +335,7 @@ class MonasteriumDataset(VisionDataset):
                     logger.debug("Work folder: {}".format( self.work_folder_path ))
 
                 if not self.work_folder_path.is_dir():
-                    self.work_folder_path.mkdir()
+                    self.work_folder_path.mkdir(parents=True)
                     logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
                 # samples: all of them! (Splitting into subset happens in a ulterior step.)
@@ -292,7 +358,7 @@ class MonasteriumDataset(VisionDataset):
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
-                alphabet.Alphabet( default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
+                alphabet.Alphabet( self.default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
                 #shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
             
             # load alphabet
@@ -306,7 +372,7 @@ class MonasteriumDataset(VisionDataset):
         elif task == 'segment':
             self.work_folder_path = Path('.', work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
-                self.work_folder_path.mkdir() 
+                self.work_folder_path.mkdir(parents=True) 
 
             if build_items:
                 if crop:
@@ -317,15 +383,16 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def load_line_items_from_dir( work_folder_path: Union[Path,str] ) -> List[dict]:
-        """
-        Construct a list of samples from a directory that has been populated with
+        """Construct a list of samples from a directory that has been populated with
         line images and line transcriptions
 
-        Args:
-            work_folder_path (Path): a folder containing images (`*.png`) and transcription files (`*.gt.txt`)
+        :param work_folder_path: 
+            a folder containing images (`*.png`) and transcription files (`*.gt.txt`)
+        :type work_folder_path: Union[Path,str]
 
-        Returns:
-            List[dict]: a list of samples.
+        :returns: a list of samples.
+        :rtype: List[dict]
+
         """
         samples = []
         if type(work_folder_path) is str:
@@ -348,19 +415,19 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def dataset_stats( samples: List[dict] ) -> str:
-        """
-        Compute basic stats about sample sets.
-
+        """Compute basic stats about sample sets.
+        
         + avg, median, min, max on image heights and widths
         + avg, median, min, max on transcriptions
         + effective character set + which subset of the default alphabet is being used
 
-        Args:
-            samples (List[dict]): a list of samples.
+        :param samples: 
+            a list of samples.
+        :type samples: List[dict]
 
-        Returns:
-            str: a string.
-            
+        :returns: a string.
+        :rtype: str
+
         """
         heights = np.array([ s['height'] for s in samples  ], dtype=int)
         widths = np.array([ s['width'] for s in samples  ], dtype=int)
@@ -382,12 +449,17 @@ class MonasteriumDataset(VisionDataset):
 
 
     def _generate_readme( self, filename: str, params: dict )->None:
-        """
-        Create a metadata file in the work directory.
+        """Create a metadata file in the work directory.
+        
+        :param filename: 
+            a filepath. 
+        :type filename: str
+        :param params: 
+            dictionary of parameters passed to the dataset task builder.
+        :type params: dict
 
-        Args:
-            filename (str): a filename path.
-            params (dict): dictionary of parameters passed to the task builder.
+        :rtype: None
+
         """
         filepath = Path(self.work_folder_path, filename )
         
@@ -403,14 +475,26 @@ class MonasteriumDataset(VisionDataset):
             raw_data_folder_path: Path,
             fl_meta: dict,
             extract=False) -> None:
-        """
-        Download the archive and extract it. If a valid archive already exists in the root location,
+        """Download the archive and extract it. If a valid archive already exists in the root location,
         extract only.
 
-        Args:
-            root (Path): where to save the archive
-            raw_data_folder (Path): where to extract (any valid path)
-            fl_meta (dict): a dict with file meta-info (keys: url, filename, md5, full-md5, origin, desc)
+        :param root: 
+            where to save the archive
+        :type root: Path
+        :param raw_data_folder_path: 
+            where to extract the archive.
+        :type raw_data_folder_path: Path
+        :param fl_meta: 
+            a dictionary with file meta-info (keys: url, filename, md5, full-md5, origin, desc)
+        :type fl_meta: dict
+        :param extract:
+            If False (default), skip archive extraction step.
+        :type extract: bool
+
+        :rtype: None
+
+        :raises OSError: the base folder does not exist.
+
         """
         output_file_path = root.joinpath( fl_meta['filename'])
 
@@ -439,12 +523,16 @@ class MonasteriumDataset(VisionDataset):
 
 
     def _purge(self, folder: str) -> int:
-        """
-        Empty the line image subfolder: all line images and transcriptions are
+        """Empty the line image subfolder: all line images and transcriptions are
         deleted, as well as the TSV file.
 
-        Args:
-            folder (str): Name of the subfolder to _purge (relative the caller's pwd
+        :param folder:
+            Name of the subfolder to _purge (relative the caller's pwd
+        :type folder: str
+
+        :returns: number of deleted files.
+        :rtype: int
+
         """
         cnt = 0
         for item in [ f for f in Path( folder ).iterdir() if not f.is_dir()]:
@@ -455,13 +543,21 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False) -> None:
-        """
-        Create a CSV file with all tuples (`<line image absolute path>`, `<transcription>`, `<height>`, `<width>` `[<polygon points]`).
+        """Create a CSV file with all tuples (`<line image absolute path>`, `<transcription>`, `<height>`, `<width>` `[<polygon points]`).
         Height and widths are the original heights and widths.
 
-        Args:
-            file_path (str): A TSV (absolute) file path 
-            all_path_style (bool): list GT file name instead of GT content.
+        :param samples: 
+            dataset samples.
+        :type samples: List[dict]
+        :param file_path: 
+            A TSV (absolute) file path (Default value = '')
+        :type file_path: str
+        :param all_path_style: 
+            list GT file name instead of GT content. (Default value = False)
+        :type all_path_style: bool
+
+        :rtype: None
+
         """
         if file_path == '':
             for sample in samples:
@@ -484,27 +580,28 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def load_from_tsv(file_path: Path) -> List[dict]:
-        """
-        Load samples (as dictionaries) from an existing TSV file. Each input line may be either a tuple::
-
+        """Load samples (as dictionaries) from an existing TSV file. Each input line may be either a tuple::
+        
                 <img file path> <transcription text> <height> <width> [<polygon points>]
-
+        
         or::
-            
+        
                 <img file path> <transcription file path> <height> <width> [<polygon points>]
 
-        Args:
-            file_path (Path): A file path (relative to the caller's pwd).
+        :param file_path: 
+            A file path (relative to the caller's pwd).
+        :type file_path: Path
 
+        :returns: A list of dictionaries of the form::
 
-        Returns:
-            List[dict]: A list of dictionaries of the form::
-            
                 {'img': <img file path>,
                  'transcription': <transcription text>,
                  'height': <original height>,
                  'width': <original width>,
                  'mask': <mask for unpadded part of the img>}}
+        :rtype: List[dict]
+
+        :raises ValueError: the TSV file has an incorrect number of fields.
 
         """
         work_folder_path = file_path.parent
@@ -529,6 +626,11 @@ class MonasteriumDataset(VisionDataset):
             if not all_path_style:
 
                 def tsv_to_dict( tsv_line ):
+                    """
+
+                    :param tsv_line: 
+
+                    """
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
                         fields = tsv_line[:-1].split('\t')
@@ -567,20 +669,34 @@ class MonasteriumDataset(VisionDataset):
         return samples
 
 
-    def _build_page_lines_pairs(self, raw_data_folder_path:Path, work_folder_path: Path, text_only:bool=False, count:int=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
-        """
-        Create a new dataset for segmentation that associate each page image with its metadata.
+    def _build_page_lines_pairs(self, raw_data_folder_path:Path,
+                                work_folder_path: Path, 
+                                text_only:bool=False, 
+                                count:int=0, 
+                                metadata_format:str='xml') -> List[Tuple[str, str]]:
+        """Create a new dataset for segmentation that associate each page image with its metadata.
 
-        Args:
-            raw_data_folder_path (Path): root of the (read-only) expanded archive.
-            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            count (int): Stops after extracting {count} images (for testing purpose).
-            metadata_format (str): 'xml' (default) or 'json'
+        :param raw_data_folder_path: 
+            root of the (read-only) expanded archive.
+        :type raw_data_folder_path: Path
+        :param work_folder_path: 
+            Line images are extracted in this subfolder (relative to the caller's pwd).
+        :type work_folder_path: Path
+        :param text_only: 
+            If True, only generate the transcription files; default is False.
+        :type text_only: bool
+        :param count: 
+            Stops after extracting {count} images (for testing purpose). (Default value = 0)
+        :type count: int
+        :param metadata_format: 
+            'xml' (default) or 'json'
+        :type metadata_format: str
 
-        Returns:
-            List[Tuple[str,str]]: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
+        :returns: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
+        :rtype: List[Tuple[str,str]]
+
         """
-        Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
         self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         items = []
@@ -600,24 +716,39 @@ class MonasteriumDataset(VisionDataset):
         return items
 
 
-    def _extract_text_regions(self, raw_data_folder_path: Path, work_folder_path: Path, text_only=False, count=0, metadata_format:str='xml') -> List[Tuple[str, str]]:
-        """
-        Crop text regions from original files, and create a new dataset for segmentation where the text
+    def _extract_text_regions(self, 
+                              raw_data_folder_path: Path, 
+                              work_folder_path: Path,
+                              text_only=False, 
+                              count=0, 
+                              metadata_format:str='xml') -> List[Tuple[str, str]]:
+        """Crop text regions from original files, and create a new dataset for segmentation where the text
         region image has a corresponding, new PageXML decriptor.
 
-        Args:
-            raw_data_folder_path (Path): root of the (read-only) expanded archive.
-            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            count (int): Stops after extracting {count} images (for testing purpose).
-            metadata_format (str): `'xml'` (default) or `'json'`
+        :param raw_data_folder_path:
+            root of the (read-only) expanded archive.
+        :type raw_data_folder_path: Path
+        :param work_folder_path:
+            Line images are extracted in this subfolder (relative to the caller's pwd).
+        :type work_folder_path: Path
+        :param text_only: 
+            if True, only generate the GT text files. Default: False.
+        :type text_only: bool
+        :param count:
+            Stops after extracting {count} images (for testing purpose). (Default value = 0)
+        :type count: int
+        :param metadata_format: 
+            `'xml'` (default) or `'json'`
+        :type metadata_format: str
 
-        Returns:
-            List[Tuple[str,str]]: a list of pairs `(img_file_path, transcription)`
+        :returns: a list of pairs `(img_file_path, transcription)`
+        :rtype: List[Tuple[str,str]]
+
         """
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
-        Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
         self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         cnt = 0 # for testing purpose
@@ -683,20 +814,29 @@ class MonasteriumDataset(VisionDataset):
 
 
     def _compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
-        """
-        In the raw Monasterium/Teklia PageXMl file, baseline and/or textline polygon points
+        """In the raw Monasterium/Teklia PageXMl file, baseline and/or textline polygon points
         may be outside the nominal boundaries of their text region. This method computes a
         new bounding box for the given text region, based on the baseline points its contains.
 
-        Args:
-            page (str): path to the PageXML file.
-            region_id (str): id attribute of the region element in the PageXML file
+        :param page:
+            path to the PageXML file.
+        :type page: str
+        :param region_id: 
+            id attribute of the region element in the PageXML file
+        :type region_id: str
 
-        Returns:
-            tuple: region's new coordinates, as (x1, y1, x2, y2)
+        :returns: region's new coordinates, as (x1, y1, x2, y2)
+        :rtype: Tuple[int,int,int,int]
+
         """
 
         def within(pt, bbox):
+            """
+
+            :param pt: 
+            :param bbox: 
+
+            """
             return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
 
         with open(page, 'r') as page_file:
@@ -732,16 +872,22 @@ class MonasteriumDataset(VisionDataset):
             return bbox
 
 
-    def _write_region_to_xml( self, page: str, ns: str, textregion: dict )-None:
-        """
-        From the given text region data, generates a new PageXML file.
-
+    def _write_region_to_xml( self, page: str, ns: str, textregion: dict )->None:
+        """From the given text region data, generates a new PageXML file.
+        
         TODO: fix bug in ImageFilename attribute E.g. NA-RM_14240728_2469_r-r1..jpg
 
-        Args:
-            page (str): path of the pageXML file to generate.
-            ns (str): namespace.
-            textregion (dict): a dictionary of text region attributes.
+        :param page: 
+            path of the pageXML file to generate.
+        :type page: str
+        :param ns: 
+            namespace.
+        :type ns: str
+        :param textregion: 
+            a dictionary of text region attributes.
+        :type textregion: dict
+
+        :rtype: None
 
         """
 
@@ -788,30 +934,38 @@ class MonasteriumDataset(VisionDataset):
                         shape: str='bbox',
                         text_only=False,
                         count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
-        """
-        Generate line images from the PageXML files and save them in a local subdirectory
+        """Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
 
-        Args:
-            raw_data_folder_path (Path): root of the (read-only) expanded archive.
-            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            shape (str): Extract lines as bboxes (default) or as polygon-within-bbox.
-            text_only (bool): Store only the transcriptions (*.gt.txt files).
-            count (int): Stops after extracting {count} images (for testing purpose).
+        :param raw_data_folder_path: 
+            root of the (read-only) expanded archive.
+        :type raw_data_folder_path: Path
+        :param work_folder_path: 
+            Line images are extracted in this subfolder (relative to the caller's pwd).
+        :type work_folder_path: Path
+        :param shape: 
+            Extract lines as bboxes (default) or as polygon-within-bbox.
+        :type shape: str
+        :param text_only: 
+            Store only the transcriptions (*.gt.txt files). (Default value = False)
+        :type text_only: bool
+        :param count: 
+            Stops after extracting {count} images (for testing purpose). (Default value = 0)
+        :type count: int
 
-        Returns:
-            List[Dict[str, Union[Tensor,str,int]]]: An array of dictionaries of the form::
+        :returns: An array of dictionaries of the form::
                 {'img': <absolute img_file_path>,
                  'transcription': <transcription text>,
                  'height': <original height>,
                  'width': <original width>}
+        :rtype: List[Dict[str,Union[Tensor,str,int]]]
 
         """
         logger.debug("_extract_lines()")
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
-        Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
+        Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
         self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
@@ -924,16 +1078,22 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def _split_set(samples: object, ratios: Tuple[float, float, float], subset: str) -> List[object]:
-        """
-        Split a dataset into 3 sets: train, validation, test.
+        """Split a dataset into 3 sets: train, validation, test.
 
-        Args:
-            samples (object): any dataset sample.
-            ratios (Tuple[float, float, float]): respective proportions for possible subsets
-            subset (str): subset to be build  ('train', 'validate', or 'test')
+        :param samples: 
+            any dataset sample.
+        :type samples: object
+        :param ratios: 
+            respective proportions for possible subsets
+        :type ratios: Tuple[float, float, float]
+        :param subset: 
+            subset to be build  ('train', 'validate', or 'test')
+        :type subset: str
 
-        Returns:
-            List[object]: a list of samples.
+        :returns: a list of samples.
+        :rtype: List[object]
+
+        :raises ValueError: The subset type does not exist.
         """
 
         random.seed(10)
@@ -966,14 +1126,14 @@ class MonasteriumDataset(VisionDataset):
 
 
     def __getitem__(self, index) -> Dict[str, Union[Tensor, int, str]]:
-        """
-        Callback function for the iterator.
+        """Callback function for the iterator.
 
-        Args:
-            index (int): item index.
+        :param index: 
+            item index.
+        :type index: int
 
-        Returns:
-            dict[str,Union[Tensor,int,str]]: dictionary
+        :returns: a sample dictionary
+        :rtype: dict[str,Union[Tensor,int,str]]
         """
         img_path = self.data[index]['img']
         
@@ -995,14 +1155,14 @@ class MonasteriumDataset(VisionDataset):
         return sample
 
     def __getitems__(self, indexes: list ) -> List[dict]:
-        """
-        To help with batching.
+        """ To help with batching.
 
-        Args:
-            indexes (list): a list of indexes.
+        :param indexes: 
+            a list of indexes.
+        :type indexes: list
 
-        Returns:
-            List[dict]: a list of samples.
+        :returns: a list of samples.
+        :rtype: List[dict]
         """
         print('getitems()')
         return [ self.__getitem__( idx ) for idx in indexes ]
@@ -1012,13 +1172,14 @@ class MonasteriumDataset(VisionDataset):
         """
         Number of samples in the dataset.
 
-        Returns:
-            int: number of data points.
+        :returns: number of data points.
+        :rtype: int
         """
         return len( self.data )
 
     @property
     def task( self ):
+        """ """
         if self._task == 'htr':
             return "HTR"
         if self._task == 'segment':
@@ -1061,6 +1222,17 @@ class MonasteriumDataset(VisionDataset):
 
 
     def count_line_items(self, folder) -> Tuple[int, int]:
+        """
+        Count dataset items in the given folder.
+
+        :param folder: 
+            a directory path. 
+        :type folder: str
+
+        :returns: a pair `(<number of GT files>, <number of image files>)`
+        :rtype: Tuple[int,int]
+
+        """
         return (
                 len( [ i for i in Path(folder).glob('*.gt.txt') ] ),
                 len( [ i for i in Path(folder).glob('*.png') ] )
@@ -1069,21 +1241,22 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def get_default_alphabet() -> alphabet.Alphabet:
-        """
-        Return an instance of the default alphabet.
+        """Return an instance of the default alphabet.
 
-        Returns:
-            alphabet.Alphabet: an alphabet instance.
+
+        :returns: alphabet.Alphabet: an alphabet instance.
+        :rtype: alphabet.Alphabet
+
         """
         return alphabet.Alphabet( default_alphabet )
 
 
     def get_prototype_alphabet( self ) -> alphabet.Alphabet:
-        """
-        Return a prototype alphabet, generated from the transcriptions.
+        """Return a prototype alphabet, generated from the transcriptions.
 
-        Returns:
-            alphabet.Alphabet: a prototypical alphabet instance, generated from the transcriptions.
+        :returns: alphabet.Alphabet: a prototypical alphabet instance, generated from the transcriptions.
+        :rtype: alphabet.Alphabet
+
         """
         if self.data == []:
             logger.warning("Sample set is empty!")
@@ -1093,6 +1266,7 @@ class MonasteriumDataset(VisionDataset):
 
 
 class PadToWidth():
+    """ """
 
     def __init__( self, max_w ):
         self.max_w = max_w
@@ -1114,10 +1288,10 @@ class PadToWidth():
 
 
 class ResizeToHeight():
-    """
-    Resize an image with fixed height, preserving aspect ratio as long as the resulting width
-    does not exceed the specified max. width. If that is the case, the image is horizontally 
+    """Resize an image with fixed height, preserving aspect ratio as long as the resulting width
+    does not exceed the specified max. width. If that is the case, the image is horizontally
     squeezed to fix this.
+
     """
 
     def __init__( self, target_height, max_width ):
@@ -1146,4 +1320,5 @@ class ResizeToHeight():
 
 
 def dummy():
+    """ """
     return True
