@@ -1164,7 +1164,6 @@ class MonasteriumDataset(VisionDataset):
         :returns: a list of samples.
         :rtype: List[dict]
         """
-        print('getitems()')
         return [ self.__getitem__( idx ) for idx in indexes ]
 
 
