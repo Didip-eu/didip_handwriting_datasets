@@ -48,9 +48,6 @@ Directory structure for local file storage:
 TODO:
 
 - dataset splitting should return 3 sets together? 
-- build_items=False option needlessly complicated: better with 'load_from_tsv_file=<tsv path>' option
-  whose directory is assumed to be the work folder
-
 """
 
 import logging
@@ -123,6 +120,24 @@ default_alphabet =[' ',
 
 
 class MonasteriumDataset(VisionDataset):
+    """
+    Initialize a dataset instance.
+
+    Args:
+        root (str): Where the archive is to be downloaded and the subfolder containing original files (pageXML documents and page images) is to be created. Default: subfolder `data/Monasterium' in this project's directory.
+        work_folder (str): Where line images and ground truth transcriptions fitting a particular task are to be created; default: '<root>/MonasteriumHandwritingDatasetHTR'; if parameter is a relative path, the work folder is created under <root>; an absolute path overrides this. For HTR task, the work folder also contains the alphabet in TSV form.
+        subset (str): 'train' (default), 'validate' or 'test'.
+        subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
+        transform (Callable): Function to apply to the PIL image at loading time.
+        target_transform (Callable): Function to apply to the transcription ground truth at loading time.
+        extract_pages (bool): if True, extract the archive's content into the base folder no matter what; otherwise (default), check first for a file tree with matching name and checksum.
+        task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation = cropped TextRegion images, with corresponding PageXML files. If '' (default), the dataset archive is extracted but no actual data get built.
+        shape (str): 'bbox' (default) for line bounding boxes or 'polygons' 
+        build_items (bool): if True (default), extract and store images for the task from the pages; otherwise, just extract the original data from the archive.
+        from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is assumed to be the work folder, superceding the work_folder option).
+        count (int): Stops after extracting {count} image items (for testing purpose only).
+        alphabet_tsv (str): TSV file containing the alphabet
+        """
 
     dataset_file = {
             #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
@@ -134,8 +149,7 @@ class MonasteriumDataset(VisionDataset):
             'origin': 'google',
     }
 
-    def __init__(
-                self,
+    def __init__( self,
                 root: str='',
                 work_folder: str = '', # here further files are created, for any particular task
                 subset: str = 'train',
@@ -149,34 +163,7 @@ class MonasteriumDataset(VisionDataset):
                 shape: str = '',
                 count: int = 0,
                 alphabet_tsv: str = None,
-                ):
-        """
-        Args:
-            root (str): Where the archive is to be downloaded and the subfolder containing original files
-                        (pageXML documents and page images) is to be created. Default: 
-                        subfolder `data/Monasterium' in this project's directory.
-            work_folder (str): Where line images and ground truth transcriptions fitting a particular task
-                               are to be created; default: '<root>/MonasteriumHandwritingDatasetHTR'; if 
-                               parameter is a relative path, the work folder is created under <root>; an
-                               absolute path overrides this. For HTR task, the work folder also contains
-                               the alphabet in TSV form.
-            subset (str): 'train' (default), 'validate' or 'test'.
-            subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 'validate', ...) subsets
-            transform (Callable): Function to apply to the PIL image at loading time.
-            target_transform (Callable): Function to apply to the transcription ground truth at loading time.
-            extract_pages (bool): if True, extract the archive's content into the base folder no matter what;
-                               otherwise (default), check first for a file tree with matching name and checksum.
-            task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation 
-                        = cropped TextRegion images, with corresponding PageXML files. If '' (default),
-                        the dataset archive is extracted but no actual data get built.
-            shape (str): 'bbox' (default) for line bounding boxes or 'polygons' 
-            build_items (bool): if True (default), extract and store images for the task from the pages; 
-                     otherwise, just extract the original data from the archive.
-            from_tsv_file (str): TSV file from which the data are to be loaded (containing folder is
-                                 assumed to be the work folder, superceding the work_folder option).
-            count (int): Stops after extracting {count} image items (for testing purpose only).
-            alphabet_tsv (str): TSV file containing the alphabet
-        """
+                ) -> None:
         
         trf = v2.PILToTensor()
         if transform:
@@ -232,7 +219,7 @@ class MonasteriumDataset(VisionDataset):
                    work_folder: str='', 
                    crop=False,
                    alphabet_tsv='',
-                   ):
+                   )->None:
         """
         From the read-only, uncompressed archive files, build the image/GT files required for the task at hand.
         + only creates the files needed for a particular task (train, validate, or test): if more than one subset is needed, just initialize a new dataset with desired parameters (work directory, subset)
@@ -299,7 +286,9 @@ class MonasteriumDataset(VisionDataset):
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
-                                     {'subset':subset, 'task':task, 'shape':self.shape, 'count':count, 'work_folder': work_folder })
+                                    { {v,k} for keys in ('subset', 'subset_ratios', 'build_items', 
+                                                         'task', 'crop', 'count', 'from_tsv_file',
+                                                         'work_folder', 'alphabet_tsv') } )
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
@@ -334,6 +323,9 @@ class MonasteriumDataset(VisionDataset):
 
         Args:
             work_folder_path (Path): a folder containing images (`*.png`) and transcription files (`*.gt.txt`)
+
+        Returns:
+            List[dict]: a list of samples.
         """
         samples = []
         if type(work_folder_path) is str:
@@ -355,13 +347,20 @@ class MonasteriumDataset(VisionDataset):
                 
 
     @staticmethod
-    def dataset_stats( samples: List[dict] ):
+    def dataset_stats( samples: List[dict] ) -> str:
         """
         Compute basic stats about sample sets.
 
         + avg, median, min, max on image heights and widths
         + avg, median, min, max on transcriptions
         + effective character set + which subset of the default alphabet is being used
+
+        Args:
+            samples (List[dict]): a list of samples.
+
+        Returns:
+            str: a string.
+            
         """
         heights = np.array([ s['height'] for s in samples  ], dtype=int)
         widths = np.array([ s['width'] for s in samples  ], dtype=int)
@@ -382,9 +381,13 @@ class MonasteriumDataset(VisionDataset):
 
 
 
-    def _generate_readme( self, filename: str, params: dict ):
+    def _generate_readme( self, filename: str, params: dict )->None:
         """
         Create a metadata file in the work directory.
+
+        Args:
+            filename (str): a filename path.
+            params (dict): dictionary of parameters passed to the task builder.
         """
         filepath = Path(self.work_folder_path, filename )
         
@@ -405,9 +408,9 @@ class MonasteriumDataset(VisionDataset):
         extract only.
 
         Args:
-            root: where to save the archive
-            raw_data_folder: where to extract (any valid path)
-            fl_meta: a dict with file meta-info (keys: url, filename, md5, full-md5, origin, desc)
+            root (Path): where to save the archive
+            raw_data_folder (Path): where to extract (any valid path)
+            fl_meta (dict): a dict with file meta-info (keys: url, filename, md5, full-md5, origin, desc)
         """
         output_file_path = root.joinpath( fl_meta['filename'])
 
@@ -441,8 +444,7 @@ class MonasteriumDataset(VisionDataset):
         deleted, as well as the TSV file.
 
         Args:
-            folder (str): Name of the subfolder to _purge (relative the caller's
-                          pwd
+            folder (str): Name of the subfolder to _purge (relative the caller's pwd
         """
         cnt = 0
         for item in [ f for f in Path( folder ).iterdir() if not f.is_dir()]:
@@ -452,9 +454,10 @@ class MonasteriumDataset(VisionDataset):
 
 
     @staticmethod
-    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False):
+    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False) -> None:
         """
-        Create a CSV file with all tuples (<line image absolute path>, <transcription>, <original height>, <original width> [<polygon points]).
+        Create a CSV file with all tuples (`<line image absolute path>`, `<transcription>`, `<height>`, `<width>` `[<polygon points]`).
+        Height and widths are the original heights and widths.
 
         Args:
             file_path (str): A TSV (absolute) file path 
@@ -482,27 +485,27 @@ class MonasteriumDataset(VisionDataset):
     @staticmethod
     def load_from_tsv(file_path: Path) -> List[dict]:
         """
-        Load samples (as dictionaries) from an existing TSV file.
+        Load samples (as dictionaries) from an existing TSV file. Each input line may be either a tuple::
+
+                <img file path> <transcription text> <height> <width> [<polygon points>]
+
+        or::
+            
+                <img file path> <transcription file path> <height> <width> [<polygon points>]
 
         Args:
-            file_path (Path): A file path (relative to the caller's pwd), where each line
-                                      is either a tuple 
+            file_path (Path): A file path (relative to the caller's pwd).
 
-            ```python
-            <img file path> <transcription text> <height> <width> [<polygon points>]
-            ````
-            or
-
-            ```python
-            <img file path> <transcription file path> <height> <width> [<polygon points>]
-            ````
 
         Returns:
-            List[dict]: A list of dictionaries of the form {'img': <img file path>,
-                                                      'transcription': <transcription text>,
-                                                      'height': <original height>,
-                                                      'width': <original width>,
-                                                      'mask': <mask for unpadded part of the img>}}
+            List[dict]: A list of dictionaries of the form::
+            
+                {'img': <img file path>,
+                 'transcription': <transcription text>,
+                 'height': <original height>,
+                 'width': <original width>,
+                 'mask': <mask for unpadded part of the img>}}
+
         """
         work_folder_path = file_path.parent
         samples=[]
@@ -522,7 +525,9 @@ class MonasteriumDataset(VisionDataset):
             #logger.debug('load_from_tsv(): type(img_path)={} type(height)={}'.format( type(img_path), type(height)))
             all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
+
             if not all_path_style:
+
                 def tsv_to_dict( tsv_line ):
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
@@ -573,7 +578,7 @@ class MonasteriumDataset(VisionDataset):
             metadata_format (str): 'xml' (default) or 'json'
 
         Returns:
-            list: a list of pairs (<absolute img filepath>, <absolute transcription filepath>)
+            List[Tuple[str,str]]: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
         """
         Path( work_folder_path ).mkdir(exist_ok=True) # always create the subfolder if not already there
         self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
@@ -604,10 +609,10 @@ class MonasteriumDataset(VisionDataset):
             raw_data_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
             count (int): Stops after extracting {count} images (for testing purpose).
-            metadata_format (str): 'xml' (default) or 'json'
-/
+            metadata_format (str): `'xml'` (default) or `'json'`
+
         Returns:
-            list: a list of pairs (img_file_path, transcription)
+            List[Tuple[str,str]]: a list of pairs `(img_file_path, transcription)`
         """
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -727,11 +732,17 @@ class MonasteriumDataset(VisionDataset):
             return bbox
 
 
-    def _write_region_to_xml( self, page: str, ns, textregion: dict ):
+    def _write_region_to_xml( self, page: str, ns: str, textregion: dict )-None:
         """
         From the given text region data, generates a new PageXML file.
 
         TODO: fix bug in ImageFilename attribute E.g. NA-RM_14240728_2469_r-r1..jpg
+
+        Args:
+            page (str): path of the pageXML file to generate.
+            ns (str): namespace.
+            textregion (dict): a dictionary of text region attributes.
+
         """
 
         ET.register_namespace('', ns['pc'])
@@ -772,7 +783,11 @@ class MonasteriumDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
-    def _extract_lines(self, raw_data_folder_path: Path, work_folder_path: Path, shape='bbox', text_only=False, count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
+    def _extract_lines(self, raw_data_folder_path: Path,
+                        work_folder_path: Path, 
+                        shape: str='bbox',
+                        text_only=False,
+                        count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
         """
         Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
@@ -785,10 +800,11 @@ class MonasteriumDataset(VisionDataset):
             count (int): Stops after extracting {count} images (for testing purpose).
 
         Returns:
-            list[dict]: An array of dictionaries {'img': <absolute img_file_path>,
-                                                  'transcription': <transcription text>,
-                                                  'height': <original height>,
-                                                  'width': <original width>}
+            List[Dict[str, Union[Tensor,str,int]]]: An array of dictionaries of the form::
+                {'img': <absolute img_file_path>,
+                 'transcription': <transcription text>,
+                 'height': <original height>,
+                 'width': <original width>}
 
         """
         logger.debug("_extract_lines()")
@@ -907,17 +923,17 @@ class MonasteriumDataset(VisionDataset):
 
 
     @staticmethod
-    def _split_set(samples: object, ratios: Tuple[float, float, float], subset) -> List[object]:
+    def _split_set(samples: object, ratios: Tuple[float, float, float], subset: str) -> List[object]:
         """
         Split a dataset into 3 sets: train, validation, test.
 
         Args:
             samples (object): any dataset sample.
-            ratios Tuple[float, float, float]: respective proportions for possible subsets
+            ratios (Tuple[float, float, float]): respective proportions for possible subsets
             subset (str): subset to be build  ('train', 'validate', or 'test')
 
         Returns:
-            list[object]: a list of samples.
+            List[object]: a list of samples.
         """
 
         random.seed(10)
@@ -949,8 +965,13 @@ class MonasteriumDataset(VisionDataset):
             return [ samples[i] for i in subset_3_indices ]
 
 
-    def __getitem__(self, index) -> dict:
+    def __getitem__(self, index) -> Dict[str, Union[Tensor, int, str]]:
         """
+        Callback function for the iterator.
+
+        Args:
+            index (int): item index.
+
         Returns:
             dict[str,Union[Tensor,int,str]]: dictionary
         """
@@ -975,6 +996,8 @@ class MonasteriumDataset(VisionDataset):
 
     def __getitems__(self, indexes: list ) -> List[dict]:
         """
+        To help with batching.
+
         Args:
             indexes (list): a list of indexes.
 
@@ -987,6 +1010,8 @@ class MonasteriumDataset(VisionDataset):
 
     def __len__(self) -> int:
         """
+        Number of samples in the dataset.
+
         Returns:
             int: number of data points.
         """
@@ -1090,9 +1115,9 @@ class PadToWidth():
 
 class ResizeToHeight():
     """
-    Resize an image with fixed height, preserving aspect ratio as long as the resulting width does
-    not exceed the specified max. width. If that is the case, the image is horizontally squeezed 
-    to fix this.
+    Resize an image with fixed height, preserving aspect ratio as long as the resulting width
+    does not exceed the specified max. width. If that is the case, the image is horizontally 
+    squeezed to fix this.
     """
 
     def __init__( self, target_height, max_width ):
