@@ -12,6 +12,7 @@ import defusedxml.ElementTree as ET
 #import xml.etree.ElementTree as ET
 from PIL import Image, ImageDraw
 from PIL import ImagePath as IP
+import skimage as ski
 
 import numpy as np
 import torch
@@ -86,61 +87,59 @@ class MonasteriumDataset(VisionDataset):
             'origin': 'google',
     }
 
-    default_alphabet =[' ',
-     [',', '.', ':', ';'],
-     ['-', '¬', '—'],
-     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-     ['A', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ă', 'Ą'],
-     'B',
-     ['C', 'Ç', 'Ć', 'Ĉ', 'Ċ', 'Č'],
-     ['D', 'Ð', 'Ď', 'Đ'],
-     ['E', 'È', 'É', 'Ê', 'Ë', 'Ē', 'Ĕ', 'Ė', 'Ę', 'Ě'],
-     'F',
-     ['G', 'Ĝ', 'Ğ', 'Ġ', 'Ģ'],
-     ['H', 'Ĥ', 'Ħ'],
-     ['I', 'Ì', 'Í', 'Î', 'Ï', 'Ĩ', 'Ī', 'Ĭ', 'Į', 'İ', 'Ĳ'],
-     ['J', 'Ĵ'],
-     ['K', 'Ķ'],
-     ['L', 'Ĺ', 'Ļ', 'Ľ', 'Ŀ', 'Ł'],
-     'M',
-     ['N', 'Ñ', 'Ń', 'Ņ', 'Ň', 'Ŋ'],
-     ['O', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Ō', 'Ŏ', 'Ő', 'Œ'],
-     'P',
-     'Q',
-     ['R', 'Ŕ', 'Ŗ', 'Ř'],
-     ['S', 'ß', 'Ś', 'Ŝ', 'Ş', 'Š'],
-     ['T', 'Ţ', 'Ť', 'Ŧ'],
-     ['U', 'Ù', 'Ú', 'Û', 'Ü', 'Ũ', 'Ū', 'Ŭ', 'Ů', 'Ű', 'Ų'],
-     'V',
-     ['W', 'Ŵ'],
-     'X',
-     ['Y', 'Ŷ', 'Ÿ'],
-     ['Z', 'Ź', 'Ż', 'Ž'],
-     ['a', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'ă', 'ą'],
-     'b',
-     ['c', 'ç', 'ć', 'ĉ', 'ċ', 'č'],
-     ['d', 'ð', 'ď', 'đ'],
-     ['e', 'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě'],
-     'f',
-     ['g', 'ĝ', 'ğ', 'ġ', 'ģ'],
-     ['h', 'ĥ', 'ħ'],
-     ['i', 'j', 'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı', 'ĳ', 'ĵ'],
-     ['k', 'ķ', 'ĸ'],
-     ['l', 'ĺ', 'ļ', 'ľ', 'ŀ', 'ł'],
-     'm',
-     ['n', 'ñ', 'ń', 'ņ', 'ň', 'ŉ', 'ŋ'],
-     ['o', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', 'ŏ', 'ő', 'œ'],
-     'p',
-     'q',
-     ['r', 'ŕ', 'ŗ', 'ř'],
-     ['s', 'ś', 'ŝ', 'ş', 'š'],
-     ['t', 'ţ', 'ť', 'ŧ'],
-     ['u', 'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų'],
-     'v',
-     ['w', 'ŵ'],
-     'x',
-     ['y', 'ý', 'ÿ', 'ŷ'],
-     ['z', 'ź', 'ż', 'ž']]
+    default_alphabet = [' ',
+                       [',', '.', ':', ';'],
+                       ['-', '¬', '—'],
+                       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+                       ['A', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ă', 'Ą'],
+                       'B',
+                       ['C', 'Ç', 'Ć', 'Ĉ', 'Ċ', 'Č'],
+                       ['D', 'Ð', 'Ď', 'Đ'],
+                       ['E', 'È', 'É', 'Ê', 'Ë', 'Ē', 'Ĕ', 'Ė', 'Ę', 'Ě'],
+                       'F',
+                       ['G', 'Ĝ', 'Ğ', 'Ġ', 'Ģ'],
+                       ['H', 'Ĥ', 'Ħ'],
+                       ['I', 'J', 'Ì', 'Í', 'Î', 'Ï', 'Ĩ', 'Ī', 'Ĭ', 'Į', 'İ', 'Ĳ', 'Ĵ'],
+                       ['K', 'Ķ'],
+                       ['L', 'Ĺ', 'Ļ', 'Ľ', 'Ŀ', 'Ł'],
+                       'M',
+                       ['N', 'Ñ', 'Ń', 'Ņ', 'Ň', 'Ŋ'],
+                       ['O', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Ō', 'Ŏ', 'Ő', 'Œ'],
+                       'P',
+                       'Q',
+                       ['R', 'Ŕ', 'Ŗ', 'Ř'],
+                       ['S', 'ß', 'Ś', 'Ŝ', 'Ş', 'Š'],
+                       ['T', 'Ţ', 'Ť', 'Ŧ'],
+                       ['U', 'V', 'Ù', 'Ú', 'Û', 'Ü', 'Ũ', 'Ū', 'Ŭ', 'Ů', 'Ű', 'Ų'],
+                       ['W', 'Ŵ'],
+                       'X',
+                       ['Y', 'Ŷ', 'Ÿ'],
+                       ['Z', 'Ź', 'Ż', 'Ž'],
+                       ['a', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'ă', 'ą'],
+                       'b',
+                       ['c', 'ç', 'ć', 'ĉ', 'ċ', 'č'],
+                       ['d', 'ð', 'ď', 'đ'],
+                       ['e', 'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě'],
+                       'f',
+                       ['g', 'ĝ', 'ğ', 'ġ', 'ģ'],
+                       ['h', 'ĥ', 'ħ'],
+                       ['i', 'j', 'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı', 'ĳ', 'ĵ'],
+                       ['k', 'ķ', 'ĸ'],
+                       ['l', 'ĺ', 'ļ', 'ľ', 'ŀ', 'ł'],
+                       'm',
+                       ['n', 'ñ', 'ń', 'ņ', 'ň', 'ŉ', 'ŋ'],
+                       ['o', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', 'ŏ', 'ő', 'œ'],
+                       'p',
+                       'q',
+                       ['r', 'ŕ', 'ŗ', 'ř'],
+                       ['s', 'ś', 'ŝ', 'ş', 'š'],
+                       ['t', 'ţ', 'ť', 'ŧ'],
+                       ['u', 'v', 'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų'],
+                       ['w', 'ŵ'],
+                       'x',
+                       ['y', 'ý', 'ÿ', 'ŷ'],
+                       ['z', 'ź', 'ż', 'ž']]
+
 
     def __init__( self,
                 root: str='',
@@ -352,9 +351,9 @@ class MonasteriumDataset(VisionDataset):
                 # Generate a TSV file with one entry per img/transcription pair
                 self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
-                                    { {v,k} for keys in ('subset', 'subset_ratios', 'build_items', 
-                                                         'task', 'crop', 'count', 'from_tsv_file',
-                                                         'work_folder', 'alphabet_tsv') } )
+                        { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
+                          'task': task, 'crop': crop, 'count': count, 'from_tsv_file': from_tsv_file,
+                          'work_folder': work_folder, 'alphabet_tsv': alphabet_tsv } )
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
@@ -1045,18 +1044,25 @@ class MonasteriumDataset(VisionDataset):
                             # 4. Ideally: import/export to pickled tensors
 
                             # mask (=line polygon)
-                            mask = Image.new("L", bbox_img.size, 0)
-                            drawer = ImageDraw.Draw(mask)
+
+                            # 1. Open image as a  np.array
+                            img_hwc = np.array( bbox_img )
+                            # 2. Compute 2D Boolean polygon mask with ski.draw, from points
                             leftx, topy = textline['bbox'][:2]
-                            transposed_coordinates = [ (x-leftx, y-topy) for x,y in coordinates ]
-                            drawer.polygon( transposed_coordinates, fill=255 )
+                            transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ])[:,::-1]
+                            boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
+                            # 3. For each of the 3 channels:
+                            for ch in (0,1,2):
+                                # - compute median from mask-in
+                                med = np.median( img_hwc[:,:,ch][boolean_mask] )
+                                # - color mask-out with median
+                                median_background = np.full( boolean_mask.shape, med ) * np.logical_not( boolean_mask )
+                                # - mask-in + mask-out
+                                img_hwc[:,:,ch]=img_hwc[:,:,ch]*boolean_mask  + median_background
+
                             textline['polygon']=transposed_coordinates
 
-                            # background
-                            bg = Image.new("RGB", bbox_img.size, color=0)
-
-                            # composite
-                            Image.composite(bbox_img, bg, mask).save( Path( textline['img_path'] ))
+                            Image.fromarray(img_hwc).save( Path( textline['img_path'] ))
 
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \

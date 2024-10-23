@@ -16,20 +16,11 @@ from collections import Counter
 class Alphabet:
 
     """
-    Internally stored as 2 (synchronized) dictionaries
-    - one with int code as key and utf char as value.
-    - one with utf char as key and int code as value.
+    Creating and handling alphabets.
 
-    Features:
-        - loads from tsv or string
-        - white space char (U0020=32)
-        - null character (U03f5)
-        - default character for encoding (when dealing with unknown char)
-        - many-to-one code2utf always return the same code (the last): assume that at creation time,
-        symbols have been sorted s.t.
-        { 1: A, ..., 10: a, ... } -> {
-        - compound symbols
-
+    + one-to-one or many-to-one alphabet, with deterministic mapping either way;
+    + prototyping from reasonable subsets of characters to be grouped
+    + a choice of input/output sources: TSV, nested lists, mappings.
 
     """
     null_symbol = '\u03f5'
@@ -37,7 +28,30 @@ class Alphabet:
     start_of_seq_symbol = '\u21A6' # '↦' i.e. '|->'
     end_of_seq_symbol = '\u21E5' # '⇥' i.e. '->|'
 
-    def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None):
+    def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None) -> None:
+        """ Initialize a new Alphabet object. The special characters are
+        added automatically.
+
+        From a dictionary:
+        >>> alphabet.Alphabet({'a':1, 'A': 1, 'b': 2, 'c':3})
+        {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+
+        From a TSV path:
+        >>> alphabet.Alphabet('alpha.tsv')
+        {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+
+        From a nested list:
+        >>> alphabet.Alphabet([['a','A'],'b','c'])
+        {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+
+        From a string of characters (one-to-one):
+        >>> alphabet.Alphabet('aAbc ')
+        {' ': 1, 'A': 2, 'a': 3, 'b': 4, 'c': 5, 'ϵ': 0, '↦': 6, '⇥': 7}
+
+        :param alpha_repr: the input source--it may be a dictionary that maps chars to codes,
+                        a nested list, a plain string, or the path of a TSV file.
+        :param alpha_repr: Union[str, dict, list]
+        """
 
         self._utf_2_code = {}
         if type(alpha_repr) is dict:
@@ -69,12 +83,12 @@ class Alphabet:
 
 
 
-    def finalize( self ):
-        """
-        - Add virtual symbols: EOS, SOS, null symbol
-        - compute the reverse dictionary
-        """
+    def finalize( self ) -> None:
+        """Finalize the alphabet's data:
 
+        + Add virtual symbols: EOS, SOS, null symbol
+        + compute the reverse dictionary
+        """
         self._utf_2_code[ self.null_symbol ] = self.null_value
         for s in (self.start_of_seq_symbol, self.end_of_seq_symbol):
             if s not in self._utf_2_code:
@@ -85,15 +99,14 @@ class Alphabet:
         else:
             self._code_2_utf = { c:s for (s,c) in sorted(self._utf_2_code.items(), reverse=True) }
             
-
-        #print(self._code_2_utf)
         self.default_symbol, self.default_code = self.null_symbol, self.null_value
 
 
-    def to_tsv( self, filename: Union[str,Path]):
-        """
-        Dump to TSV file.
-
+    def to_tsv( self, filename: Union[str,Path]) -> None:
+        """ Dump to TSV file.
+        
+        :param filename: path to TSV file
+        :type filename: Union[str,Path]
         """
         with open( filename, 'w') as of:
             print(self, file=of)
@@ -101,14 +114,19 @@ class Alphabet:
 
 
     def to_list( self, exclude: list=[] )-> List[Union[str,list]]:
-        """
-        Return a list representation of the alphabet, minus the virtual symbols, so that it can be fed back to the initialization method.
+        """ Return a list representation of the alphabet. 
 
-        Args:
-            exclude (list): list of symbols that should not be included into the resulting list.
+        Virtual symbols (EoS, SoS, null) are not included, so that it can be fed back
+        to the initialization method.
 
-        Returns:
-            List[Union[str,list]]:  a list of lists or strings.
+        :param exclude: list of symbols that should not be included into the resulting list.
+        :type exclude: List[str]
+
+        >>> alphabet.Alphabet([['a','A'],'b','c']).to_list(['a','b'])
+        ['A', 'c']
+
+        :returns: a list of lists or strings.
+        :rtype: List[Union[str,list]]
         """
         code_2_utfs = {}
         for (s,c) in self._utf_2_code.items():
@@ -123,21 +141,24 @@ class Alphabet:
 
     @classmethod
     def from_tsv(cls, tsv_filename: str, prototype=False) -> Dict[str,int]:
-        """
+        """ Initialize an alphabet dictionary from a TSV file.
+
         Assumption: if it is not a prototype, the TSV file always contains a correct mapping,
         but the symbols need to be sorted before building the dictionary, to ensure a 
         deterministic mapping of codes to symbols; if it is a prototype, the last column in each
         line is -1 (a dummy for the code) and the previous columns store the symbols that should
         map to the same code.
 
-        Args:
-            tsv_filename (str): a TSV file of the form
-                                <symbol>     <code>
-            prototype (bool): if True, the TSV file may store more than 1 symbol on the same
-                              line, as well as a proto-code at the end (-1); codes are
-                              to be generated.
-        Returns:
-            Dict[str, int]: { <symbol>: <code> }
+        :param tsv_filename: a TSV file of the form::
+
+            <symbol>     <code>
+        :type tsv_filename: str
+        :param prototype: if True, the TSV file may store more than 1 symbol on the same
+                              line, as well as a proto-code at the end (-1); codes are to be generated.
+        :type prototype: bool
+
+        :returns: a dictionary `{ <symbol>: <code> }`
+        :rtype: Dict[str, int]
         """
         with open( tsv_filename, 'r') as infile:
             if prototype:
@@ -162,20 +183,16 @@ class Alphabet:
         Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
         symbols in the same sublist are assigned the same label.
 
-        Works on many-to-one, compound symbols:
-        Eg. 
+        Works on many-to-one, compound symbols. Eg. 
 
-        ```python
         >>> from_list( [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] )
         { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
 
-        ````
+        :param symbol_list: a list of either symbols (possibly with more than one characters) or sublists of symbols that should map to the same code.
+        :type symbol_list: List[Union[List,str]]
 
-        Args:
-            symbol_list (List[Union[List,str]]): a list of either symbols (possibly with more than one characters) or sublists of symbols that should map to the same code.
-
-        Returns:
-            Dict[str,int]: a dictionary mapping symbols to codes.
+        :returns: a dictionary mapping symbols to codes.
+        :rtype: Dict[str,int]
         """
 
         # if list is not nested (one-to-one)
@@ -343,8 +360,8 @@ class Alphabet:
                               initialization method; otherwise a TSV string, where tab-separated symbols
                               on the same line map to the same code, and last element (-1) is a placeholder
                               for the symbol's code.
-            merge (List[tuple]): for each of the provided subsequences, merge those output sublists that contain the characters
-                               in it. Eg. `merge=[(ij)]` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+            merge (List[str]): for each of the provided subsequences, merge those output sublists that contain the characters
+                               in it. Eg. `merge=['ij']` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
         Returns:
              Union[list,str]: a list of lists or str (the mapping)
 
@@ -412,7 +429,19 @@ class Alphabet:
         if type(i) is int:
             return self._code_2_utf[i]
 
-    def get_symbol( self, code ) -> str:
+    def get_symbol( self, code, all=False ) -> Union[str, List[str]]:
+        """ Return the default symbol (default) or all symbols that map on the given code.
+
+        :param code: a integer code.
+        :type code: int
+        :param all: if True, returns all symbols that map to the given code; if False (default), returns the default symbol.
+        :type all: bool
+
+        :returns: the default symbol for this code, or the list of matching symbols.
+        :rtype: Union[str, List[str]]
+        """
+        if all:
+            return [ s for (s,c) in self._utf_2_code.items() if c==code ]
         return self._code_2_utf[ code ] if code in self._code_2_utf else self.default_symbol
 
     def get_code( self, symbol ) -> int:
@@ -596,19 +625,16 @@ class Alphabet:
 
 
     def decode_ctc(self, msg: np.ndarray ):
-        """
-        Decode the output labels of a CTC-trained network into a human-readable string.
-        Eg. 
-            ```python
-            >>> decode_ctc(np.array([0, 1, 1, 1, 2, 2, 5, 6, 6, 3, 3, 1, 7, 7, 7])
-
-            ```
-
-        Args:
-            msg (np.ndarray): a sequence of labels, possibly with duplicates and null values.
+        """ Decode the output labels of a CTC-trained network into a human-readable string.
         
-        Outputs:
-            str: a string of characters.
+        >>> alphabet.Alphabet('Hello').decode_ctc(np.array([1,1,0,2,2,2,0,0,3,3,0,3,0,4]))
+        'Hello'
+
+        :param msg: a sequence of labels, possibly with duplicates and null values.
+        :type msg: np.ndarray
+        
+        :returns: a string of characters.
+        :rtype: str
                               
         """
         # keep track of positions to keep
