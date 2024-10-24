@@ -167,40 +167,51 @@ class MonasteriumDataset(VisionDataset):
             default: '<root>/MonasteriumHandwritingDatasetHTR'; if parameter is a relative path, the work folder is created under <root>;
             an absolute path overrides this. For HTR task, the work folder also contains the alphabet in TSV form.
         :type work_folder: str
+
         :param subset: 
             'train' (default), 'validate' or 'test'.
         :type subset: str
+
         :param subset_ratios:
             ratios for respective ('train', 'validate', ...) subsets
         :type subset_ratios: Tuple[float, float, float]
+
         :param transform: 
             Function to apply to the PIL image at loading time.
         :type transform: Callable
+
         :param target_transform: 
             Function to apply to the transcription ground truth at loading time.
         :type target_transform: Callable
+
         :param extract_pages: 
             if True, extract the archive's content into the base folder no matter what; 
             otherwise (default), check first for a file tree with matching name and checksum.
         :type extract_pages: bool
+
         :param task: 
             'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation = cropped TextRegion images,
             with corresponding PageXML files.  If '' (default), the dataset archive is extracted but no actual data get built.
         :type task: str
+
         :param shape: 
             'bbox' (default) for line bounding boxes or 'polygons'
         :type shape: str
+
         :param build_items: 
             if True (default), extract and store images for the task from the pages; otherwise,
             just extract the original data from the archive.
         :type build_items: bool
+
         :param from_tsv_file: 
             TSV file from which the data are to be loaded (containing folder is assumed to be the work folder,
             superceding the work_folder option).
         :type from_tsv_file: str
+
         :param count: 
             Stops after extracting {count} image items (for testing purpose only).
         :type count: int
+
         :param alphabet_tsv: 
             TSV file containing the alphabet
         :type alphabet_tsv: str
