@@ -643,12 +643,12 @@ class MonasteriumDataset(VisionDataset):
                     """
                     img, transcription, height, width, polygon_mask = [ None ] * 5
                     if has_polygon:
-                        fields = tsv_line[:-1].split('\t')
+                        fields = tsv_line[:-1].split("\t")
                         logger.debug("fields={}".format(fields))
                         if len(fields)<5:
                             raise ValueError("Incorrect number of fields: {}".format(fields))
 
-                        img, transcription, height, width, polygon_mask = tsv_line[:-1].split('\t')
+                        img, transcription, height, width, polygon_mask = tsv_line[:-1].split("\t")
                         #logger.debug('tsv_to_dict(): type(height)=', type(height))
 
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
@@ -656,7 +656,7 @@ class MonasteriumDataset(VisionDataset):
                         #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
                         return s
                     else:
-                        img, transcription, height, width = tsv_line[:-1].split('\t')
+                        img, transcription, height, width = tsv_line[:-1].split("\t")
                         s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
                                 'height': int(height), 'width': int(width) }
                         #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
@@ -1013,7 +1013,12 @@ class MonasteriumDataset(VisionDataset):
 
                     textline = dict()
                     textline['id']=textline_elt.get("id")
-                    textline['transcription']=textline_elt.find('./pc:TextEquiv', ns).find('./pc:Unicode', ns).text
+                    transcription = textline_elt.find('./pc:TextEquiv', ns).find('./pc:Unicode', ns).text
+
+                    if not transcription or re.match(r'\s+$', transcription):
+                        continue
+                    transcription = transcription.strip().replace("\t",' ')
+                    textline['transcription'] = transcription
 
                     # skip lines that don't have a transcription
                     if not textline['transcription']:
@@ -1289,9 +1294,11 @@ class PadToWidth():
 
     def __call__(self, sample: dict) -> dict:
         """Transform a sample: only the image is modified, not the nominal height and width.
+        A mask covers the unpadded part of the image.
+        
             
         """
-        t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription') ]
+        t_chw, w = [ sample[k] for k in ('img', 'width' ) ]
         if w > self.max_w:
             warnings.warn("Cannot pad an image that is wider ({}) than the padding size ({})".format( w, self.max_w))
             return sample
@@ -1301,8 +1308,10 @@ class PadToWidth():
         # add a field
         mask = torch.zeros( new_t_chw.shape, dtype=torch.bool)
         mask[:,:,:w] = 1
-        return {'img': new_t_chw, 'height': h, 'width': w, 'transcription': gt, 'mask': mask }
 
+        transformed_sample = sample.copy()
+        transformed_sample.update( {'img': new_t_chw, 'mask': mask } )
+        return transformed_sample
 
 
 
@@ -1324,7 +1333,7 @@ class ResizeToHeight():
            + modify 'height' and 'width' accordingly
 
         """
-        t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription')]
+        t_chw, h, w = [ sample[k] for k in ('img', 'height', 'width') ]
         # freak case (marginal annotations): original height is the larger
         # dimension -> specify the width too
         if h > w:
@@ -1338,9 +1347,11 @@ class ResizeToHeight():
             t_chw = v2.Resize(size=(self.target_height, self.max_width), antialias=True)( t_chw )
         h_new, w_new = [ int(d) for d in t_chw.shape[1:] ]
 
-        mask = torch.zeros( t_chw.shape, dtype=torch.bool)
-        mask[:,:h,:w]=1
-        return {'img': t_chw, 'height': h_new, 'width': w_new, 'transcription': gt, 'mask': mask }
+        transformed_sample = sample.copy()
+        transformed_sample.update( {'img': t_chw, 'height': h_new, 'width': w_new } )
+
+        return transformed_sample
+        
 
 
 
