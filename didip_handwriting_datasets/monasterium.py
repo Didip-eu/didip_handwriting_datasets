@@ -1285,6 +1285,8 @@ class MonasteriumDataset(VisionDataset):
         return alphabet.Alphabet( alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ]))
             
 
+def bbox_median_pad( img_chw: Tensor, mask_hw: Tensor ):
+
 
 class PadToWidth():
     """ Pad an image to desired length."""
