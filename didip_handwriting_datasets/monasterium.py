@@ -1282,12 +1282,15 @@ class MonasteriumDataset(VisionDataset):
 
 
 class PadToWidth():
-    """ """
+    """ Pad an image to desired length."""
 
     def __init__( self, max_w ):
         self.max_w = max_w
 
-    def __call__(self, sample):
+    def __call__(self, sample: dict) -> dict:
+        """Transform a sample: only the image is modified, not the nominal height and width.
+            
+        """
         t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription') ]
         if w > self.max_w:
             warnings.warn("Cannot pad an image that is wider ({}) than the padding size ({})".format( w, self.max_w))
@@ -1314,7 +1317,13 @@ class ResizeToHeight():
         self.target_height = target_height
         self.max_width = max_width
 
-    def __call__(self, sample):
+    def __call__(self, sample: dict) -> dict:
+        """Transform a sample
+            
+           + resize 'img' value to desired height
+           + modify 'height' and 'width' accordingly
+
+        """
         t_chw, h, w, gt = [ sample[k] for k in ('img', 'height', 'width', 'transcription')]
         # freak case (marginal annotations): original height is the larger
         # dimension -> specify the width too
