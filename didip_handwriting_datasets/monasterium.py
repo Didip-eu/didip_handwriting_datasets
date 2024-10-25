@@ -1229,15 +1229,15 @@ class MonasteriumDataset(VisionDataset):
                 )
 
 
-    @staticmethod
-    def get_default_alphabet() -> alphabet.Alphabet:
+    @classmethod
+    def get_default_alphabet( cls ) -> alphabet.Alphabet:
         """Return an instance of the default alphabet.
 
         :returns: alphabet.Alphabet: an alphabet instance.
         :rtype: alphabet.Alphabet
 
         """
-        return alphabet.Alphabet( default_alphabet )
+        return alphabet.Alphabet( cls.default_alphabet )
 
 
     def get_prototype_alphabet( self ) -> alphabet.Alphabet:
@@ -1252,44 +1252,55 @@ class MonasteriumDataset(VisionDataset):
             return None
         return alphabet.Alphabet( alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ]))
             
-    @classmethod
-    def bbox_median_pad(cls, img_chw: np.ndarray, mask_hw: np.ndarray ) -> np.ndarray:
+    @staticmethod
+    def bbox_median_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
         """ Pad a polygon BBox with the median value of the polygon. Used by
         the line extraction method.
 
-        :param img_chw: an array (C,H,W).
+        :param img_chw: an array (C,H,W). Optionally: (H,W,C)
         :type img_chw: np.ndarray.
 
         :param mask_hw: a 2D Boolean mask (H,W).
         :type mask_hw: np.ndarray
 
-        :returns: the padded image (C,H,W).
+        :param channel_dim: the channel dimension: 2 for (H,W,C) images. Default is 0.
+        :type channel_dim: int
+
+        :returns: the padded image, with same shape as input.
         :rtype: np.ndarray.
         """
-        padding_bg = np.zeros( img_chw.shape, dtype=img_chw.dtype)
-        for ch in range( img_chw.shape[0] ):
-            med = np.median( img_chw[ch][mask_hw] ).astype( img_chw.dtype )
-            padding_bg[ch] += np.logical_not(mask_hw) * med
-            padding_bg[ch] += img_chw[ch] * mask_hw
-        return padding_bg
+        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
+        padding_bg = np.zeros( img.shape, dtype=img.dtype)
 
-    @classmethod
-    def bbox_noise_pad(cls, img_chw: np.ndarray, mask_hw: np.ndarray ) -> np.ndarray:
+        print('img.shape=', img.shape, 'mask_hw.shape=', mask_hw.shape)
+        for ch in range( img.shape[0] ):
+            med = np.median( img[ch][mask_hw] ).astype( img.dtype )
+            padding_bg[ch] += np.logical_not(mask_hw) * med
+            padding_bg[ch] += img[ch] * mask_hw
+        return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
+
+    @staticmethod
+    def bbox_noise_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
         """ Pad a polygon BBox with noise. Used by the line extraction method.
 
-        :param img_chw: an array (C,H,W).
+        :param img_chw: an array (C,H,W). Optionally: (H,W,C)
         :type img_chw: np.ndarray
 
         :param mask_hw: a 2D Boolean mask (H,W).
         :type mask_hw: np.ndarray
 
-        :returns: the padded image (C,H,W).
+        :param channel_dim: the channel dimension: 2 for (H,W,C) images. Default is 0.
+        :type channel_dim: int
+
+        :returns: the padded image, with same shape as input.
         :rtype: np.ndarray.
         """
-        padding_bg_chw = np.random.randint(0, 255, img_chw.shape, dtype=img_chw.dtype)
-        padding_bg_chw *= np.logical_not(mask_hw) 
-        padding_bg_chw += img_chw * mask_hw
-        return padding_bg_chw
+        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
+        padding_bg = np.random.randint(0, 255, img.shape, dtype=img_chw.dtype)
+        
+        padding_bg *= np.logical_not(mask_hw) 
+        padding_bg += img_chw * mask_hw
+        return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
 
 
 class PadToWidth():
