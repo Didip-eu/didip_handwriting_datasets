@@ -144,24 +144,22 @@ def test_getitem_bbox( bbox_data_set ):
 
 def test_data_point_polygons( polygon_data_set ):
     dp = polygon_data_set.data[0]
-    print(dp)
-    assert len(dp) == 5
+    #print(dp)
+    assert len(dp) == 4
     assert type(dp['img']) is str
     assert type(dp['transcription']) is str
     assert type(dp['height']) is int
     assert type(dp['width']) is int
-    assert type(dp['polygon_mask']) is list
 
 def test_getitem_polygons( polygon_data_set ):
     sample = polygon_data_set[0]
-    print(sample)
+
     assert len(sample) == 6
     assert type(sample['img']) is Tensor
     assert type(sample['transcription']) is str
     assert type(sample['height']) is int
     assert type(sample['width']) is int
     assert type(sample['mask']) is Tensor
-    assert 'polygon_mask' in sample and type(sample['polygon_mask']) is Tensor
 
 def test_load_from_tsv_bbox( data_path ):
     samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv') )

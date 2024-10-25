@@ -155,6 +155,7 @@ class MonasteriumDataset(VisionDataset):
                 shape: str = '',
                 count: int = 0,
                 alphabet_tsv: str = None,
+                line_padding_style: str = 'median',
                 ) -> None:
         """Initialize a dataset instance.
 
@@ -215,6 +216,12 @@ class MonasteriumDataset(VisionDataset):
         :param alphabet_tsv: 
             TSV file containing the alphabet
         :type alphabet_tsv: str
+
+        :param line_padding_style:
+            When extracting line bounding boxes for an HTR task, padding to be used around 
+            the polygon: 'median' (default) pads with the median value of the polygon; 
+            'noise' pads with random noise.
+        :type line_padding_style: str
         """
         
         trf = v2.PILToTensor()
@@ -257,7 +264,8 @@ class MonasteriumDataset(VisionDataset):
             build_ok = build_items if from_tsv_file == '' else False
             self._build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
-                             work_folder=work_folder, count=count, alphabet_tsv=alphabet_tsv )
+                             work_folder=work_folder, count=count, 
+                             alphabet_tsv=alphabet_tsv, line_padding_style=line_padding_style )
 
             logger.debug("data={}".format( self.data[:6]))
 
@@ -271,6 +279,7 @@ class MonasteriumDataset(VisionDataset):
                    work_folder: str='', 
                    crop=False,
                    alphabet_tsv='',
+                   line_padding_style='median',
                    )->None:
         """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
 
@@ -282,32 +291,46 @@ class MonasteriumDataset(VisionDataset):
         :param task: 
             'htr' for HTR set = pairs (line, transcription), 'segment' for segmentation (Default value = 'htr')
         :type task: str
+
         :param build_items: 
             if True (default), extract and store images for the task from the pages;
         :type build_items: bool
+
         :param from_tsv_file: 
             TSV file from which the data are to be loaded (containing folder is
                                  assumed to be the work folder, superceding the work_folder option). (Default value = '')
         :type from_tsv_file: str
+
         :param subset: 
             'train', 'validate' or 'test'. (Default value = 'train')
         :type subset: str
+
         :param subset_ratios: 
             ratios for respective ('train', 'validate', ...) subsets (Default value = (.7, 0.1, 0.2))
         :type subset_ratios: Tuple[float,float,float]
+
         :param count: 
             Stops after extracting {count} image items (for testing purpose only). (Default value = 0)
         :type count: int
+
         :param work_folder: 
             Where line images and ground truth transcriptions fitting a particular task
                                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
         :type work_folder: str
+
         :param crop: 
             (for segmentation set only) crop text regions from both image and PageXML file. (Default value = False)
         :type crop: bool
+
         :param alphabet_tsv: 
             TSV file containing the alphabet (Default value = '')
         :type alphabet_tsv: str
+
+        :param line_padding_style:
+            When extracting line bounding boxes for an HTR task, padding to be used around 
+            the polygon: 'median' (default) pads with the median value of the polygon; 
+            'noise' pads with random noise.
+        :type line_padding_style: str
 
         :rtype: None
 
@@ -329,8 +352,8 @@ class MonasteriumDataset(VisionDataset):
                     self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
                     self.data = self.load_from_tsv( tsv_path )
-                    logger.debug("_build_task(): data={}".format( self.data[:6]))
-                    logger.debug("_build_task(): height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
+                    logger.debug("data={}".format( self.data[:6]))
+                    logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
                     #logger.debug(self.data[0]['polygon_mask'])
                 else:
                     raise FileNotFoundError(f'File {tsv_path} does not exist!')
@@ -350,7 +373,9 @@ class MonasteriumDataset(VisionDataset):
 
                 # samples: all of them! (Splitting into subset happens in a ulterior step.)
                 if build_items:
-                    samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, count=count, shape=self.shape )
+                    samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, 
+                                                    count=count, shape=self.shape,
+                                                    padding_func=self.bbox_noise_pad if line_padding_style=='noise' else self.bbox_median_pad)
                 else:
                     logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
                     samples = self.load_line_items_from_dir( self.work_folder_path )
@@ -364,7 +389,8 @@ class MonasteriumDataset(VisionDataset):
                 self._generate_readme("README.md", 
                         { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
                           'task': task, 'crop': crop, 'count': count, 'from_tsv_file': from_tsv_file,
-                          'work_folder': work_folder, 'alphabet_tsv': alphabet_tsv } )
+                          'work_folder': work_folder, 'alphabet_tsv': alphabet_tsv, 
+                          'line_padding_style': line_padding_style} )
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
@@ -590,14 +616,10 @@ class MonasteriumDataset(VisionDataset):
 
     @staticmethod
     def load_from_tsv(file_path: Path) -> List[dict]:
-        """Load samples (as dictionaries) from an existing TSV file. Each input line may be either a tuple::
+        """Load samples (as dictionaries) from an existing TSV file. Each input line is a tuple::
         
                 <img file path> <transcription text> <height> <width> [<polygon points>]
         
-        or::
-        
-                <img file path> <transcription file path> <height> <width> [<polygon points>]
-
         :param file_path: 
             A file path (relative to the caller's pwd).
         :type file_path: Path
@@ -607,8 +629,8 @@ class MonasteriumDataset(VisionDataset):
                 {'img': <img file path>,
                  'transcription': <transcription text>,
                  'height': <original height>,
-                 'width': <original width>,
-                 'mask': <mask for unpadded part of the img>}}
+                 'width': <original width>,}
+                 
         :rtype: List[dict]
 
         :raises ValueError: the TSV file has an incorrect number of fields.
@@ -619,62 +641,18 @@ class MonasteriumDataset(VisionDataset):
         with open( file_path, 'r') as infile:
             # Detection: 
             # - is the transcription passed as a filepath or as text?
-            # - is there a polygon path
+            img_path, file_or_text, height, width = next( infile )[:-1].split('\t')[:4]
+            inline_transcription = False if Path(file_or_text).exists() else True
 
-            #img_path, file_or_text, height, width, polygon_mask = [None] * 5
-            has_polygon = False
-            fields = next( infile )[:-1].split('\t')
-            img_path, file_or_text, height, width = fields[:4]
-            polygon_mask = None
-            if len(fields) > 4:
-                polygon_mask = fields[4]
-                has_polygon = True
-            #logger.debug('load_from_tsv(): type(img_path)={} type(height)={}'.format( type(img_path), type(height)))
-            all_path_style = True if Path(file_or_text).exists() else False
             infile.seek(0) 
 
-            if not all_path_style:
-
-                def tsv_to_dict( tsv_line ):
-                    """
-
-                    :param tsv_line: 
-
-                    """
-                    img, transcription, height, width, polygon_mask = [ None ] * 5
-                    if has_polygon:
-                        fields = tsv_line[:-1].split("\t")
-                        logger.debug("fields={}".format(fields))
-                        if len(fields)<5:
-                            raise ValueError("Incorrect number of fields: {}".format(fields))
-
-                        img, transcription, height, width, polygon_mask = tsv_line[:-1].split("\t")
-                        #logger.debug('tsv_to_dict(): type(height)=', type(height))
-
-                        s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
-                                'height': int(height), 'width': int(width), 'polygon_mask': 'None' if polygon_mask == '-' else eval(polygon_mask)  }
-                        #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
-                        return s
-                    else:
-                        img, transcription, height, width = tsv_line[:-1].split("\t")
-                        s = {'img': str(work_folder_path.joinpath( img )), 'transcription': transcription,
-                                'height': int(height), 'width': int(width) }
-                        #logger.debug('type(s[img])={} type(s[height]={}'.format( type(s['img']), type(s['height'])))
-                        return s
-
-                samples = [ tsv_to_dict(s) for s in infile ]
-                #logger.debug("tsv_to_dict(): samples=", samples)
-            else:
-                for tsv_line in infile:
-                    img_file, gt_file, height, width = tsv_line[:-1].split('\t')
-                    with open( work_folder_path.joinpath( gt_file ), 'r') as igt:
-                        gt_content = '\n'.join( igt.readlines())
-                        if has_polygon:
-                            samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_content,
-                                             'height': int(height), 'width': int(width), 'polygon_mask': eval(polygon_mask) })
-                        else:
-                            samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_content,
-                                             'height': int(height), 'width': int(width) })
+            for tsv_line in infile:
+                img_file, gt_field, height, width = tsv_line[:-1].split('\t')
+                if not inline_transcription:
+                    with open( work_folder_path.joinpath( gt_field ), 'r') as igt:
+                        gt_field = '\n'.join( igt.readlines())
+                samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_field,
+                                 'height': int(height), 'width': int(width) } )
 
         return samples
 
@@ -943,25 +921,35 @@ class MonasteriumDataset(VisionDataset):
                         work_folder_path: Path, 
                         shape: str='bbox',
                         text_only=False,
-                        count=0) -> List[Dict[str, Union[Tensor,str,int]]]:
+                        count=0,
+                        padding_func=None) -> List[Dict[str, Union[Tensor,str,int]]]:
         """Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
 
         :param raw_data_folder_path: 
             root of the (read-only) expanded archive.
         :type raw_data_folder_path: Path
+
         :param work_folder_path: 
             Line images are extracted in this subfolder (relative to the caller's pwd).
         :type work_folder_path: Path
+
         :param shape: 
             Extract lines as bboxes (default) or as polygon-within-bbox.
         :type shape: str
+
         :param text_only: 
             Store only the transcriptions (*.gt.txt files). (Default value = False)
         :type text_only: bool
+
         :param count: 
             Stops after extracting {count} images (for testing purpose). (Default value = 0)
         :type count: int
+
+        :param padding_func: 
+            For polygons, a function that accepts a (C,H,W) Numpy array and returns
+            the line BBox image, with padding around the polygon.
+        :type padding_func: Callable[[np.ndarray], np.ndarray]
 
         :returns: An array of dictionaries of the form::
                 {'img': <absolute img_file_path>,
@@ -972,6 +960,11 @@ class MonasteriumDataset(VisionDataset):
 
         """
         logger.debug("_extract_lines()")
+
+        if padding_func is None:
+            padding_func = self.bbox_median_pad
+        logger.debug('padding_func={}'.format( padding_func ))
+
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
@@ -1043,42 +1036,18 @@ class MonasteriumDataset(VisionDataset):
                             bbox_img.save( textline['img_path'] )
 
                         else:
-                            # This takes care of saving line images, but not of computing
-                            # useful information for training and inference, such as masks.
-                            #
-                            # Options:
-                            # 1. Compute mask at this stage and add it to the sample: added complexity
-                            # 2. Compute mask in __getitem()__: consistent with having all tensor processing
-                            #    at sample use stage, but need at least polygon definition
-                            # 3. Find way to save mask in TSV? Related to...
-                            # 4. Add another import/export format (pickled tensors?)
-
-                            # Solution = everything :))
-                            # 1. Add polygon sequence to raw sample
-                            # 2. Serialize and deserialize same seq. to/fro TSV
-                            # 3. Use __getitem__ to compute the tensor from it
-                            # 4. Ideally: import/export to pickled tensors
-
-                            # mask (=line polygon)
-
-                            # 1. Open image as a  np.array
-                            img_hwc = np.array( bbox_img )
-                            # 2. Compute 2D Boolean polygon mask with ski.draw, from points
+                            # Image -> (C,H,W) array
+                            img_chw = np.array( bbox_img ).transpose(2,0,1)
+                            # 2D Boolean polygon mask, from points
                             leftx, topy = textline['bbox'][:2]
                             transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ])[:,::-1]
-                            boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
-                            # 3. For each of the 3 channels:
-                            for ch in (0,1,2):
-                                # - compute median from mask-in
-                                med = np.median( img_hwc[:,:,ch][boolean_mask] )
-                                # - color mask-out with median
-                                median_background = np.full( boolean_mask.shape, med ) * np.logical_not( boolean_mask )
-                                # - mask-in + mask-out
-                                img_hwc[:,:,ch]=img_hwc[:,:,ch]*boolean_mask  + median_background
+                            boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
+                            # Pad around the polygon
+                            img_chw = padding_func( img_chw, boolean_mask )
 
                             textline['polygon']=transposed_coordinates
 
-                            Image.fromarray(img_hwc).save( Path( textline['img_path'] ))
+                            Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
 
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
@@ -1264,7 +1233,6 @@ class MonasteriumDataset(VisionDataset):
     def get_default_alphabet() -> alphabet.Alphabet:
         """Return an instance of the default alphabet.
 
-
         :returns: alphabet.Alphabet: an alphabet instance.
         :rtype: alphabet.Alphabet
 
@@ -1284,8 +1252,44 @@ class MonasteriumDataset(VisionDataset):
             return None
         return alphabet.Alphabet( alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ]))
             
+    @classmethod
+    def bbox_median_pad(cls, img_chw: np.ndarray, mask_hw: np.ndarray ) -> np.ndarray:
+        """ Pad a polygon BBox with the median value of the polygon. Used by
+        the line extraction method.
 
-def bbox_median_pad( img_chw: Tensor, mask_hw: Tensor ):
+        :param img_chw: an array (C,H,W).
+        :type img_chw: np.ndarray.
+
+        :param mask_hw: a 2D Boolean mask (H,W).
+        :type mask_hw: np.ndarray
+
+        :returns: the padded image (C,H,W).
+        :rtype: np.ndarray.
+        """
+        padding_bg = np.zeros( img_chw.shape, dtype=img_chw.dtype)
+        for ch in range( img_chw.shape[0] ):
+            med = np.median( img_chw[ch][mask_hw] ).astype( img_chw.dtype )
+            padding_bg[ch] += np.logical_not(mask_hw) * med
+            padding_bg[ch] += img_chw[ch] * mask_hw
+        return padding_bg
+
+    @classmethod
+    def bbox_noise_pad(cls, img_chw: np.ndarray, mask_hw: np.ndarray ) -> np.ndarray:
+        """ Pad a polygon BBox with noise. Used by the line extraction method.
+
+        :param img_chw: an array (C,H,W).
+        :type img_chw: np.ndarray
+
+        :param mask_hw: a 2D Boolean mask (H,W).
+        :type mask_hw: np.ndarray
+
+        :returns: the padded image (C,H,W).
+        :rtype: np.ndarray.
+        """
+        padding_bg_chw = np.random.randint(0, 255, img_chw.shape, dtype=img_chw.dtype)
+        padding_bg_chw *= np.logical_not(mask_hw) 
+        padding_bg_chw += img_chw * mask_hw
+        return padding_bg_chw
 
 
 class PadToWidth():
