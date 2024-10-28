@@ -1272,7 +1272,6 @@ class MonasteriumDataset(VisionDataset):
         img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
         padding_bg = np.zeros( img.shape, dtype=img.dtype)
 
-        print('img.shape=', img.shape, 'mask_hw.shape=', mask_hw.shape)
         for ch in range( img.shape[0] ):
             med = np.median( img[ch][mask_hw] ).astype( img.dtype )
             padding_bg[ch] += np.logical_not(mask_hw) * med
@@ -1302,6 +1301,28 @@ class MonasteriumDataset(VisionDataset):
         mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
         padding_bg += img * mask_chw
         return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
+
+    @staticmethod
+    def bbox_zero_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
+        """ Pad a polygon BBox with zeros. Used by the line extraction method.
+
+        :param img_chw: an array (C,H,W). Optionally: (H,W,C)
+        :type img_chw: np.ndarray
+
+        :param mask_hw: a 2D Boolean mask (H,W).
+        :type mask_hw: np.ndarray
+
+        :param channel_dim: the channel dimension: 2 for (H,W,C) images. Default is 0.
+        :type channel_dim: int
+
+        :returns: the padded image, with same shape as input.
+        :rtype: np.ndarray.
+        """
+        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
+        mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
+        img_out = img * mask_chw
+        return img_out.transpose(1,2,0) if channel_dim == 2 else img_out
+
 
 
 class PadToWidth():
