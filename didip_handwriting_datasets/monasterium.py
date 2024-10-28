@@ -1299,7 +1299,8 @@ class MonasteriumDataset(VisionDataset):
         padding_bg = np.random.randint(0, 255, img.shape, dtype=img_chw.dtype)
         
         padding_bg *= np.logical_not(mask_hw) 
-        padding_bg += img_chw * mask_hw
+        mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
+        padding_bg += img * mask_chw
         return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
 
 
