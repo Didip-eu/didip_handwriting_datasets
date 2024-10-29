@@ -20,14 +20,14 @@ def data_path():
 def bbox_data_set( data_path ):
     return monasterium.MonasteriumDataset(
             task='htr', shape='bbox',
-            from_tsv_file=data_path.joinpath('bbox', 'monasterium_ds_train.tsv'),
+            from_line_tsv_file=data_path.joinpath('bbox', 'monasterium_ds_train.tsv'),
             transform=Compose([ monasterium.ResizeToHeight(300,2000), monasterium.PadToWidth(2000) ]))
 
 @pytest.fixture(scope="session")
 def polygon_data_set( data_path ):
     return monasterium.MonasteriumDataset(
             task='htr', shape='polygons',
-            from_tsv_file=data_path.joinpath('polygons', 'monasterium_ds_train.tsv'),
+            from_line_tsv_file=data_path.joinpath('polygons', 'monasterium_ds_train.tsv'),
             transform=Compose([ monasterium.ResizeToHeight(300,2000), monasterium.PadToWidth(2000) ]))
 
 @pytest.mark.parametrize(

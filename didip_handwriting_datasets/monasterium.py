@@ -1,3 +1,5 @@
+
+# stdlib
 import sys
 import warnings
 import random
@@ -5,8 +7,11 @@ import tarfile
 import json
 import shutil
 import re
+import os
 from pathlib import *
 from typing import *
+
+# 3rd-party
 from tqdm import tqdm
 import defusedxml.ElementTree as ET
 #import xml.etree.ElementTree as ET
@@ -53,40 +58,45 @@ TODO:
 """
 
 import logging
-logging.basicConfig( level=logging.INFO, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
+logging.basicConfig( level=logging.DEBUG, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
 logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
 
 
 
-class MonasteriumDataset(VisionDataset):
-    """ Dataset for charters.
+class ChartersDataset(VisionDataset):
+    """ Dataset class for charters.
 
         :param dataset_resource: 
             meta-data (URL, archive name, type of repository).
         :type dataset_resource: dict
+
+        :param work_folder_name: 
+            The work folder is where a task-specific instance of the data is created; if it not
+            passed to the constructor, a default path is constructed, using this default name.
+        :type work_folder_name: str
+
+        :param root_folder_basename:
+            The root folder contains the archive and the subfolder that is created from it. By default,
+            a folder with this name is created in the project directory, if no other path is passed
+            to the constructor.
+        :type root_folder_basename: str 
 
         :param default_alphabet:
             a many-to-one alphabet in list form, to be used if no other alphabet is passed to the initialization function.
         :type default_alphabet: list
     """
 
-    dataset_resource = {
-            #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
-            'url': r'https://drive.google.com/uc?id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
-            'tarball_filename': 'MonasteriumTekliaGTDataset.tar.gz',
-            'md5': '7d3974eb45b2279f340cc9b18a53b47a',
-            'full-md5': 'e720bac1040523380921a576f4cc89dc',
-            'desc': 'Monasterium ground truth data (Teklia)',
-            'origin': 'google',
-            'tarball_root_name': 'MonasteriumTekliaGTDataset',
-    }
+    dataset_resource = None
 
-    work_folder_name="MonasteriumHandwritingDataset"
-    root_folder_basename="Monasterium"
-   
+    """Used to construct default work directory name (when none provided) """
+    work_folder_name = "ChartersHandwritingDataset"
+    """Where the archive (if relevant) is downloaded and raw data are extracted """
+    root_folder_basename="Charters"
+    """A file with this name is added to an instance folder """ 
     alphabet_tsv_name="alphabet.tsv"
+
     default_alphabet = [' ',
                        [',', '.', ':', ';'],
                        ['-', '¬', '—'],
@@ -164,6 +174,7 @@ class MonasteriumDataset(VisionDataset):
             Where the archive is to be downloaded and the subfolder containing original files (pageXML documents and page images)
             is to be created. Default: subfolder `data/Monasterium' in this project's directory.
         :type root: str
+
         :param work_folder:
             Where line images and ground truth transcriptions fitting a particular task are to be created;
             default: '<root>/MonasteriumHandwritingDatasetHTR'; if parameter is a relative path, the work folder is created under <root>;
@@ -224,6 +235,8 @@ class MonasteriumDataset(VisionDataset):
             'noise' pads with random noise.
         :type line_padding_style: str
         """
+        if self.dataset_resource is None:
+            raise FileNotFoundError("This dataset class cannot be instantiated without a valid resource dictionary")
         
         trf = v2.PILToTensor()
         if transform:
@@ -244,19 +257,19 @@ class MonasteriumDataset(VisionDataset):
 
         self.from_line_tsv_file = ''
         if from_line_tsv_file == '':
+            # Local file system, no archive (for building datasets on the fly)
+            if from_page_xml_dir != '':
+                self.raw_data_folder_path = Path( from_page_xml_dir )
+                if not self.raw_data_folder_path.exists():
+                    raise FileNotFoundError(f"Directory {self.raw_data_folder_path} does not exist. Abort.")
+                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
             # Online archive
-            if self.dataset_resource is not None:
+            elif self.dataset_resource is not None:
                 # tarball creates its own base folder
                 self.raw_data_folder_path = self.root.joinpath( self.dataset_resource['tarball_root_name'] )
                 self.download_and_extract( self.root, self.root, self.dataset_resource, extract_pages )
                 # input PageXML files are at the root of the resulting tree
                 #        (sorting is necessary for deterministic output)
-                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
-            # Local file system
-            elif from_page_xml_dir != '':
-                self.raw_data_folder_path = Path( from_page_xml_dir )
-                if not self.raw_data_folder_path.exists():
-                    raise FileNotFoundError(f"Directory {self.raw_data_folder_path} does not exist. Abort.")
                 self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
             else:
                 raise FileNotFoundError("Could not find a dataset source!")
@@ -409,10 +422,10 @@ class MonasteriumDataset(VisionDataset):
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
                 alphabet.Alphabet( self.default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
-                #shutil.copy(self.root.joinpath( alphabet_tsv_name ), self.work_folder_path )
+                #shutil.copy(self.root.joinpath( self.alphabet_tsv_name ), self.work_folder_path )
             
             # load alphabet
-            alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( alphabet_tsv_name )
+            alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( self.alphabet_tsv_name )
             if not alphabet_tsv_input.exists():
                 raise FileNotFoundError("Alphabet file: {}".format( alphabet_tsv_input))
             logger.debug('alphabet path: {}'.format( str(alphabet_tsv_input)))
@@ -546,19 +559,25 @@ class MonasteriumDataset(VisionDataset):
         :raises OSError: the base folder does not exist.
 
         """
-        output_file_path = root.joinpath( fl_meta['tarball_filename'])
+        output_file_path = None
+        print(fl_meta)
+        # downloadable archive
+        if 'url' in fl_meta:
+            output_file_path = root.joinpath( fl_meta['tarball_filename'])
 
-        if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
-            logger.info("Downloading archive...")
-            du.resumable_download(fl_meta['url'], root, fl_meta['tarball_filename'], google=(fl_meta['origin']=='google'))
-        else:
-            logger.info("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_resource['md5']))
+            if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
+                logger.info("Downloading archive...")
+                du.resumable_download(fl_meta['url'], root, fl_meta['tarball_filename'], google=(fl_meta['origin']=='google'))
+            else:
+                logger.info("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_resource['md5']))
+        elif 'file' in fl_meta:
+            output_file_path = Path(fl_meta['file'])
 
         if not raw_data_folder_path.exists() or not raw_data_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
 
         # skip if archive already extracted (unless explicit override)
-        if not extract and du.check_extracted( raw_data_folder_path.joinpath( self.dataset_resource['tarball_root_name'] ) , fl_meta['full-md5'] ):
+        if not extract: # and du.check_extracted( raw_data_folder_path.joinpath( self.dataset_resource['tarball_root_name'] ) , fl_meta['full-md5'] ):
             logger.info('Found valid file tree in {}: skipping the extraction stage.'.format(str(raw_data_folder_path.joinpath( self.dataset_resource['tarball_root_name'] ))))
             return
         if output_file_path.suffix == '.tgz' or output_file_path.suffixes == [ '.tar', '.gz' ] :
@@ -996,7 +1015,7 @@ class MonasteriumDataset(VisionDataset):
 
             xml_id = Path( page ).stem
             img_path = Path( raw_data_folder_path, f'{xml_id}.jpg')
-            #logger.debug( img_path )
+            logger.debug( img_path )
 
             with open(page, 'r') as page_file:
 
@@ -1204,7 +1223,7 @@ class MonasteriumDataset(VisionDataset):
         if self.from_line_tsv_file:
              summary += "\nBuilt from TSV input:\t{}".format( self.from_line_tsv_file )
         if self.task == 'HTR':
-            summary += "\nAlphabet:\t{} ({} codes)".format( self.work_folder_path.joinpath(alphabet_tsv_name), len(self.alphabet))
+            summary += "\nAlphabet:\t{} ({} codes)".format( self.work_folder_path.joinpath(self.alphabet_tsv_name), len(self.alphabet))
         
         prototype_alphabet = self.get_prototype_alphabet()
 
@@ -1409,14 +1428,47 @@ class ResizeToHeight():
         
 
 
-class KoenigsfeldDataset(MonasteriumDataset):
+class MonasteriumDataset(ChartersDataset):
 
-    dataset_resource = None
+    dataset_resource = {
+            #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
+            'url': r'https://drive.google.com/uc?id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
+            'tarball_filename': 'MonasteriumTekliaGTDataset.tar.gz',
+            'md5': '7d3974eb45b2279f340cc9b18a53b47a',
+            'full-md5': 'e720bac1040523380921a576f4cc89dc',
+            'desc': 'Monasterium ground truth data (Teklia)',
+            'origin': 'google',
+            'tarball_root_name': 'MonasteriumTekliaGTDataset',
+    }
+
+    work_folder_name="MonasteriumHandwritingDataset"
+
+    root_folder_basename="Monasterium"
 
     def __init__(self, *args, **kwargs ):
 
         print(kwargs)
+        super().__init__( *args, **kwargs)
 
+
+class KoenigsfeldenDataset(ChartersDataset):
+
+    dataset_resource = {
+            'file': f"{os.getenv('HOME')}/tmp/data/koenigsfelden_abbey_1308-1662/koenigsfelden_1308-1662.tar.gz",
+            'tarball_filename': 'koenigsfelden_1308-1662.tar.gz',
+            'md5': '9326bc99f9035fb697e1b3f552748640',
+            'desc': 'Koenigsfelden ground truth data',
+            'origin': 'local',
+            'tarball_root_name': 'koenigsfelden_1308-1662',
+    }
+
+    work_folder_name="KoenigsfeldenHandwritingDataset"
+
+    root_folder_basename="Koenigsfelden"
+
+    def __init__(self, *args, **kwargs ):
+
+        print(kwargs)
         super().__init__( *args, **kwargs)
 
 
