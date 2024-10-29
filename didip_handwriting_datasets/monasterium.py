@@ -57,10 +57,6 @@ logging.basicConfig( level=logging.INFO, format="%(asctime)s - %(funcName)s: %(m
 logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
-tarball_root_name="MonasteriumTekliaGTDataset"    
-work_folder_name="MonasteriumHandwritingDataset"
-root_folder_basename="Monasterium"
-alphabet_tsv_name="alphabet.tsv"
 
 
 
@@ -68,25 +64,30 @@ alphabet_tsv_name="alphabet.tsv"
 class MonasteriumDataset(VisionDataset):
     """ Dataset for charters.
 
-        :param dataset_file: 
+        :param dataset_resource: 
             meta-data (URL, archive name, type of repository).
-        :type dataset_file: dict
+        :type dataset_resource: dict
 
         :param default_alphabet:
             a many-to-one alphabet in list form, to be used if no other alphabet is passed to the initialization function.
         :type default_alphabet: list
     """
 
-    dataset_file = {
+    dataset_resource = {
             #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
             'url': r'https://drive.google.com/uc?id=1hEyAMfDEtG0Gu7NMT7Yltk_BAxKy_Q4_',
-            'filename': 'MonasteriumTekliaGTDataset.tar.gz',
+            'tarball_filename': 'MonasteriumTekliaGTDataset.tar.gz',
             'md5': '7d3974eb45b2279f340cc9b18a53b47a',
             'full-md5': 'e720bac1040523380921a576f4cc89dc',
             'desc': 'Monasterium ground truth data (Teklia)',
             'origin': 'google',
+            'tarball_root_name': 'MonasteriumTekliaGTDataset',
     }
 
+    work_folder_name="MonasteriumHandwritingDataset"
+    root_folder_basename="Monasterium"
+   
+    alphabet_tsv_name="alphabet.tsv"
     default_alphabet = [' ',
                        [',', '.', ':', ';'],
                        ['-', '¬', '—'],
@@ -149,7 +150,8 @@ class MonasteriumDataset(VisionDataset):
                 transform: Optional[Callable] = None,
                 target_transform: Optional[Callable] = None,
                 extract_pages: bool = False,
-                from_tsv_file: str = '',
+                from_line_tsv_file: str = '',
+                from_page_xml_dir: str = '',
                 build_items: bool = True,
                 task: str = '',
                 shape: str = '',
@@ -204,10 +206,10 @@ class MonasteriumDataset(VisionDataset):
             just extract the original data from the archive.
         :type build_items: bool
 
-        :param from_tsv_file: 
+        :param from_line_tsv_file: 
             TSV file from which the data are to be loaded (containing folder is assumed to be the work folder,
             superceding the work_folder option).
-        :type from_tsv_file: str
+        :type from_line_tsv_file: str
 
         :param count: 
             Stops after extracting {count} image items (for testing purpose only).
@@ -230,27 +232,35 @@ class MonasteriumDataset(VisionDataset):
 
         super().__init__(root, transform=trf, target_transform=target_transform )
 
-        self.root = Path(root) if root else Path(__file__).parent.joinpath('data', root_folder_basename)
+        self.root = Path(root) if root else Path(__file__).parent.joinpath('data', self.root_folder_basename)
         logger.debug("Root folder: {}".format( self.root ))
         if not self.root.exists():
             self.root.mkdir( parents=True )
             logger.debug("Create root path: {}".format(self.root))
 
         self.work_folder_path = None # task-dependent
-        # tarball creates its own base folder
-        self.raw_data_folder_path = self.root.joinpath( tarball_root_name )
 
-        self.from_tsv_file = ''
-        if from_tsv_file == '':
-            self.download_and_extract( self.root, self.root, self.dataset_file, extract_pages)
+        self.from_line_tsv_file = ''
+        if from_line_tsv_file == '':
+            # Online archive
+            if self.dataset_resource is not None:
+                # tarball creates its own base folder
+                self.raw_data_folder_path = self.root.joinpath( self.dataset_resource['tarball_root_name'] )
+                self.download_and_extract( self.root, self.root, self.dataset_resource, extract_pages )
+                # input PageXML files are at the root of the resulting tree
+                #        (sorting is necessary for deterministic output)
+                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
+            # Local file system
+            elif from_page_xml_dir != '':
+                self.raw_data_folder_path = Path( from_page_xml_dir )
+                if not self.raw_data_folder_path.exists():
+                    raise FileNotFoundError(f"Directory {self.raw_data_folder_path} does not exist. Abort.")
+                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
         else:
             # used only by __str__ method
-            self.from_tsv_file = from_tsv_file
+            self.from_line_tsv_file = from_line_tsv_file
 
-        # input PageXML files are at the root of the resulting tree
-        # (sorting is necessary for deterministic output)
-        self.pagexmls = sorted( Path(self.root, tarball_root_name ).glob('*.xml'))
-
+        # bbox or polygons
         self.shape = shape
 
         self.data = []
@@ -261,8 +271,8 @@ class MonasteriumDataset(VisionDataset):
         self._task = ''
         if (task != ''):
             self._task = task # for self-documentation only
-            build_ok = build_items if from_tsv_file == '' else False
-            self._build_task( task, build_items=build_ok, from_tsv_file=from_tsv_file, 
+            build_ok = build_items if from_line_tsv_file == '' else False
+            self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, 
                              alphabet_tsv=alphabet_tsv, line_padding_style=line_padding_style )
@@ -272,7 +282,7 @@ class MonasteriumDataset(VisionDataset):
     def _build_task( self, 
                    task: str='htr',
                    build_items: bool=True, 
-                   from_tsv_file: str='',
+                   from_line_tsv_file: str='',
                    subset: str='train', 
                    subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
                    count: int=0, 
@@ -296,10 +306,10 @@ class MonasteriumDataset(VisionDataset):
             if True (default), extract and store images for the task from the pages;
         :type build_items: bool
 
-        :param from_tsv_file: 
+        :param from_line_tsv_file: 
             TSV file from which the data are to be loaded (containing folder is
                                  assumed to be the work folder, superceding the work_folder option). (Default value = '')
-        :type from_tsv_file: str
+        :type from_line_tsv_file: str
 
         :param subset: 
             'train', 'validate' or 'test'. (Default value = 'train')
@@ -334,7 +344,7 @@ class MonasteriumDataset(VisionDataset):
 
         :rtype: None
 
-        :raises FileNotFoundError: the TSV file passed to the `from_tsv_file` option does not exist, or
+        :raises FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist, or
                the specified TSV alphabet does not exist.
 
         """
@@ -346,8 +356,8 @@ class MonasteriumDataset(VisionDataset):
             # create from existing TSV files - passed directory that contains:
             # + image to GT mapping (TSV)
             # + alphabet.tsv
-            if from_tsv_file != '':
-                tsv_path = Path( from_tsv_file )
+            if from_line_tsv_file != '':
+                tsv_path = Path( from_line_tsv_file )
                 if tsv_path.exists():
                     self.work_folder_path = tsv_path.parent
                     # paths are assumed to be absolute
@@ -360,7 +370,7 @@ class MonasteriumDataset(VisionDataset):
 
             else:
                 if work_folder=='':
-                    self.work_folder_path = Path(self.root, work_folder_name+'HTR') 
+                    self.work_folder_path = Path(self.root, self.work_folder_name+'HTR') 
                     logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
                 else:
                     # if work folder is an absolute path, it overrides the root
@@ -388,7 +398,7 @@ class MonasteriumDataset(VisionDataset):
                 self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
                         { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
-                          'task': task, 'crop': crop, 'count': count, 'from_tsv_file': from_tsv_file,
+                          'task': task, 'crop': crop, 'count': count, 'from_line_tsv_file': from_line_tsv_file,
                           'work_folder': work_folder, 'alphabet_tsv': alphabet_tsv, 
                           'line_padding_style': line_padding_style} )
 
@@ -406,7 +416,7 @@ class MonasteriumDataset(VisionDataset):
                 
 
         elif task == 'segment':
-            self.work_folder_path = Path('.', work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
+            self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
                 self.work_folder_path.mkdir(parents=True) 
 
@@ -532,20 +542,20 @@ class MonasteriumDataset(VisionDataset):
         :raises OSError: the base folder does not exist.
 
         """
-        output_file_path = root.joinpath( fl_meta['filename'])
+        output_file_path = root.joinpath( fl_meta['tarball_filename'])
 
         if 'md5' not in fl_meta or not du.is_valid_archive(output_file_path, fl_meta['md5']):
             logger.info("Downloading archive...")
-            du.resumable_download(fl_meta['url'], root, fl_meta['filename'], google=(fl_meta['origin']=='google'))
+            du.resumable_download(fl_meta['url'], root, fl_meta['tarball_filename'], google=(fl_meta['origin']=='google'))
         else:
-            logger.info("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_file['md5']))
+            logger.info("Found valid archive {} (MD5: {})".format( output_file_path, self.dataset_resource['md5']))
 
         if not raw_data_folder_path.exists() or not raw_data_folder_path.is_dir():
             raise OSError("Base folder does not exist! Aborting.")
 
         # skip if archive already extracted (unless explicit override)
-        if not extract and du.check_extracted( raw_data_folder_path.joinpath( tarball_root_name ) , fl_meta['full-md5'] ):
-            logger.info('Found valid file tree in {}: skipping the extraction stage.'.format(str(raw_data_folder_path.joinpath( tarball_root_name ))))
+        if not extract and du.check_extracted( raw_data_folder_path.joinpath( self.dataset_resource['tarball_root_name'] ) , fl_meta['full-md5'] ):
+            logger.info('Found valid file tree in {}: skipping the extraction stage.'.format(str(raw_data_folder_path.joinpath( self.dataset_resource['tarball_root_name'] ))))
             return
         if output_file_path.suffix == '.tgz' or output_file_path.suffixes == [ '.tar', '.gz' ] :
             with tarfile.open(output_file_path, 'r:gz') as archive:
@@ -679,7 +689,7 @@ class MonasteriumDataset(VisionDataset):
         :param metadata_format: 
             'xml' (default) or 'json'
         :type metadata_format: str
-
+)
         :returns: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
         :rtype: List[Tuple[str,str]]
 
@@ -1176,35 +1186,37 @@ class MonasteriumDataset(VisionDataset):
             return "Segmentation"
         return "None defined."
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
 
-        summary = (f"Root folder:\t{self.root}\n"
-                    f"Files extracted in:\t{self.root.joinpath(tarball_root_name)}\n"
-                    f"Task: {self.task}\n"
-                    f"Line shape: {self.shape}\n"
-                    f"Work folder:\t{self.work_folder_path}\n"
-                    f"Data points:\t{len(self.data)}\n"
-                    "Stats:\n"
-                    f"{self.dataset_stats( self.data )}\n")
-        if self.from_tsv_file:
-             summary += "\nBuilt from TSV input:\t{}".format( self.from_tsv_file )
+        summary = '\n'.join([
+                    f"Root folder:\t{self.root}",
+                    f"Files extracted in:\t{self.raw_data_folder_path}",
+                    f"Task: {self.task}",
+                    f"Line shape: {self.shape}",
+                    f"Work folder:\t{self.work_folder_path}",
+                    f"Data points:\t{len(self.data)}",
+                    "Stats:",
+                    f"{self.dataset_stats(self.data)}" if self.data else 'No data',])
+        if self.from_line_tsv_file:
+             summary += "\nBuilt from TSV input:\t{}".format( self.from_line_tsv_file )
         if self.task == 'HTR':
             summary += "\nAlphabet:\t{} ({} codes)".format( self.work_folder_path.joinpath(alphabet_tsv_name), len(self.alphabet))
         
         prototype_alphabet = self.get_prototype_alphabet()
 
-        summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes."
+        if prototype_alphabet is not None:
+            summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes." 
         
-        symbols_shared = self.alphabet.symbol_intersection( prototype_alphabet )
-        symbols_only_here, symbols_only_prototype = self.alphabet.symbol_differences( prototype_alphabet )
+            symbols_shared = self.alphabet.symbol_intersection( prototype_alphabet )
+            symbols_only_here, symbols_only_prototype = self.alphabet.symbol_differences( prototype_alphabet )
 
 
-        summary += f"\n + Dataset alphabet shares {len(symbols_shared)} symbols with a data-generated charset."
-        summary += f"\n + Dataset alphabet and a data-generated charset are identical: {self.alphabet == prototype_alphabet}"
-        if symbols_only_here:
-            summary += f"\n + Dataset alphabet's symbols that are not in a data-generated charset: {symbols_only_here}"
-        if symbols_only_prototype:
-            summary += f"\n + Data-generated charset's symbols that are not in the dataset alphabet: {symbols_only_prototype}"
+            summary += f"\n + Dataset alphabet shares {len(symbols_shared)} symbols with a data-generated charset."
+            summary += f"\n + Dataset alphabet and a data-generated charset are identical: {self.alphabet == prototype_alphabet}"
+            if symbols_only_here:
+                summary += f"\n + Dataset alphabet's symbols that are not in a data-generated charset: {symbols_only_here}"
+            if symbols_only_prototype:
+                summary += f"\n + Data-generated charset's symbols that are not in the dataset alphabet: {symbols_only_prototype}"
 
         return ("\n________________________________\n"
                 f"\n{summary}"
