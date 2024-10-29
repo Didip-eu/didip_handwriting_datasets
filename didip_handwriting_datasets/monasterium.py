@@ -60,7 +60,6 @@ logger = logging.getLogger(__name__)
 
 
 
-
 class MonasteriumDataset(VisionDataset):
     """ Dataset for charters.
 
@@ -232,6 +231,9 @@ class MonasteriumDataset(VisionDataset):
 
         super().__init__(root, transform=trf, target_transform=target_transform )
 
+        print( "from_page_xml_dir=", from_page_xml_dir )
+        print( "self.dataset_resource=", self.dataset_resource)
+
         self.root = Path(root) if root else Path(__file__).parent.joinpath('data', self.root_folder_basename)
         logger.debug("Root folder: {}".format( self.root ))
         if not self.root.exists():
@@ -256,6 +258,8 @@ class MonasteriumDataset(VisionDataset):
                 if not self.raw_data_folder_path.exists():
                     raise FileNotFoundError(f"Directory {self.raw_data_folder_path} does not exist. Abort.")
                 self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
+            else:
+                raise FileNotFoundError("Could not find a dataset source!")
         else:
             # used only by __str__ method
             self.from_line_tsv_file = from_line_tsv_file
@@ -1403,6 +1407,17 @@ class ResizeToHeight():
 
         return transformed_sample
         
+
+
+class KoenigsfeldDataset(MonasteriumDataset):
+
+    dataset_resource = None
+
+    def __init__(self, *args, **kwargs ):
+
+        print(kwargs)
+
+        super().__init__( *args, **kwargs)
 
 
 
