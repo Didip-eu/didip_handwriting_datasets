@@ -88,12 +88,30 @@ class ChartersDataset(VisionDataset):
      task-specific work folder, as well as a corresponding TSV file mapping images to their sizes
      and transcriptions.
 
-    * if a folder already contains line images `%.png` and transcriptions `%.gt.txt`, the 
-    `-from_tsv_file` option builds a dataset out of the files listed in the provided TSV file---it
-    may be just a subset of the files contained in the directory. This folder implicitly becomes
-    the work folder. A single work folder can be used to construct different sample sets:
-    just provide different TSV files for each. A typical use is to create train, validation, 
-    and test TSV specs, out of a single set of physical image/GT files.
+    * if a folder already contains line images `%.png` and transcriptions `%.gt.txt`, any TSV file
+      that lists all or part of those files may be used to create a working dataset:
+        
+        * if the TSV file does not exist, create it from existing line items as shown here:
+        
+          .. code-block::
+
+              >>> trainDS = mom.ChartersDataset(task='htr', build_items=False, subset='train', subset_ratios=(.85,.05,.1))
+
+           The `build_items=False` option ensures that the (costly) line extraction routine does not run.
+           The provided subset ratios allow to define which proportion of the existing files
+           should go into respectively the 'train', 'validate', and 'test' sets. (All 3
+           sets are distinct, no matter what.)
+
+        * in order to reuse an existing TSV dataset definition, use the `-from_line_tsv_file` option:
+          it builds a sample set out of the files listed in the provided TSV file---it
+          may reference any subset of the files contained in the parent directory, which
+          implicitly becomes the work folder for the task.  A single work folder can be used to
+          construct different sample sets: just provide different TSV files for each. A typical use
+          is to create train, validation, and test TSV specs, out of a single set of physical image/GT files.
+
+          .. code-block::
+
+              >>> trainDS = mom.ChartersDataset(task='htr', from_line_tsv_file='myCustomSet.tsv')
 
 
     ===============================================
@@ -295,7 +313,8 @@ class ChartersDataset(VisionDataset):
         :type resume_task: bool
         """
 
-        if self.dataset_resource is None:
+        # A dataset resource dictionary needed, unless we build from existing files
+        if self.dataset_resource is None and not (from_page_xml_dir or from_line_tsv_file):
             raise FileNotFoundError("This dataset class cannot be instantiated without a valid resource dictionary")
         
         trf = v2.PILToTensor()
@@ -313,6 +332,7 @@ class ChartersDataset(VisionDataset):
             self.root.mkdir( parents=True )
             logger.debug("Create root path: {}".format(self.root))
 
+        self.raw_data_folder_path = None
         self.work_folder_path = None # task-dependent
 
         self.from_line_tsv_file = ''
