@@ -167,6 +167,7 @@ class ChartersDataset(VisionDataset):
                 count: int = 0,
                 alphabet_tsv: str = None,
                 line_padding_style: str = 'median',
+                resume_task: bool = False
                 ) -> None:
         """Initialize a dataset instance.
 
@@ -234,7 +235,13 @@ class ChartersDataset(VisionDataset):
             the polygon: 'median' (default) pads with the median value of the polygon; 
             'noise' pads with random noise.
         :type line_padding_style: str
+
+        :param resume_task:
+            If True, the work folder is not purged. Only those page items (lines, regions) that not already 
+            in the work folder are extracted. (Partially implemented: works only for lines.)
+        :type resume_task: bool
         """
+
         if self.dataset_resource is None:
             raise FileNotFoundError("This dataset class cannot be instantiated without a valid resource dictionary")
         
@@ -285,6 +292,8 @@ class ChartersDataset(VisionDataset):
         # Used only for HTR tasks: initialized by _build_task()
         self.alphabet = None
 
+        self.resume_task = resume_task
+
         self._task = ''
         if (task != ''):
             self._task = task # for self-documentation only
@@ -292,7 +301,8 @@ class ChartersDataset(VisionDataset):
             self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, 
-                             alphabet_tsv=alphabet_tsv, line_padding_style=line_padding_style )
+                             alphabet_tsv=alphabet_tsv, 
+                             line_padding_style=line_padding_style,)
 
             logger.debug("data={}".format( self.data[:6]))
 
@@ -718,7 +728,9 @@ class ChartersDataset(VisionDataset):
 
         """
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
-        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+
+        if not self.resume_task:
+            self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         items = []
 
@@ -770,7 +782,9 @@ class ChartersDataset(VisionDataset):
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
-        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+
+        if not self.resume_task:
+            self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         cnt = 0 # for testing purpose
 
@@ -1002,7 +1016,9 @@ class ChartersDataset(VisionDataset):
         warnings.simplefilter("error", Image.DecompressionBombWarning)
 
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
-        self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+
+        if not self.resume_task:
+            self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
 
         gt_lengths = []
         img_sizes = []
@@ -1039,7 +1055,10 @@ class ChartersDataset(VisionDataset):
 
                     textline = dict()
                     textline['id']=textline_elt.get("id")
-                    transcription = textline_elt.find('./pc:TextEquiv', ns).find('./pc:Unicode', ns).text
+                    transcription_element = textline_elt.find('./pc:TextEquiv', ns)
+                    if transcription_element is None:
+                        continue
+                    transcription = transcription_element.find('./pc:Unicode', ns).text
 
                     if not transcription or re.match(r'\s+$', transcription):
                         continue
@@ -1059,14 +1078,16 @@ class ChartersDataset(VisionDataset):
                     
                     img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textline['id']}" )
                     textline['img_path'] = img_path_prefix.with_suffix('.png')
+
                     textline['polygon'] = None
 
                     #logger.debug("_extract_lines():", samples[-1])
-                    if not text_only:
+                    if not text_only: 
                         bbox_img = page_image.crop( textline['bbox'] )
 
                         if shape=='bbox':
-                            bbox_img.save( textline['img_path'] )
+                            if not (self.resume_task and textline['img_path'].exists()):
+                                bbox_img.save( textline['img_path'] )
 
                         else:
                             # Image -> (C,H,W) array
@@ -1074,13 +1095,13 @@ class ChartersDataset(VisionDataset):
                             # 2D Boolean polygon mask, from points
                             leftx, topy = textline['bbox'][:2]
                             transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ])[:,::-1]
-                            boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
-                            # Pad around the polygon
-                            img_chw = padding_func( img_chw, boolean_mask )
-
                             textline['polygon']=transposed_coordinates
 
-                            Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
+                            if not (self.resume_task and textline['img_path'].exists()):
+                                boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
+                                # Pad around the polygon
+                                img_chw = padding_func( img_chw, boolean_mask )
+                                Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
 
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
