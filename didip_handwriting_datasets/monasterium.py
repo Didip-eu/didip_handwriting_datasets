@@ -56,19 +56,56 @@ class ChartersDataset(VisionDataset):
     """ A generic dataset class for charters, equipped with a rich set of methods for both HTR and segmentation tasks:
 
     + region and line/transcription extraction methods (from original page images and XML metadata)
-    + commonly-used transforms, both for producing (static) line images and for use in getitem()
+    + commonly-used transforms, for use in getitem()
     + default alphabet
 
-    Although this class can be instantiated directly, it will not accomplish anything unless the `dataset_resource`
-    class attribute (a dictionary) is set properly. For all practical purposes, it is recommended to subclas it:
-    see below in this module for examples (`MonasteriumDataset` and `KoenigsfeldenDataset` classes).
+    =============
+    How to use
+    =============
+
+    ------------------------------------------------------
+    Working from an existing dataset archive → subclassing
+    ------------------------------------------------------
+
+    This is probably the most common use of the `ChartersDataset` class: assuming that the dataset 
+    is provided as an archive of page images and their metadata, that we want to keep 
+    separate from other sources, we create a subclass with the appropriate archive metadata
+    (the `dataset_resource` class attribute), as illustrated by the `MonasteriumDataset` and
+    `KoenigsfeldenDataset` classes below in this module. Setting a couple of class attributes
+    allows for specific default root and work directories to be created, with no risk of overriding
+    an existing folder.
+
+        
+    ----------------------------------------------------------------------------
+    Create a dataset from arbitrary pages or line items -> direct instantiation  
+    ----------------------------------------------------------------------------
+
+    Assuming that a directory already contains some data (whose provenance does not matter), we want to
+    create a dataset object that is fit for training or inference tasks:
+
+    * if the directory contains page images `%.jpg` and their corresponding PageXML metadata `%.xml`,
+     the `-from_page_xml_dir` option allows for building the line images and transcriptions into a
+     task-specific work folder, as well as a corresponding TSV file mapping images to their sizes
+     and transcriptions.
+
+    * if a folder already contains line images `%.png` and transcriptions `%.gt.txt`, the 
+    `-from_tsv_file` option builds a dataset out of the files listed in the provided TSV file---it
+    may be just a subset of the files contained in the directory. This folder implicitly becomes
+    the work folder. A single work folder can be used to construct different sample sets:
+    just provide different TSV files for each. A typical use is to create train, validation, 
+    and test TSV specs, out of a single set of physical image/GT files.
+
+
+    ===============================================
+    Directories: root, raw data, and work folders
+    ===============================================
 
     The workflow assumes the following directory structure: 
 
-    + `root`: where datasets archives are to be downloaded (default: the 'data' subfolder in this package directory).
-    + `root/<raw data folder>` : where content of the original archive is to be extracted (i.e. a subdirectory 
+    * `root`: where datasets archives are to be downloaded (default: the 'data' subfolder in this package directory).
+    * `root/<raw data folder>` : where content of the original archive is to be extracted (i.e. a subdirectory 
       `MonasteriumTekliaGTDataset` containing all image files)
-    + `work_folder`: where to create the dataset to be used for given task (segmentation or htr)
+    * `work_folder`: where to create the dataset to be used for given task (segmentation or htr)
 
     The first two directories can be created with a 'no-task' (default) initialization and forcing the archive extraction:
 
