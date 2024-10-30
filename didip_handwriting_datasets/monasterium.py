@@ -40,21 +40,8 @@ class DataException( Exception ):
 
 
 """
-Generate image/GT pairs for Monasterium transcriptions. This is a multi-use, generic dataset class, that can be used to generate
+Utility classes to manage charter data.
 
-- line-segmentation dataset
-- HTR dataset: Extract line polygons from each image and their respective transcriptions from the PageXML file
-
-
-Directory structure for local file storage:
-
-- root: where datasets archives are to be downloaded
-- root/<raw data folder> : where archives are to be extracted (i.e. a subdirectory 'MonasteriumTekliaGTDataset' containing all image files)
-- work_folder: where to create the dataset to be used for given task (segmentation or htr)
-
-TODO:
-
-- dataset splitting should return 3 sets together? 
 """
 
 import logging
@@ -66,7 +53,36 @@ logger = logging.getLogger(__name__)
 
 
 class ChartersDataset(VisionDataset):
-    """ Dataset class for charters.
+    """ A generic dataset class for charters, equipped with a rich set of methods for both HTR and segmentation tasks:
+
+    + region and line/transcription extraction methods (from original page images and XML metadata)
+    + commonly-used transforms, both for producing (static) line images and for use in getitem()
+    + default alphabet
+
+    Although this class can be instantiated directly, it will not accomplish anything unless the `dataset_resource`
+    class attribute (a dictionary) is set properly. For all practical purposes, it is recommended to subclas it:
+    see below in this module for examples (`MonasteriumDataset` and `KoenigsfeldenDataset` classes).
+
+    The workflow assumes the following directory structure: 
+
+    + `root`: where datasets archives are to be downloaded (default: the 'data' subfolder in this package directory).
+    + `root/<raw data folder>` : where content of the original archive is to be extracted (i.e. a subdirectory 
+      `MonasteriumTekliaGTDataset` containing all image files)
+    + `work_folder`: where to create the dataset to be used for given task (segmentation or htr)
+
+    The first two directories can be created with a 'no-task' (default) initialization and forcing the archive extraction:
+
+    .. code-block:: python
+
+        >>> ChartersDataset(extract=True)
+    
+    The following call leaves the first two folders untouched and uses their data to build a task-specific instance:
+
+    .. code-block:: python
+
+        >>> myHtrDs = ChartersDataset(task='htr')
+
+
 
         :param dataset_resource: 
             meta-data (URL, archive name, type of repository).
@@ -527,6 +543,7 @@ class ChartersDataset(VisionDataset):
         :param filename: 
             a filepath. 
         :type filename: str
+
         :param params: 
             dictionary of parameters passed to the dataset task builder.
         :type params: dict
@@ -554,12 +571,15 @@ class ChartersDataset(VisionDataset):
         :param root: 
             where to save the archive
         :type root: Path
+
         :param raw_data_folder_path: 
             where to extract the archive.
         :type raw_data_folder_path: Path
+
         :param fl_meta: 
             a dictionary with file meta-info (keys: url, filename, md5, full-md5, origin, desc)
         :type fl_meta: dict
+
         :param extract:
             If False (default), skip archive extraction step.
         :type extract: bool
@@ -628,9 +648,11 @@ class ChartersDataset(VisionDataset):
         :param samples: 
             dataset samples.
         :type samples: List[dict]
+
         :param file_path: 
             A TSV (absolute) file path (Default value = '')
         :type file_path: str
+
         :param all_path_style: 
             list GT file name instead of GT content. (Default value = False)
         :type all_path_style: bool
@@ -710,22 +732,26 @@ class ChartersDataset(VisionDataset):
         :param raw_data_folder_path: 
             root of the (read-only) expanded archive.
         :type raw_data_folder_path: Path
+
         :param work_folder_path: 
             Line images are extracted in this subfolder (relative to the caller's pwd).
         :type work_folder_path: Path
+
         :param text_only: 
             If True, only generate the transcription files; default is False.
         :type text_only: bool
+
         :param count: 
             Stops after extracting {count} images (for testing purpose). (Default value = 0)
         :type count: int
+
         :param metadata_format: 
             'xml' (default) or 'json'
         :type metadata_format: str
 )
         :returns: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
         :rtype: List[Tuple[str,str]]
-
+        
         """
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
 
@@ -756,27 +782,31 @@ class ChartersDataset(VisionDataset):
                               count=0, 
                               metadata_format:str='xml') -> List[Tuple[str, str]]:
         """Crop text regions from original files, and create a new dataset for segmentation where the text
-        region image has a corresponding, new PageXML decriptor.
+           region image has a corresponding, new PageXML decriptor.
 
         :param raw_data_folder_path:
             root of the (read-only) expanded archive.
         :type raw_data_folder_path: Path
+
         :param work_folder_path:
             Line images are extracted in this subfolder (relative to the caller's pwd).
         :type work_folder_path: Path
+
         :param text_only: 
             if True, only generate the GT text files. Default: False.
         :type text_only: bool
+
         :param count:
             Stops after extracting {count} images (for testing purpose). (Default value = 0)
         :type count: int
+
         :param metadata_format: 
             `'xml'` (default) or `'json'`
         :type metadata_format: str
 
         :returns: a list of pairs `(img_file_path, transcription)`
         :rtype: List[Tuple[str,str]]
-
+        
         """
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -856,6 +886,7 @@ class ChartersDataset(VisionDataset):
         :param page:
             path to the PageXML file.
         :type page: str
+
         :param region_id: 
             id attribute of the region element in the PageXML file
         :type region_id: str
@@ -915,9 +946,11 @@ class ChartersDataset(VisionDataset):
         :param page: 
             path of the pageXML file to generate.
         :type page: str
+
         :param ns: 
             namespace.
         :type ns: str
+
         :param textregion: 
             a dictionary of text region attributes.
         :type textregion: dict
@@ -1450,6 +1483,11 @@ class ResizeToHeight():
 
 
 class MonasteriumDataset(ChartersDataset):
+    """ A subset of Monasterium charter images and their meta-data (PageXML).
+    
+    + its core is a set of charters segmented and transcribed by various contributors, mostly by correcting Transkribus-generated data.
+    + it has vocation to grow through in-house, DiDip-produced transcriptions.
+    """
 
     dataset_resource = {
             #'url': r'https://cloud.uni-graz.at/apps/files/?dir=/DiDip%20\(2\)/CV/datasets&fileid=147916877',
@@ -1473,6 +1511,9 @@ class MonasteriumDataset(ChartersDataset):
 
 
 class KoenigsfeldenDataset(ChartersDataset):
+    """ A subset of charters from the Koenigsfelden abbey, covering a wide range of handwriting style.
+    The data have been compiled from raw Transkribus exports.
+    """
 
     dataset_resource = {
             'file': f"{os.getenv('HOME')}/tmp/data/koenigsfelden_abbey_1308-1662/koenigsfelden_1308-1662.tar.gz",
