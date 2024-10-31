@@ -129,13 +129,13 @@ class ChartersDataset(VisionDataset):
 
     .. code-block:: python
 
-        >>> ChartersDataset(extract=True)
+        >>> ChartersDataset( extract_pages=True )
     
     The following call leaves the first two folders untouched and uses their data to build a task-specific instance:
 
     .. code-block:: python
 
-        >>> myHtrDs = ChartersDataset(task='htr')
+        >>> myHtrDs = ChartersDataset( task='htr' )
 
 
 
