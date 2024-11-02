@@ -168,59 +168,7 @@ class ChartersDataset(VisionDataset):
     """A file with this name is added to an instance folder """ 
     alphabet_tsv_name="alphabet.tsv"
 
-    default_alphabet = [' ',
-                       [',', '.', ':', ';'],
-                       ['-', '¬', '—'],
-                       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-                       ['A', 'Á', 'Â', 'Ã', 'Ä', 'Å', 'Æ', 'Ă', 'Ą'],
-                       'B',
-                       ['C', 'Ç', 'Ć', 'Ĉ', 'Ċ', 'Č'],
-                       ['D', 'Ð', 'Ď', 'Đ'],
-                       ['E', 'È', 'É', 'Ê', 'Ë', 'Ē', 'Ĕ', 'Ė', 'Ę', 'Ě'],
-                       'F',
-                       ['G', 'Ĝ', 'Ğ', 'Ġ', 'Ģ'],
-                       ['H', 'Ĥ', 'Ħ'],
-                       ['I', 'J', 'Ì', 'Í', 'Î', 'Ï', 'Ĩ', 'Ī', 'Ĭ', 'Į', 'İ', 'Ĳ', 'Ĵ'],
-                       ['K', 'Ķ'],
-                       ['L', 'Ĺ', 'Ļ', 'Ľ', 'Ŀ', 'Ł'],
-                       'M',
-                       ['N', 'Ñ', 'Ń', 'Ņ', 'Ň', 'Ŋ'],
-                       ['O', 'Ò', 'Ó', 'Ô', 'Õ', 'Ö', 'Ō', 'Ŏ', 'Ő', 'Œ'],
-                       'P',
-                       'Q',
-                       ['R', 'Ŕ', 'Ŗ', 'Ř'],
-                       ['S', 'ß', 'Ś', 'Ŝ', 'Ş', 'Š'],
-                       ['T', 'Ţ', 'Ť', 'Ŧ'],
-                       ['U', 'V', 'Ù', 'Ú', 'Û', 'Ü', 'Ũ', 'Ū', 'Ŭ', 'Ů', 'Ű', 'Ų'],
-                       ['W', 'Ŵ'],
-                       'X',
-                       ['Y', 'Ŷ', 'Ÿ'],
-                       ['Z', 'Ź', 'Ż', 'Ž'],
-                       ['a', 'á', 'â', 'ã', 'ä', 'å', 'æ', 'ā', 'ă', 'ą'],
-                       'b',
-                       ['c', 'ç', 'ć', 'ĉ', 'ċ', 'č'],
-                       ['d', 'ð', 'ď', 'đ'],
-                       ['e', 'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě'],
-                       'f',
-                       ['g', 'ĝ', 'ğ', 'ġ', 'ģ'],
-                       ['h', 'ĥ', 'ħ'],
-                       ['i', 'j', 'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı', 'ĳ', 'ĵ'],
-                       ['k', 'ķ', 'ĸ'],
-                       ['l', 'ĺ', 'ļ', 'ľ', 'ŀ', 'ł'],
-                       'm',
-                       ['n', 'ñ', 'ń', 'ņ', 'ň', 'ŉ', 'ŋ'],
-                       ['o', 'ò', 'ó', 'ô', 'õ', 'ö', 'ō', 'ŏ', 'ő', 'œ'],
-                       'p',
-                       'q',
-                       ['r', 'ŕ', 'ŗ', 'ř'],
-                       ['s', 'ś', 'ŝ', 'ş', 'š'],
-                       ['t', 'ţ', 'ť', 'ŧ'],
-                       ['u', 'v', 'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų'],
-                       ['w', 'ŵ'],
-                       'x',
-                       ['y', 'ý', 'ÿ', 'ŷ'],
-                       ['z', 'ź', 'ż', 'ž']]
-
+    default_alphabet = alphabet.Alphabet.prototype_from_scratch( exclude=["Hebrew","Diacritic","Parenthesis",], unknown='&' )
 
     def __init__( self,
                 root: str='',
@@ -481,7 +429,7 @@ class ChartersDataset(VisionDataset):
                     self.work_folder_path.mkdir(parents=True)
                     logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
-                # samples: all of them! (Splitting into subset happens in a ulterior step.)
+                # samples: all of them! (Splitting into subsets happens in an ulterior step.)
                 if build_items:
                     samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, 
                                                     count=count, shape=self.shape,
@@ -1282,6 +1230,7 @@ class ChartersDataset(VisionDataset):
         # - dimensions of transformed image ('height' and 'width')
         # 
         sample = self.data[index].copy()
+        sample['transcription']=self.target_transform( sample['transcription'] )
         sample['img'] = Image.open( img_path, 'r')
         # if resized, should store new height and width
         sample = self.transform( sample )
@@ -1375,15 +1324,15 @@ class ChartersDataset(VisionDataset):
                 )
 
 
-    @classmethod
-    def get_default_alphabet( cls ) -> alphabet.Alphabet:
+    @property
+    def default_alphabet( cls ) -> alphabet.Alphabet:
         """Return an instance of the default alphabet.
 
         :returns: alphabet.Alphabet: an alphabet instance.
         :rtype: alphabet.Alphabet
 
         """
-        return alphabet.Alphabet( cls.default_alphabet )
+        return alphabet.Alphabet.prototype_from_scratch()
 
 
     def get_prototype_alphabet( self ) -> alphabet.Alphabet:
@@ -1563,7 +1512,6 @@ class MonasteriumDataset(ChartersDataset):
 
     def __init__(self, *args, **kwargs ):
 
-        print(kwargs)
         super().__init__( *args, **kwargs)
 
 
@@ -1587,8 +1535,14 @@ class KoenigsfeldenDataset(ChartersDataset):
 
     def __init__(self, *args, **kwargs ):
 
-        print(kwargs)
         super().__init__( *args, **kwargs)
+
+        self.target_transform = self.filter_transcription
+
+    def filter_transcription( transcription:str ):
+        pass
+
+
 
 
 
