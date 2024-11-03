@@ -55,9 +55,9 @@ logger = logging.getLogger(__name__)
 class ChartersDataset(VisionDataset):
     """ A generic dataset class for charters, equipped with a rich set of methods for both HTR and segmentation tasks:
 
-    + region and line/transcription extraction methods (from original page images and XML metadata)
-    + commonly-used transforms, for use in getitem()
-    + default alphabet
+    * region and line/transcription extraction methods (from original page images and XML metadata)
+    * commonly-used transforms, for use in getitem()
+    * default alphabet
 
     =============
     How to use
@@ -75,6 +75,16 @@ class ChartersDataset(VisionDataset):
     allows for specific default root and work directories to be created, with no risk of overriding
     an existing folder.
 
+    As an example, the following line decompresses all images and pageXML files contained in the Koenigsfelden
+    archive into a Koenigsfelden root folder:
+
+    .. code-block::
+
+        >>> monasterium.KoenigsfeldenDataset(extract_pages=True)
+
+    (Since the archive extraction stage may takes a few minutes, the default is to assume that it has already
+    been decompressed.)
+
         
     ----------------------------------------------------------------------------
     Create a dataset from arbitrary pages or line items -> direct instantiation  
@@ -83,12 +93,12 @@ class ChartersDataset(VisionDataset):
     Assuming that a directory already contains some data (whose provenance does not matter), we want to
     create a dataset object that is fit for training or inference tasks:
 
-    * if the directory contains page images `%.jpg` and their corresponding PageXML metadata `%.xml`,
-     the `-from_page_xml_dir` option allows for building the line images and transcriptions into a
-     task-specific work folder, as well as a corresponding TSV file mapping images to their sizes
-     and transcriptions.
+    * if the directory contains page images ``%.jpg`` and their corresponding PageXML metadata ``%.xml``,
+      the ``-from_page_xml_dir`` option allows for building the line images and transcriptions into a
+      task-specific work folder, as well as a corresponding TSV file mapping images to their sizes
+      and transcriptions.
 
-    * if a folder already contains line images `%.png` and transcriptions `%.gt.txt`, any TSV file
+    * if a folder already contains line images ``%.png`` and transcriptions ``%.gt.txt``, any TSV file
       that lists all or part of those files may be used to create a working dataset:
         
         * if the TSV file does not exist, create it from existing line items as shown here:
@@ -97,12 +107,12 @@ class ChartersDataset(VisionDataset):
 
               >>> trainDS = mom.ChartersDataset(task='htr', build_items=False, subset='train', subset_ratios=(.85,.05,.1))
 
-           The `build_items=False` option ensures that the (costly) line extraction routine does not run.
-           The provided subset ratios allow to define which proportion of the existing files
-           should go into respectively the 'train', 'validate', and 'test' sets. (All 3
-           sets are distinct, no matter what.)
+          The ``build_items=False`` option ensures that the (costly) line extraction routine does not run.
+          The provided subset ratios allow to define which proportion of the existing files
+          should go into respectively the 'train', 'validate', and 'test' sets. (All 3
+          sets are distinct, no matter what.)
 
-        * in order to reuse an existing TSV dataset definition, use the `-from_line_tsv_file` option:
+        * in order to reuse an existing TSV dataset definition, use the ``-from_line_tsv_file`` option:
           it builds a sample set out of the files listed in the provided TSV file---it
           may reference any subset of the files contained in the parent directory, which
           implicitly becomes the work folder for the task.  A single work folder can be used to
@@ -120,10 +130,10 @@ class ChartersDataset(VisionDataset):
 
     The workflow assumes the following directory structure: 
 
-    * `root`: where datasets archives are to be downloaded (default: the 'data' subfolder in this package directory).
-    * `root/<raw data folder>` : where content of the original archive is to be extracted (i.e. a subdirectory 
-      `MonasteriumTekliaGTDataset` containing all image files)
-    * `work_folder`: where to create the dataset to be used for given task (segmentation or htr)
+    * ``root``: where datasets archives are to be downloaded (default: the 'data' subfolder in this package directory).
+    * ``root/<raw data folder>`` : where content of the original archive is to be extracted (i.e. a subdirectory 
+      ``MonasteriumTekliaGTDataset`` containing all image files)
+    * ``work_folder``: where to create the dataset to be used for given task (segmentation or htr)
 
     The first two directories can be created with a 'no-task' (default) initialization and forcing the archive extraction:
 
@@ -139,36 +149,40 @@ class ChartersDataset(VisionDataset):
 
 
 
-        :param dataset_resource: 
-            meta-data (URL, archive name, type of repository).
-        :type dataset_resource: dict
+    :param dataset_resource: 
+        meta-data (URL, archive name, type of repository).
+    :type dataset_resource: dict
 
-        :param work_folder_name: 
-            The work folder is where a task-specific instance of the data is created; if it not
-            passed to the constructor, a default path is constructed, using this default name.
-        :type work_folder_name: str
+    :param work_folder_name: 
+        The work folder is where a task-specific instance of the data is created; if it not
+        passed to the constructor, a default path is constructed, using this default name.
+    :type work_folder_name: str
 
-        :param root_folder_basename:
-            The root folder contains the archive and the subfolder that is created from it. By default,
-            a folder with this name is created in the project directory, if no other path is passed
-            to the constructor.
-        :type root_folder_basename: str 
+    :param root_folder_basename:
+        The root folder contains the archive and the subfolder that is created from it. By default,
+        a folder with this name is created in the project directory, if no other path is passed
+        to the constructor.
+    :type root_folder_basename: str 
 
-        :param default_alphabet:
-            a many-to-one alphabet in list form, to be used if no other alphabet is passed to the initialization function.
-        :type default_alphabet: list
+    :param default_alphabet:
+        a many-to-one alphabet in list form, to be used if no other alphabet is passed to the initialization function.
+    :type default_alphabet: list
     """
 
     dataset_resource = None
+    "Where to access the data: archive location, url, etc."
 
-    """Used to construct default work directory name (when none provided) """
     work_folder_name = "ChartersHandwritingDataset"
-    """Where the archive (if relevant) is downloaded and raw data are extracted """
+    "Used to construct default work directory name (when none provided) "
+
     root_folder_basename="Charters"
-    """A file with this name is added to an instance folder """ 
+    "Where the archive (if relevant) is downloaded and raw data are extracted "
+
     alphabet_tsv_name="alphabet.tsv"
+    "A file with this name is added to an instance folder " 
 
     default_alphabet = alphabet.Alphabet.prototype_from_scratch( exclude=["Hebrew","Diacritic","Parenthesis",], unknown='&' )
+    #"Alphabet to be used if no other alphabet is provided."
 
     def __init__( self,
                 root: str='',
@@ -686,20 +700,22 @@ class ChartersDataset(VisionDataset):
 
     @staticmethod
     def load_from_tsv(file_path: Path) -> List[dict]:
-        """Load samples (as dictionaries) from an existing TSV file. Each input line is a tuple::
+        """Load samples (as dictionaries) from an existing TSV file. Each input line is a tuple:
         
-                <img file path> <transcription text> <height> <width> [<polygon points>]
+        .. code-block::
+
+            <img file path> <transcription text> <height> <width> [<polygon points>]
         
         :param file_path: 
             A file path (relative to the caller's pwd).
         :type file_path: Path
 
-        :returns: A list of dictionaries of the form::
+        :returns: A list of dictionaries of the form:
 
-                {'img': <img file path>,
-                 'transcription': <transcription text>,
-                 'height': <original height>,
-                 'width': <original width>,}
+            {'img': <img file path>,
+             'transcription': <transcription text>,
+             'height': <original height>,
+             'width': <original width>,}
                  
         :rtype: List[dict]
 
@@ -1324,17 +1340,6 @@ class ChartersDataset(VisionDataset):
                 )
 
 
-    @property
-    def default_alphabet( cls ) -> alphabet.Alphabet:
-        """Return an instance of the default alphabet.
-
-        :returns: alphabet.Alphabet: an alphabet instance.
-        :rtype: alphabet.Alphabet
-
-        """
-        return alphabet.Alphabet.prototype_from_scratch()
-
-
     def get_prototype_alphabet( self ) -> alphabet.Alphabet:
         """Return a prototype alphabet, generated from the transcriptions.
 
@@ -1504,6 +1509,7 @@ class MonasteriumDataset(ChartersDataset):
             'desc': 'Monasterium ground truth data (Teklia)',
             'origin': 'google',
             'tarball_root_name': 'MonasteriumTekliaGTDataset',
+            'comment': 'A clean, terse dataset, with no use of Unicode abbreviation marks.',
     }
 
     work_folder_name="MonasteriumHandwritingDataset"
@@ -1527,11 +1533,14 @@ class KoenigsfeldenDataset(ChartersDataset):
             'desc': 'Koenigsfelden ground truth data',
             'origin': 'local',
             'tarball_root_name': 'koenigsfelden_1308-1662',
+            'comment': 'Minimal clean-up on transcriptions: removal of obvious junk or non-printable characters, as well a redundant punctuation marks (star-shaped unicode symbols); unicode-abbreviation marks have been kept.',
     }
 
     work_folder_name="KoenigsfeldenHandwritingDataset"
+    "This prefix will be used when creating a work folder."
 
     root_folder_basename="Koenigsfelden"
+    " This is the root of the archive tree."
 
     def __init__(self, *args, **kwargs ):
 

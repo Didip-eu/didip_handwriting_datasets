@@ -28,14 +28,17 @@ class Alphabet:
     Distinguish between:
 
     1. symbols we want to ignore/discard, because they're junk or 
-       irrelevant for any HTR purpose
+       irrelevant for any HTR purpose - they typically do not have
+       any counterpart in the input image.
 
-    2. symbols we want to ignore now because they don't matter for our
+    2. symbols that may have a counterpart in the original image,
+       but we want to ignore now because they don't matter for our
        particular experiment - by they may do for the next one.
+       It is the HTR analog of '> /dev/null' !
 
     3. symbols we don't want to interpret but need to be there in some way
-       (if just for being able to say: there is something here that needs
-       interpreting. Eg. abbreviations)
+       in the output (if just for being able to say: there is something
+       here that needs interpreting. Eg. abbreviations)
     
     For (1), they can be filtered out of the sample at any stage
     between the page/xlm collation phase and the last, encoding stage,
@@ -43,7 +46,7 @@ class Alphabet:
     overhead later, while not having to think too much about it (i.e.
     avoid having to use a zoo of pre-processing scripts that live
     outside this module): the line extraction method seems a good place
-    to do that, and no alphabet is needed.
+    to do that, and no alphabet is normally needed.
 
     For (2) and (3), we want more flexibility: what is to be ignored or
     not interpreted now may change tomorrow. The costly line extraction
@@ -51,31 +54,32 @@ class Alphabet:
     generally once, is not the best place to do it: rather, the 
     getitem transforms are appropriate. But how?
 
-    - to ignore a symbol, just do not include it into the alphabet: it 
-    will map to null at the encoding stage.
-    - a symbol that is not to be interpreted needs to be in the alphabet,
-    even though it is just a normal symbol, that maps to a conventional code
-    for 'unknown'. Eg. a character class '?' may contain all tricky baseline
-    abbreviations -> it must be easy to merge different classes into 
-    a single 'unknown' set.
+    * to ignore a symbol, just do not include it into the alphabet: it 
+      will map to null at the encoding stage, while still occupy one slot
+      in the sequence, which is what we want;
+    
+    * a symbol that is not to be interpreted needs to be in the alphabet,
+      even though it is just a normal symbol, that maps to a conventional code
+      for 'unknown'. Eg. a character class '?' may contain all tricky baseline
+      abbreviations -> it must be easy to merge different classes into 
+      a single 'unknown' set.
 
     In practice, any experiment needs to define its alphabet, as follows:
 
     1. Define a reasonable, all-purpose default alphabet in the ChartersDataset
-    class, that leaves most options open, while still excluding the most
-    unlikely ones. Eg.  an alphabet without the Hebrew characters, diacritic marks, etc.
-    It should be a class property, so that any addition to the character classes
-    is duly reflected in the default.
+       class, that leaves most options open, while still excluding the most
+       unlikely ones. Eg.  an alphabet without the Hebrew characters, diacritic marks, etc.
+       It should be a class property, so that any addition to the character classes
+       is duly reflected in the default.
 
     2. Construct a specific alphabet out of it, by substraction or merging.
-    A that point, the class 'unknown' is just like another class: all 
-    subsets of characters that make it should be merge accordingly first.
-    Only then does the finalization method define a stand-in symbol
-    for this class, through a quick lookup at any character that is member
-    of the set (see `unknown_class_representant` option in the initialization
-    function).
-
-
+       A that point, the class 'unknown' is just like another class: all 
+       subsets of characters that make it should be merged accordingly first.
+       Only then does the finalization method define a stand-in symbol
+       for this class, through a quick lookup at any character that is member
+       of the set (see `unknown_class_representant` option in the initialization
+       function).
+    
 
     """
     null_symbol = '\u03f5'
@@ -744,6 +748,7 @@ class Alphabet:
         """ Decode the output labels of a CTC-trained network into a human-readable string.
         
         .. code-block::
+
             >>> alphabet.Alphabet('Hello').decode_ctc(np.array([1,1,0,2,2,2,0,0,3,3,0,3,0,4]))
             'Hello'
 
@@ -771,9 +776,12 @@ class Alphabet:
         """ Sort a list that contains either lists of strings, or plain strings.
 
         Eg.
+
         .. code-block::
+
             >>> deep_sorted(['a', ['B', 'b'], 'c', 'd', ['e', 'E'], 'f'])
             [['B', 'b'], ['E', 'e'], 'a', 'c', 'd', 'f']
+        
 
         """
         return sorted([sorted(i) if len(i)>1 else i for i in list_of_lists],
@@ -783,7 +791,7 @@ class Alphabet:
     def tokenize_crude( self, mesg: str, quiet=True ) -> List[str]:
         """ Tokenize a string into tokens that are consistent with the provided alphabet.
         A very crude splitting, as a provision for a proper tokenizer. Spaces
-        are normalized (only standard spaces - `' '=\x20`)), with duplicate spaces removed.
+        are normalized (only standard spaces - ``' '=\\u0020``)), with duplicate spaces removed.
 
         :param mesg: a string
         :type mesg: str
@@ -803,14 +811,17 @@ class Alphabet:
     def normalize_spaces(mesg: str) -> str:
         """ Normalize the spaces: 
 
-        + remove trailing spaces
-        + all spaces mapped to standard space (`' '=\x20`)
-        + duplicate spaces removed
+        * remove trailing spaces
+        * all spaces mapped to standard space (``' '=\\u0020``)
+        * duplicate spaces removed
 
-        Eg:
+        Eg.
+
         .. code-block::
-            >>> normalize_spaces(' \t\n\u000Ba\u000C\u000Db\u0085c\u00A0\u2000\u2001d\u2008\u2009e')
-            ['a', ' ', 'b', ' ', 'c', ' ', 'd', ' ', 'e']
+             
+            >>> normalize_spaces('\\t \\u000Ba\\u000C\\u000Db\\u0085c\\u00A0\\u2000\\u2001d\\u2008\\u2009e')
+            ['a b c d e']
+
 
         :param mesg: a string
         :type mesg: str 
@@ -829,7 +840,7 @@ class Alphabet:
 
         :param merge: 
             for each of the provided subsequences, merge those output sublists that contain the characters
-            in it. Eg. `merge=['ij']` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+            in it. Eg. ``merge=['ij']`` will merge the ``'i'`` sublist (``[iI$î...]``) with the ``'j'`` sublist (``[jJ...]``)
         :type merge: List[str]
 
         :returns: a list of lists.
@@ -878,10 +889,10 @@ class CharClass():
     the decoding phase. However, because some classes need both a more explicit key (eg. abbreviations),
     there is a need to distinguish the key function and the stand-in function, 
     by using the first elt of each value to set the class representant.
-    Eg. `'g': ('g', 'gĝğġģḡ')` means that 'g' is both the key for the 
-    set 'gĝğġģḡ', as well as its stand-in or class representant.
-    `'Parenthesis': ('|', '()[]/\\|')` means that the set "Parenthesis" 
-    has the `'|'` symbol as a stand-in.
+    Eg. ``'g': ('g', 'gĝğġģḡ')`` means that 'g' is both the key for the 
+    set `'gĝğġģḡ'`, as well as its stand-in or class representant.
+    ``'Parenthesis': ('|', '()[]/\\|')`` means that the set "Parenthesis" 
+    has the ``'|'`` symbol as a stand-in.
 
     Notes about the categories:
     
@@ -998,7 +1009,9 @@ class CharClass():
     
     @classmethod
     def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:
-        """ From a set of chars, return a list of lists, where each sublist matches one of the categories above.
+        """ From a set of chars, return a list of lists, where each sublist matches one
+        of the categories above.
+
 
         :param chars: set of individual chars.
         :type chars: set
@@ -1010,6 +1023,7 @@ class CharClass():
         :rtype: List[Union[List,str]]
 
         .. code-block::
+
             >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
             [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$'] 
 
