@@ -1350,7 +1350,7 @@ class ChartersDataset(VisionDataset):
         if self.data == []:
             logger.warning("Sample set is empty!")
             return None
-        return alphabet.Alphabet( alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ]))
+        return alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ])
             
     @staticmethod
     def bbox_median_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
