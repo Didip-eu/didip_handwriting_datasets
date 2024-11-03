@@ -732,8 +732,9 @@ class ChartersDataset(VisionDataset):
 
             infile.seek(0) 
 
+            # Note: polygons are not read
             for tsv_line in infile:
-                img_file, gt_field, height, width = tsv_line[:-1].split('\t')
+                img_file, gt_field, height, width = tsv_line[:-1].split('\t')[:4]
                 if not inline_transcription:
                     with open( work_folder_path.joinpath( gt_field ), 'r') as igt:
                         gt_field = '\n'.join( igt.readlines())
@@ -1148,8 +1149,8 @@ class ChartersDataset(VisionDataset):
                             img_chw = np.array( bbox_img ).transpose(2,0,1)
                             # 2D Boolean polygon mask, from points
                             leftx, topy = textline['bbox'][:2]
-                            transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ])[:,::-1]
-                            textline['polygon']=transposed_coordinates
+                            transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
+                            textline['polygon']=transposed_coordinates.tolist()
 
                             if not (self.resume_task and textline['img_path'].exists()):
                                 boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
