@@ -318,6 +318,7 @@ class Alphabet:
                                 paths: List[str], 
                                 merge:List[str]=[],
                                 exclude:List[str]=[],
+                                many_to_one:bool=False,
                                 unknown:str='') -> Tuple[ Alphabet, Dict[str,str]]:
         """Given a list of GT transcription file paths, return an alphabet.
 
@@ -336,6 +337,10 @@ class Alphabet:
             a stand-in for the one class of characters that have to map
             on the 'unknown' code.
         :type unknown: str
+
+        :param many_to_one: 
+            if True (default), builds a many-to-one alphabet, based on the Alphabet class' character classes.
+        :type many_to_one: bool
 
         :returns: a pair with
              * an Alphabet object
@@ -382,6 +387,7 @@ class Alphabet:
                                     transcriptions: List[str], 
                                     merge:List[str]=[], 
                                     exclude:List[str]=[],
+                                    many_to_one:bool=False,
                                     unknown:str='') -> Alphabet:
         """ Given a list of GT transcription strings, return an Alphabet.
 
@@ -396,6 +402,10 @@ class Alphabet:
         :param exclude: 
             a list of Alphabet class names to exclude (keys in the Alphabet categories attribute).
         :type exclude: List[str]
+
+        :param many_to_one: 
+            if True (default), builds a many-to-one alphabet, based on the Alphabet class' character classes.
+        :type many_to_one: bool
 
         :param unknown: 
             a stand-in for the one class of characters that have to map 

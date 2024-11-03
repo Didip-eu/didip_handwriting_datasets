@@ -466,7 +466,7 @@ class ChartersDataset(VisionDataset):
 
                 # serialize the alphabet into the work folder
                 logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
-                alphabet.Alphabet( self.default_alphabet ).to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
+                self.default_alphabet.to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
                 #shutil.copy(self.root.joinpath( self.alphabet_tsv_name ), self.work_folder_path )
             
             # load alphabet
