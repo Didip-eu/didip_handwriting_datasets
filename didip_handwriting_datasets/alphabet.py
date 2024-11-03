@@ -529,7 +529,6 @@ class Alphabet:
             return [ s for (s,c) in self._utf_2_code.items() if c==code ]
         return self._code_2_utf[ code ] if code in self._code_2_utf else self.default_symbol
 
-
     def get_code( self, symbol ) -> int:
         """Return the code on which the given symbol maps.
 
@@ -542,7 +541,7 @@ class Alphabet:
         :rtype: int
         """
         return self._utf_2_code[ symbol ] if symbol in self._utf_2_code else self.default_code
-    
+
 
     def stats( self ) -> dict:
         """ Basic statistics.
@@ -1004,7 +1003,23 @@ class CharClass():
 
     @classmethod
     def get_key(cls, char: str ) -> str:
-        """ Get key ("head character") for given character 
+        """ Get key for given character 
+
+        :param char: a UTF character. Eg. `'Ä'`
+        :type char: str
+
+        :returns: UTF character or string that serves as a key for its category. Eg. `'a'`
+        :rtype: str
+        """
+        for (k, cat) in cls.character_classes.items():
+            if char in cat[1]:
+                return k
+        return None
+
+
+    @classmethod
+    def get_representant(cls, char: str ) -> str:
+        """Get "head character" for given character .
 
         :param char: a UTF character. Eg. `'Ä'`
         :type char: str
@@ -1014,8 +1029,10 @@ class CharClass():
         """
         for (k, cat) in cls.character_classes.items():
             if char in cat[1]:
-                return k
+                return cat[0]
         return None
+
+
     
     @classmethod
     def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:

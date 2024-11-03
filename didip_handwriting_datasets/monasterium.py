@@ -283,7 +283,7 @@ class ChartersDataset(VisionDataset):
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
-        super().__init__(root, transform=trf, target_transform=target_transform )
+        super().__init__(root, transform=trf, target_transform=target_transform if target_transform else lambda x: x)
 
         print( "from_page_xml_dir=", from_page_xml_dir )
         print( "self.dataset_resource=", self.dataset_resource)
@@ -1351,6 +1351,18 @@ class ChartersDataset(VisionDataset):
             logger.warning("Sample set is empty!")
             return None
         return alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ])
+
+
+    def filter_transcription(self, transcription:str ) -> str:
+        """Rewrite a message by using only the symbols that are in the alphabet.
+
+        :param transcription: A transcription ground truth.
+        :type transcription: str
+
+        :returns: a rewritten message.
+        :rtype: str
+        """
+        return ''.join([ self.alphabet.get_symbol(c) if c != self.alphabet.null_value else '' for c in self.alphabet.encode( transcription ) ])
             
     @staticmethod
     def bbox_median_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
@@ -1548,8 +1560,6 @@ class KoenigsfeldenDataset(ChartersDataset):
 
         self.target_transform = self.filter_transcription
 
-    def filter_transcription( transcription:str ):
-        pass
 
 
 
