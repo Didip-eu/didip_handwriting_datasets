@@ -283,7 +283,7 @@ class ChartersDataset(VisionDataset):
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
-        super().__init__(root, transform=trf, target_transform=target_transform if target_transform else lambda x: x)
+        super().__init__(root, transform=trf, target_transform=target_transform if target_transform else self.filter_transcription)
 
         print( "from_page_xml_dir=", from_page_xml_dir )
         print( "self.dataset_resource=", self.dataset_resource)
@@ -1559,7 +1559,7 @@ class KoenigsfeldenDataset(ChartersDataset):
 
         super().__init__( *args, **kwargs)
 
-        self.target_transform = self.filter_transcription
+        #self.target_transform = self.filter_transcription
 
 
 
