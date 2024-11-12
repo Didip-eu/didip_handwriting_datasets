@@ -1446,34 +1446,6 @@ class MonasteriumDataset(ChartersDataset):
         super().__init__( *args, **kwargs)
 
 
-class KoenigsfeldenDatasetAbbrev(ChartersDataset):
-    """ A subset of charters from the Koenigsfelden abbey, covering a wide range of handwriting style.
-    The data have been compiled from raw Transkribus exports.
-    """
-
-    dataset_resource = {
-            'file': f"{os.getenv('HOME')}/tmp/data/koenigsfelden_abbey_1308-1662/koenigsfelden_1308-1662.tar.gz",
-            'tarball_filename': 'koenigsfelden_1308-1662.tar.gz',
-            'md5': '9326bc99f9035fb697e1b3f552748640',
-            'desc': 'Koenigsfelden ground truth data',
-            'origin': 'local',
-            'tarball_root_name': 'koenigsfelden_1308-1662',
-            'comment': 'Similar to the KoenigsfeldenDataset, with a notable difference: Unicode abbreviations have been kept.',
-    }
-
-    work_folder_name="KoenigsfeldenHandwritingDataset"
-    "This prefix will be used when creating a work folder."
-
-    root_folder_basename="KoenigsfeldenAbbrev"
-    " This is the root of the archive tree."
-
-    def __init__(self, *args, **kwargs ):
-
-        super().__init__( *args, **kwargs)
-
-        #self.target_transform = self.filter_transcription
-
-
 class KoenigsfeldenDataset(ChartersDataset):
     """ A subset of charters from the Koenigsfelden abbey, covering a wide range of handwriting style.
     The data have been compiled from raw Transkribus exports.
@@ -1502,6 +1474,34 @@ class KoenigsfeldenDataset(ChartersDataset):
         #self.target_transform = self.filter_transcription
 
 
+
+
+class KoenigsfeldenDatasetAbbrev(ChartersDataset):
+    """ A subset of charters from the Koenigsfelden abbey, covering a wide range of handwriting style.
+    The data have been compiled from raw Transkribus exports.
+    """
+
+    dataset_resource = {
+            'file': f"{os.getenv('HOME')}/tmp/data/koenigsfelden_abbey_1308-1662/koenigsfelden_1308-1662.tar.gz",
+            'tarball_filename': 'koenigsfelden_1308-1662_abbrev.tar.gz',
+            'md5': '9326bc99f9035fb697e1b3f552748640',
+            'desc': 'Koenigsfelden ground truth data',
+            'origin': 'local',
+            'tarball_root_name': 'koenigsfelden_1308-1662_abbrev',
+            'comment': 'Similar to the KoenigsfeldenDataset, with a notable difference: Unicode abbreviations have been kept.',
+    }
+
+    work_folder_name="KoenigsfeldenHandwritingDataset"
+    "This prefix will be used when creating a work folder."
+
+    root_folder_basename="KoenigsfeldenAbbrev"
+    " This is the root of the archive tree."
+
+    def __init__(self, *args, **kwargs ):
+
+        super().__init__( *args, **kwargs)
+
+        #self.target_transform = self.filter_transcription
 
 
 
