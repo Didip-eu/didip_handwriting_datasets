@@ -15,12 +15,12 @@ Indices and tables
 * :ref:`search`
 
 
-How to use
-=============
+How to use the ChartersDataset class
+====================================
 
-------------------------------------------------------
-Working from an existing dataset archive → subclassing
-------------------------------------------------------
+----------------------------------------------------------------------
+Working from an existing dataset archive → subclassing ChartersDataset
+----------------------------------------------------------------------
 
 This is probably the most common use of the `ChartersDataset` class: assuming that the dataset 
 is provided as an archive of page images and their metadata, that we want to keep 
@@ -79,7 +79,7 @@ create a dataset object that is fit for training or inference tasks:
       >>> trainDS = mom.ChartersDataset(task='htr', from_line_tsv_file='myCustomSet.tsv')
 
 
-===============================================
+
 Directories: root, raw data, and work folders
 ===============================================
 
@@ -108,14 +108,87 @@ The following call leaves the first two folders untouched and uses their data to
 >>> myHtrDs = ChartersDataset( task='htr' )
 
 
+Alphabets: notes for myself
+===========================
+
+Problem: fitting data actual charset to a model
+
+Distinguish between:
+
+1. symbols we want to ignore/discard, because they're junk or
+   irrelevant for any HTR purpose - they typically do not have
+   any counterpart in the input image.
+
+2. symbols that may have a counterpart in the original image,
+   but we want to ignore now because they don't matter for our
+   particular experiment - by they may do for the next one.
+   It is the HTR analog of '> /dev/null' !
+
+3. symbols we don't want to interpret but need to be there in some way
+   in the output (if just for being able to say: there is something
+   here that needs interpreting. Eg. abbreviations)
+
+For (1), they can be filtered out of the sample at any stage
+between the page/xlm collation phase and the last, encoding stage,
+but it makes sense to do it as early as possible, to avoid any
+overhead later, while not having to think too much about it (i.e.
+avoid having to use a zoo of pre-processing scripts that live
+outside this module): the line extraction method seems a good place
+to do that, and no alphabet is normally needed.
+
+For (2) and (3), we want more flexibility: what is to be ignored or
+not interpreted now may change tomorrow. The costly line extraction
+routine, that is meant to be run during the early dataset setup and
+generally once, is not the best place to do it: rather, the
+getitem transforms are appropriate. But how?
+
+* to ignore a symbol, just do not include it into the alphabet: it
+  will map to null at the encoding stage, while still occupy one slot
+  in the sequence, which is what we want;
+
+* a symbol that is not to be interpreted needs to be in the alphabet,
+  even though it is just a normal symbol, that maps to a conventional code
+  for 'unknown'. Eg. a character class '?' may contain all tricky baseline
+  abbreviations -> it must be easy to merge different classes into
+  a single 'unknown' set.
+
+In practice, any experiment needs to define its alphabet, as follows:
+
+1. Define a reasonable, all-purpose default alphabet in the ChartersDataset
+   class, that leaves most options open, while still excluding the most
+   unlikely ones. Eg.  an alphabet without the Hebrew characters, diacritic marks, etc.
+   It should be a class property, so that any addition to the character classes
+   is duly reflected in the default.
+
+2. Construct a specific alphabet out of it, by substraction or merging.
+   A that point, the class 'unknown' is just like another class: all
+   subsets of characters that make it should be merged accordingly first.
+   Only then does the finalization method define a stand-in symbol
+
+for this class, through a quick lookup at any character that is member
+of the set (see `unknown_class_representant` option in the initialization
+function).
+
+
+
 
 .. toctree::
    :maxdepth: 3
    :caption: Contents:
 
-.. automodule:: didip_handwriting_datasets.monasterium
+
+ChartersDataset
+================
+
+.. automodule:: didip_handwriting_datasets.charters
    :members:
    :member-order: groupwise
+
+
+Alphabet
+===========
+
+
 
 .. automodule:: didip_handwriting_datasets.alphabet
    :members:

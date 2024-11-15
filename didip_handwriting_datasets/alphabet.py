@@ -14,72 +14,11 @@ from collections import Counter
 
 
 class Alphabet:
-    """
-    Creating and handling alphabets.
+    """Creating and handling alphabets.
 
     + one-to-one or many-to-one alphabet, with deterministic mapping either way;
     + prototyping from reasonable subsets of characters to be grouped
     + a choice of input/output sources: TSV, nested lists, mappings.
-
-    Alphabet Philosophy or To Clarify My Ideas about encoding/decoding
-
-    Problem: fitting data actual charset to a model
-
-    Distinguish between:
-
-    1. symbols we want to ignore/discard, because they're junk or 
-       irrelevant for any HTR purpose - they typically do not have
-       any counterpart in the input image.
-
-    2. symbols that may have a counterpart in the original image,
-       but we want to ignore now because they don't matter for our
-       particular experiment - by they may do for the next one.
-       It is the HTR analog of '> /dev/null' !
-
-    3. symbols we don't want to interpret but need to be there in some way
-       in the output (if just for being able to say: there is something
-       here that needs interpreting. Eg. abbreviations)
-    
-    For (1), they can be filtered out of the sample at any stage
-    between the page/xlm collation phase and the last, encoding stage,
-    but it makes sense to do it as early as possible, to avoid any
-    overhead later, while not having to think too much about it (i.e.
-    avoid having to use a zoo of pre-processing scripts that live
-    outside this module): the line extraction method seems a good place
-    to do that, and no alphabet is normally needed.
-
-    For (2) and (3), we want more flexibility: what is to be ignored or
-    not interpreted now may change tomorrow. The costly line extraction
-    routine, that is meant to be run during the early dataset setup and
-    generally once, is not the best place to do it: rather, the 
-    getitem transforms are appropriate. But how?
-
-    * to ignore a symbol, just do not include it into the alphabet: it 
-      will map to null at the encoding stage, while still occupy one slot
-      in the sequence, which is what we want;
-    
-    * a symbol that is not to be interpreted needs to be in the alphabet,
-      even though it is just a normal symbol, that maps to a conventional code
-      for 'unknown'. Eg. a character class '?' may contain all tricky baseline
-      abbreviations -> it must be easy to merge different classes into 
-      a single 'unknown' set.
-
-    In practice, any experiment needs to define its alphabet, as follows:
-
-    1. Define a reasonable, all-purpose default alphabet in the ChartersDataset
-       class, that leaves most options open, while still excluding the most
-       unlikely ones. Eg.  an alphabet without the Hebrew characters, diacritic marks, etc.
-       It should be a class property, so that any addition to the character classes
-       is duly reflected in the default.
-
-    2. Construct a specific alphabet out of it, by substraction or merging.
-       A that point, the class 'unknown' is just like another class: all 
-       subsets of characters that make it should be merged accordingly first.
-       Only then does the finalization method define a stand-in symbol
-       for this class, through a quick lookup at any character that is member
-       of the set (see `unknown_class_representant` option in the initialization
-       function).
-    
 
     """
     null_symbol = '\u03f5'
@@ -89,39 +28,34 @@ class Alphabet:
     unknown_symbol_utf = '?' 
 
     def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None, unknown_class_representant:str='ƺ') -> None:
-        """ Initialize a new Alphabet object. The special characters are
-        added automatically.
+        """Initialize a new Alphabet object. The special characters are added automatically.
 
-        From a dictionary:
-        .. code-block::
+            From a dictionary::
 
-            >>> alphabet.Alphabet({'a':1, 'A': 1, 'b': 2, 'c':3})
-            {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+                >>> alphabet.Alphabet({'a':1, 'A': 1, 'b': 2, 'c':3})
+                {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
 
-        From a TSV path:
-        .. code-block::
+            From a TSV path::
 
-            >>> alphabet.Alphabet('alpha.tsv')
-            {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+                >>> alphabet.Alphabet('alpha.tsv')
+                {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
 
-        From a nested list:
-        .. code-block::
+            From a nested list::
 
-            >>> alphabet.Alphabet([['a','A'],'b','c'])
-            {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
+                >>> alphabet.Alphabet([['a','A'],'b','c'])
+                {'A': 1, 'a': 1, 'b': 2, 'c': 3, 'ϵ': 0, '↦': 4, '⇥': 5}
 
-        From a string of characters (one-to-one):
-        .. code-block::
+            From a string of characters (one-to-one)::
 
-            >>> alphabet.Alphabet('aAbc ')
-            {' ': 1, 'A': 2, 'a': 3, 'b': 4, 'c': 5, 'ϵ': 0, '↦': 6, '⇥': 7}
+                >>> alphabet.Alphabet('aAbc ')
+                {' ': 1, 'A': 2, 'a': 3, 'b': 4, 'c': 5, 'ϵ': 0, '↦': 6, '⇥': 7}
 
-        :param alpha_repr: the input source--it may be a dictionary that maps chars to codes,
-                        a nested list, a plain string, or the path of a TSV file.
-        :type alpha_repr: Union[str, dict, list]
+            Returns:
+                alpha_repr (Union[str, dict, list]): the input source--it may be a dictionary that maps chars to codes,
+                       a nested list, a plain string, or the path of a TSV file.
 
-        :param unknown_class_representant: any character in this string should map to the code for 'unknown', as well as all members of its CharClass class.
-        :type unknown_class_representant: str
+                unknown_class_representant (str): any character in this string should map to the code for 'unknown', as well
+                    as all members of its CharClass class.
         """
 
         self._utf_2_code = {}
@@ -181,10 +115,10 @@ class Alphabet:
                 self._code_2_utf[ cr_code ] = self.unknown_symbol_utf
 
     def to_tsv( self, filename: Union[str,Path]) -> None:
-        """ Dump to TSV file.
-        
-        :param filename: path to TSV file
-        :type filename: Union[str,Path]
+        """Dump to TSV file.
+
+            Args:
+                filename (Union[str,Path]): path to TSV file
         """
         with open( filename, 'w') as of:
             print(self, file=of)
@@ -192,19 +126,19 @@ class Alphabet:
 
 
     def to_list( self, exclude: list=[] )-> List[Union[str,list]]:
-        """ Return a list representation of the alphabet. 
+        """Return a list representation of the alphabet.
 
         Virtual symbols (EoS, SoS, null) are not included, so that it can be fed back
         to the initialization method.
 
-        :param exclude: list of symbols that should not be included into the resulting list.
-        :type exclude: List[str]
+        Args:
+            exclude (List[str]): list of symbols that should not be included into the resulting list. Eg::
 
-        >>> alphabet.Alphabet([['a','A'],'b','c']).to_list(['a','b'])
-        ['A', 'c']
+                >>> alphabet.Alphabet([['a','A'],'b','c']).to_list(['a','b'])
+                ['A', 'c']
 
-        :returns: a list of lists or strings.
-        :rtype: List[Union[str,list]]
+        Returns:
+             List[Union[str,list]]: a list of lists or strings.
         """
         code_2_utfs = {}
         for (s,c) in self._utf_2_code.items():
@@ -219,24 +153,24 @@ class Alphabet:
 
     @classmethod
     def from_tsv(cls, tsv_filename: str, prototype=False) -> Dict[str,int]:
-        """ Initialize an alphabet dictionary from a TSV file.
+        """Initialize an alphabet dictionary from a TSV file.
 
         Assumption: if it is not a prototype, the TSV file always contains a correct mapping,
-        but the symbols need to be sorted before building the dictionary, to ensure a 
+        but the symbols need to be sorted before building the dictionary, to ensure a
         deterministic mapping of codes to symbols; if it is a prototype, the last column in each
         line is -1 (a dummy for the code) and the previous columns store the symbols that should
         map to the same code.
 
-        :param tsv_filename: a TSV file of the form::
+        Args:
+            tsv_filename (str): pathname of a TSV file of the form::
 
-            <symbol>     <code>
-        :type tsv_filename: str
-        :param prototype: if True, the TSV file may store more than 1 symbol on the same
-                              line, as well as a proto-code at the end (-1); codes are to be generated.
-        :type prototype: bool
+                <symbol>     <code>
 
-        :returns: a dictionary `{ <symbol>: <code> }`
-        :rtype: Dict[str, int]
+            prototype (bool): if True, the TSV file may store more than 1 symbol on the same
+                             line, as well as a proto-code at the end (-1); codes are to be generated.
+
+        Returns:
+            Dict[str, int]: a dictionary `{ <symbol>: <code> }`
         """
         with open( tsv_filename, 'r') as infile:
             if prototype:
@@ -257,20 +191,20 @@ class Alphabet:
 
     @classmethod
     def from_list(cls, symbol_list: List[Union[List,str]]) -> Dict[str,int]:
-        """
-        Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
+        """Construct a symbol-to-code dictionary from a list of strings or sublists of symbols (for many-to-one alphabets):
         symbols in the same sublist are assigned the same label.
 
-        Works on many-to-one, compound symbols. Eg. 
+        Works on many-to-one, compound symbols. Eg.::
 
-        >>> from_list( [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] )
-        { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
+            >>> from_list( [['A','ae'], 'b', ['ü', 'ue', 'u', 'U'], 'c'] )
+            { 'A':1, 'U':2, 'ae':1, 'b':3, 'c':4, 'u':5, 'ue':5, ... }
 
-        :param symbol_list: a list of either symbols (possibly with more than one characters) or sublists of symbols that should map to the same code.
-        :type symbol_list: List[Union[List,str]]
+        Args:
+            symbol_list (List[Union[List,str]]): a list of either symbols (possibly with more than one characters) or
+                sublists of symbols that should map to the same code.
 
-        :returns: a dictionary mapping symbols to codes.
-        :rtype: Dict[str,int]
+        Returns:
+            Dict[str,int]: a dictionary mapping symbols to codes.
         """
 
         # if list is not nested (one-to-one)
@@ -288,27 +222,27 @@ class Alphabet:
 
     @classmethod
     def from_dict(cls, mapping: Dict[str,int]) -> Dict[str,int]:
-        """ Construct an alphabet from a dictionary. The input dictionary need not be sorted.
+        """Construct an alphabet from a dictionary. The input dictionary need not be sorted.
 
-        :param mapping:
-            a dictionary of the form `{ <symbol>: <code> }`; a symbol may have one or more characters.
-        :type mapping: Dict[str,int]
+        Args:
+            mapping (Dict[str,int]): a dictionary of the form `{ <symbol>: <code> }`; a symbol
+                may have one or more characters.
 
-        :returns: a sorted dictionary.
-        :rtype: Dict[str,int]
+        Returns:
+            Dict[str,int]: a sorted dictionary.
         """
         alphadict = dict(sorted(mapping.items()))
         return alphadict
 
     @classmethod
     def from_string(cls, stg: str ) -> Dict[str,int]:
-        """ Construct a one-to-one alphabet from a single string.
+        """Construct a one-to-one alphabet from a single string.
 
-        :param stg: a string of characters.
-        :type stg: str
+                :param stg: a string of characters.
+                :type stg: str
 
-        :returns: a `{ code: symbol }` mapping.
-        :rtype: Dict[str,int]
+                :returns: a `{ code: symbol }` mapping.
+                :rtype: Dict[str,int]
         """
         alphadict = { s:c for (c,s) in enumerate(sorted(set( [ s for s in stg if not s.isspace() or s==' ' ])), start=1) }
         return alphadict
@@ -322,31 +256,21 @@ class Alphabet:
                                 unknown:str='') -> Tuple[ Alphabet, Dict[str,str]]:
         """Given a list of GT transcription file paths, return an alphabet.
 
-        :param paths: a list of file path (wildards accepted).
-        :type paths: List[str]
+        Args:
+            paths (List[str]): a list of file path (wildards accepted).
+            merge (List[str]): for each of the provided subsequences, merge those output sublists that
+                contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
+                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
+                categories attribute).
+            unknown (str): a stand-in for the one class of characters that have to map on
+                the 'unknown' code.
+            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on the
+                Alphabet class' character classes.
 
-        :param merge: 
-            for each of the provided subsequences, merge those output sublists that contain the characters
-            in it. Eg. `merge=['ij']` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-        :type merge: List[str]
-
-        :param exclude: a list of Alphabet class names to exclude (keys in the Alphabet categories attribute).
-        :type exclude: List[str]
-
-        :param unknown: 
-            a stand-in for the one class of characters that have to map
-            on the 'unknown' code.
-        :type unknown: str
-
-        :param many_to_one: 
-            if True (default), builds a many-to-one alphabet, based on the Alphabet class' character classes.
-        :type many_to_one: bool
-
-        :returns: a pair with
-             * an Alphabet object
-             * a dictionary `{ symbol: [filepath, ... ]}` that assign to each symbols all the files in which it appears.
-        :rtype: Tuple[Alphabet, Dict[str,str]]
-
+        Returns:
+            Tuple[Alphabet, Dict[str,str]]: a pair with * an Alphabet object * a dictionary 
+                `{ symbol: [filepath, ... ]}` that assigns to each symbols all the files in which it appears.
         """
         assert type(paths) is list
         charset = set()
@@ -389,30 +313,26 @@ class Alphabet:
                                     exclude:List[str]=[],
                                     many_to_one:bool=False,
                                     unknown:str='') -> Alphabet:
-        """ Given a list of GT transcription strings, return an Alphabet.
+        """Given a list of GT transcription strings, return an Alphabet.
 
-        :param paths: a list of transcriptions. 
-        :type paths: List[str]
+        Args:
+            paths (List[str]): a list of transcriptions.
 
-        :param merge: 
-            for each of the provided subsequences, merge those output sublists that contain the characters
-            in it. Eg. `merge=['ij']` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-        :type merge: List[str]
+            merge (List[str]): for each of the provided subsequences, merge those output 
+                sublists that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'`
+                sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
 
-        :param exclude: 
-            a list of Alphabet class names to exclude (keys in the Alphabet categories attribute).
-        :type exclude: List[str]
+            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
+                categories attribute).
 
-        :param many_to_one: 
-            if True (default), builds a many-to-one alphabet, based on the Alphabet class' character classes.
-        :type many_to_one: bool
+            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on
+                the Alphabet class' character classes.
 
-        :param unknown: 
-            a stand-in for the one class of characters that have to map 
-            on the 'unknown' code.
-        :type unknown: str
-        :returns: an Alphabet object
-        :rtype: Alphabet
+            unknown (str) a stand-in for the one class of characters that have to map
+                on the 'unknown' code.
+        
+        Returns:
+                Alphabet: an Alphabet object
 
         """
         charset = set()
@@ -446,29 +366,24 @@ class Alphabet:
                                 merge:List[str]=[], 
                                 exclude:List[str]=[],
                                 unknown:str='') -> Alphabet:
-        """ Build a tentative, "universal", alphabet from scratch, without regard to the data: it 
+        """Build a tentative, "universal", alphabet from scratch, without regard to the data: it
         maps classes of characters to common code, as described in the CharacterClass below.
         The resulting encoding is rather short and lends itself to a variety of datasets.
         The output can be redirected on file, reworked and then fed back through `from_tsv()`.
 
-        :param merge: 
-            for each of the provided subsequences, merge those output sublists that contain the characters
-            in it. Eg. `merge=['ij']` will merge the `'i'` sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-        :type merge: List[str]
+        Args:
+            merge (List[str]): for each of the provided subsequences, merge those output sublists
+                that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
+                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
 
-        :param exclude: 
-            a list of Alphabet class names to exclude (keys in the Alphabet categories
-            attribute).
-        :type exclude: List[str]
+            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
+                categories attribute).
 
-        :param unknown: 
-            a stand-in for the one class of characters that have to map on the 
-            'unknown' code.
-        :type unknown: str
+            unknowni (str): a stand-in for the one class of characters that have to map on the
+                'unknown' code.
 
-        :returns: an Alphabet object
-        :rtype: Alphabet
-
+        Returns:
+             Alphabet: an Alphabet object
         """
 
         symbol_list = CharClass.build_subsets( exclude=exclude )
@@ -481,8 +396,7 @@ class Alphabet:
         return len( self._code_2_utf )
 
     def __str__( self ) -> str:
-        """ A summary
-        """
+        """A summary"""
         one_symbol_per_line = '\n'.join( [ f'{s}\t{c}' for (s,c) in  sorted(self._utf_2_code.items()) ] )
         return one_symbol_per_line.replace( self.null_symbol, '\u03f5' )
 
@@ -512,18 +426,16 @@ class Alphabet:
             return self._code_2_utf[i]
 
     def get_symbol( self, code, all=False ) -> Union[str, List[str]]:
-        """ Return the class representant (default) or all symbols that map on the given code.
+        """Return the class representant (default) or all symbols that map on the given code.
 
-        :param code: a integer code.
-        :type code: int
-        
-        :param all: 
-            if True, returns all symbols that map to the given code; if False (default),
-            returns the class representant.
-        :type all: bool
+        Args:
+            code (int): a integer code.
 
-        :returns: the default symbol for this code, or the list of matching symbols.
-        :rtype: Union[str, List[str]]
+            all (bool): if True, returns all symbols that map to the given code; if False (default),
+                returns the class representant.
+
+        Returns:
+            Union[str, List[str]]: the default symbol for this code, or the list of matching symbols.
         """
         if all:
             return [ s for (s,c) in self._utf_2_code.items() if c==code ]
@@ -534,59 +446,57 @@ class Alphabet:
 
         For symbols that are not in the alphabet, the default code (null) is returned.
 
-        :param symbol: a character.
-        :type symbol: str
+        Args:
+            symbol (str): a character.
 
-        :returns: an integer code
-        :rtype: int
+        Returns:
+            int: an integer code
         """
         return self._utf_2_code[ symbol ] if symbol in self._utf_2_code else self.default_code
 
 
     def stats( self ) -> dict:
-        """ Basic statistics.
-        """
+        """Basic statistics."""
         return { 'symbols': len(set(self._utf_2_code.values()))-3,
                  'codes': len(set(self._utf_2_code.keys()))-3,
                }
 
 
     def symbol_intersection( self, alpha: Self )->set:
-        """ Returns a set of those symbols that can be encoded in both alphabets.
+        """Returns a set of those symbols that can be encoded in both alphabets.
 
-        :param alpha: an Alphabet object.
-        :type alpha: Alphabet
+        Args:
+            alpha (Alphabet): an Alphabet object.
 
-        :returns: a set of symbols.
-        :rtype: set
+        Returns:
+            set: a set of symbols.
         """
         return set( self._utf_2_code.keys()).intersection( set( alpha._utf_2_code.keys()))
 
     def symbol_differences( self, alpha: Self ) -> Tuple[set,set]:
-        """ Compute the differences of two alphabets.
+        """Compute the differences of two alphabets.
 
-        :param alpha: an Alphabet object.
-        :type alpha: Alphabet
+        Args:
+            alpha (Alphabet): an Alphabet object.
 
-        :returns: a tuple with two sets - those symbols that can be encoded with the first alphabet, but
-                  not the second one; and conversely.
-        :rtype: Tuple[set, set]
+        Returns:
+            Tuple[set, set]: a tuple with two sets - those symbols that can be encoded with the first alphabet, but
+                 not the second one; and conversely.
         """
         return ( set(self._utf_2_code.keys()).difference( set( alpha._utf_2_code.keys())),
                  set(alpha._utf_2_code.keys()).difference( set( self._utf_2_code.keys())))
 
     def add_symbols( self, symbols ):
-        """ Add one or more symbol to the alphabet.
+        """Add one or more symbol to the alphabet.
 
-        :param symbols:
-                a list whose elements can be individual chars or list of chars that should map 
-                to the same code. A symbol (or group of symbols) that should be merged with an
-                existing group should be given a a list that comprise the new symbol(s) and any
-                symbol that already belong to the alphabet's group.
-        :type symbols: List[list,str]
+        Args:
+            symbols (List[list,str]): a list whose elements can be individual chars or list of chars that should map
+               to the same code. A symbol (or group of symbols) that should be merged with an
+               existing group should be given a a list that comprise the new symbol(s) and any
+               symbol that already belong to the alphabet's group.
 
-        :returns: the alphabet.
-        :rtype: Alphabet
+        Returns:
+            Alphabet: the alphabet.
         """
         def argfind(lst, x):
             for i,elt in enumerate(lst):
@@ -624,28 +534,28 @@ class Alphabet:
         return self
 
     def remove_symbols( self, symbol_list: list ):
-        """ Suppress one or more symbol from the alphabet.
+        """Suppress one or more symbol from the alphabet.
 
         The list format is used here as a convenient intermediate representation.
 
-        :param symbol_list: a list of symbols to be removed from the mapping.
-        :type symbol_list: list
+        Args:
+            symbol_list (list): a list of symbols to be removed from the mapping.
 
-        :returns: the alphabet itself.
-        :rtype: Alphabet
+        Returns:
+            Alphabet: the alphabet itself.
         """
         self._utf_2_code = self.from_list( self.to_list( exclude=symbol_list))
         self.finalize()
         return self
 
     def remove_symbol_class( self, symbol_class: str ):
-        """ Suppress a class of symbols from the alphabet.
+        """Suppress a class of symbols from the alphabet.
 
-        :param symbol_class: a key in the CharacterClass' character_classes dictionary.
-        :type symbol_list: list
+        Args:
+            symbol_class (list): a key in the CharacterClass' character_classes dictionary.
 
-        :returns: the alphabet itself.
-        :rtype: Alphabet
+        Returns:
+            Alphabet: the alphabet itself.
         """
         self._utf_2_code = self.from_list( self.to_list( exclude=list( CharClass.get(symbol_class) )))
         self.finalize()
@@ -654,56 +564,42 @@ class Alphabet:
     def encode(self, sample_s: str, ignore_unknown=False) -> list:
         """Encode a message string with integers: the string is segmented first.
 
-        .. todo::
-
+        Todo:
             flag for handling of unknown characters (ignore or encode as null)
 
-        :param sample_s: message string, clean or not.
-        :type sample_s: str
+        Args:
+            sample_s (str): message string, clean or not.
+            ignore_unknown (bool): if True, symbols that are not in the dictionary are
+                ignored. Default is False (unknown symbols are mapped to the null value).
 
-        :param ignore_unknown:
-            if True, symbols that are not in the dictionary are ignored. Default
-            is False (unknown symbols are mapped to the null value).
-        :type ignore_unknown: bool
-
-        :returns: a list of integers; symbols that are not in the alphabet yield
-                  a default code while generating a user warning.
-        :rtype: list
+        Returns:
+            list: a list of integers; symbols that are not in the alphabet yield
+                a default code while generating a user warning.
         """
         sample_s = self.normalize_spaces( sample_s )
         return [ self.get_code( t ) for t in self.tokenize( sample_s ) ]
 
     def encode_one_hot( self, sample_s: List[str]) -> Tensor:
-        """ 
-        One-hot encoding of a message string.
-        """
+        """One-hot encoding of a message string."""
         encode_int = self.encode( sample_s )
         return torch.tensor([[ 0 if i!=c else 1 for i in range(len(self)) ] for c in encode_int ],
                 dtype=torch.bool)
 
     def encode_batch(self, samples_s: List[str], padded=True, ignore_unknown=False ) -> Tuple[Tensor, Tensor]:
-        """ Encode a batch of messages.
+        """Encode a batch of messages.
 
-        .. todo::
+        Args:
+            samples_s (List[str]): a list of strings
 
-            flag for handling of unknown characters (ignore or encode as null)
+            padded (bool): if True (default), return a tensor of size (N,S) where S is the maximum
+               length of a sample mesg; otherwise, return an unpadded 1D-sequence of labels.
 
-        :param samples_s: a list of strings
-        :type samples_s: List[str]
+            ignore_unknown (bool): if True, symbols that are not in the dictionary are ignored. Default
+                is False (unknown symbols are mapped to the null value).
 
-        :param padded: 
-                if True (default), return a tensor of size (N,S) where S is the maximum 
-                length of a sample mesg; otherwise, return an unpadded 1D-sequence of labels.
-        :type padded: bool
-
-        :param ignore_unknown:
-            if True, symbols that are not in the dictionary are ignored. Default
-            is False (unknown symbols are mapped to the null value).
-        :type ignore_unknown: bool
-
-        :returns: a pair of tensors, with encoded batch as first element
-                  and lengths as second element.
-        :rtype: Tuple[Tensor, Tensor]
+        Returns:
+                Tuple[Tensor, Tensor]: a pair of tensors, with encoded batch as first element
+                 and lengths as second element.
         """
         encoded_samples = [ self.encode( s ) for s in samples_s ]
         lengths = [ len(s) for s in encoded_samples ] 
@@ -719,33 +615,30 @@ class Alphabet:
 
 
     def decode(self, sample_t: Tensor, length: int=-1 ) -> str:
-        """ Decode an integer-encoded sample.
+        """Decode an integer-encoded sample.
+        
+        Args:
+            sample_t (Tensor): a tensor of integers (W,).
 
-        :param sample_t: a tensor of integers (W,).
-        :type sample_t: Tensor
+            length (int): sample's length; if -1 (default), all symbols are decoded.
 
-        :param length: sample's length; if -1 (default), all symbols are decoded.
-        :type length: int
-
-        :returns: a string of symbols
-        :rtype: str
+        Returns:
+             str: a string of symbols
         """
         length = len(sample_t) if length < 0 else length
         return "".join( [self.get_symbol( c ) for c in sample_t.tolist()[:length] ] )
 
 
     def decode_batch(self, samples_nw: Tensor, lengths: Tensor=None ) -> List[ str ]:
-        """ Decode a batch of integer-encoded samples.
+        """Decode a batch of integer-encoded samples.
 
-        
-        :param sample_nw: each row of integers encodes a string.
-        :type sample_nw: Tensor (N,W)
+        Args:
+            sample_nw (Tensor): each row of integers encodes a string.
 
-        :param lengths: length to be decoded in each sample; the default is full-length decoding.
-        :type lenghts: Tensor (N)
+            lengths (Tensor): length to be decoded in each sample; the default is full-length decoding.
 
-        :returns: a sequence of strings.
-        :rtype: list
+        Returns:
+            list: a sequence of strings.
         """
         if lengths == None:
             sample_count, max_length = samples_nw.shape
@@ -754,18 +647,16 @@ class Alphabet:
 
 
     def decode_ctc(self, msg: np.ndarray ):
-        """ Decode the output labels of a CTC-trained network into a human-readable string.
-        
-        .. code-block::
+        """Decode the output labels of a CTC-trained network into a human-readable string. Eg.::
 
             >>> alphabet.Alphabet('Hello').decode_ctc(np.array([1,1,0,2,2,2,0,0,3,3,0,3,0,4]))
             'Hello'
 
-        :param msg: a sequence of labels, possibly with duplicates and null values.
-        :type msg: np.ndarray
-        
-        :returns: a string of characters.
-        :rtype: str
+        Args:
+            msg (np.ndarray): a sequence of labels, possibly with duplicates and null values.
+
+        Returns:
+               str: a string of characters.
         """
         # keep track of positions to keep
         keep_idx = np.zeros( msg.shape, dtype='bool') 
@@ -782,31 +673,34 @@ class Alphabet:
 
     @staticmethod
     def deep_sorted(list_of_lists: List[Union[str,list]]) ->List[Union[str,list]]:
-        """ Sort a list that contains either lists of strings, or plain strings.
+        """Sort a list that contains either lists of strings, or plain strings.
+        Eg.::
 
-        Eg.
+           >>> deep_sorted(['a', ['B', 'b'], 'c', 'd', ['e', 'E'], 'f'])
+           [['B', 'b'], ['E', 'e'], 'a', 'c', 'd', 'f']
 
-        .. code-block::
+        Args:
+            list_of_lists (List[Union[str,list]]): a list where each element can be a characters or a 
+                list of characters.
 
-            >>> deep_sorted(['a', ['B', 'b'], 'c', 'd', ['e', 'E'], 'f'])
-            [['B', 'b'], ['E', 'e'], 'a', 'c', 'd', 'f']
-        
-
+        Returns:
+            List[Union[str,list]]: a sorted list, where each sublist is sorted and the top sorting 
+                key is the either the character or the first element of the list to be sorted.
         """
         return sorted([sorted(i) if len(i)>1 else i for i in list_of_lists],
                        key=lambda x: x[0])
 
 
     def tokenize_crude( self, mesg: str, quiet=True ) -> List[str]:
-        """ Tokenize a string into tokens that are consistent with the provided alphabet.
+        """Tokenize a string into tokens that are consistent with the provided alphabet.
         A very crude splitting, as a provision for a proper tokenizer. Spaces
-        are normalized (only standard spaces - ``' '=\\u0020``)), with duplicate spaces removed.
+        are normalized (only standard spaces - `' '=\\u0020`)), with duplicate spaces removed.
 
-        :param mesg: a string
-        :type mesg: str
+        Args:
+            mesg (str): a string
 
-        :returns: a list of characters.
-        :rtype: List[str]
+        Returns:
+            List[str]: a list of characters.
         """
         if not quiet:
             missing = set( s for s in mesg if s not in self )
@@ -818,41 +712,38 @@ class Alphabet:
 
     @staticmethod
     def normalize_spaces(mesg: str) -> str:
-        """ Normalize the spaces: 
+        """Normalize the spaces:
 
         * remove trailing spaces
-        * all spaces mapped to standard space (``' '=\\u0020``)
+        * all spaces mapped to standard space (`' '=\\u0020`)
         * duplicate spaces removed
 
-        Eg.
+        Eg.::
 
-        .. code-block::
-             
-            >>> normalize_spaces('\\t \\u000Ba\\u000C\\u000Db\\u0085c\\u00A0\\u2000\\u2001d\\u2008\\u2009e')
-            ['a b c d e']
+           >>> normalize_spaces('\\t \\u000Ba\\u000C\\u000Db\\u0085c\\u00A0\\u2000\\u2001d\\u2008\\u2009e')
+           ['a b c d e']
 
+        Args:
+            mesg (str): a string
 
-        :param mesg: a string
-        :type mesg: str 
-
-        :returns: a string
-        :rtype: str
+        Returns:
+               str: a string
         """
         return re.sub( r'\s+', ' ', mesg.strip())
         
 
     @staticmethod
     def merge_sublists( symbol_list: List[Union[str,list]], merge:List[str]=[] ) -> List[Union[str,list]]:
-        """
-        Given a nested list and a list of strings, merge the lists contained in <symbol_list>
+        """Given a nested list and a list of strings, merge the lists contained in <symbol_list>
         such that characters joined in a <merge> string are stored in the same list.
 
-        :param merge: 
-            for each of the provided subsequences, merge those output sublists that contain the characters
-            in it. Eg. ``merge=['ij']`` will merge the ``'i'`` sublist (``[iI$î...]``) with the ``'j'`` sublist (``[jJ...]``)
-        :type merge: List[str]
+        Args:
+            merge (List[str]): for each of the provided subsequences, merge those output sublists
+                that contain the characters in it. Eg. ``merge=['ij']`` will merge the ``'i'``
+                sublist (``[iI$î...]``) with the ``'j'`` sublist (``[jJ...]``)
 
-        :returns: a list of lists.
+        Returns:
+            List[Union[str,list]]: a list of lists.
         """
         if not merge:
             return symbol_list
@@ -882,8 +773,7 @@ class Alphabet:
 
 
 class CharClass():
-    """
-    Those character classes should be make it easier to deal with exotic characters
+    """Those character classes should be make it easier to deal with exotic characters
     at different stages of an HTR pipeline:
 
     * in the pre-processing stage: filter textual unicode-rich transcription
@@ -892,19 +782,19 @@ class CharClass():
 
     * in the model+alphabet building stage: build prototype alphabets and many-to-one
       mappings, where subsets of characters can be used as such, or merged at will.
-    
+
     Most of the dictionary's keys consist of a single symbol that serves as a stand-in
     for its class, and is typically used for backward (code-to-symbol) mapping during
     the decoding phase. However, because some classes need both a more explicit key (eg. abbreviations),
-    there is a need to distinguish the key function and the stand-in function, 
+    there is a need to distinguish the key function and the stand-in function,
     by using the first elt of each value to set the class representant.
-    Eg. ``'g': ('g', 'gĝğġģḡ')`` means that 'g' is both the key for the 
+    Eg. `'g': ('g', 'gĝğġģḡ')` means that 'g' is both the key for the
     set `'gĝğġģḡ'`, as well as its stand-in or class representant.
-    ``'Parenthesis': ('|', '()[]/\\|')`` means that the set "Parenthesis" 
-    has the ``'|'`` symbol as a stand-in.
+    `'Parenthesis': ('|', '()[]/\\|')` means that the set "Parenthesis"
+    has the `'|'` symbol as a stand-in.
 
     Notes about the categories:
-    
+
     * Capital and lowercase letters in distinct categories (a consumer script
       may merge them later);
     * Recognizable subscript marks ('a', 'o', ...) belong to their 'headletter'
@@ -989,27 +879,27 @@ class CharClass():
 
     @classmethod
     def in_domain(cls, char: str) -> bool:
-        """ Check that a symbol is in the dictionary."""
+        """Check that a symbol is in the dictionary."""
         return cls.get_key( char ) is not None
 
     @classmethod
     def get_class(cls, classname:str) -> str:
         """Get characters in the given class.
 
-        :param classname: a key in the dictionary.
-        :type classname: str
+        Args:
+            classname (str): a key in the dictionary.
         """
         return cls.character_classes[classname][1] if classname in cls.character_classes else None
 
     @classmethod
     def get_key(cls, char: str ) -> str:
-        """ Get key for given character 
+        """Get key for given character
 
-        :param char: a UTF character. Eg. `'Ä'`
-        :type char: str
+        Args:
+           char (str): a UTF character. Eg. `'Ä'`
 
-        :returns: UTF character or string that serves as a key for its category. Eg. `'a'`
-        :rtype: str
+        Returns:
+            str: UTF character or string that serves as a key for its category. Eg. `'a'`
         """
         for (k, cat) in cls.character_classes.items():
             if char in cat[1]:
@@ -1019,13 +909,13 @@ class CharClass():
 
     @classmethod
     def get_representant(cls, char: str ) -> str:
-        """Get "head character" for given character .
+        """Get "head character" for given character's class.
 
-        :param char: a UTF character. Eg. `'Ä'`
-        :type char: str
+        Args:
+            char (str): a UTF character. Eg. `'Ä'`
 
-        :returns: a UTF character, i.e. head-character for its category. Eg. `'a'`
-        :rtype: str
+        Returns:
+            str: a UTF character, i.e. head-character for its category. Eg. `'a'`
         """
         for (k, cat) in cls.character_classes.items():
             if char in cat[1]:
@@ -1036,23 +926,19 @@ class CharClass():
     
     @classmethod
     def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:
-        """ From a set of chars, return a list of lists, where each sublist matches one
-        of the categories above.
+        """From a set of chars, return a list of lists, where each sublist matches one
+                of the categories above.
 
+        Args:
+            chars (set): set of individual chars.
 
-        :param chars: set of individual chars.
-        :type chars: set
+            exclude (List[str]): names (keys) for those classes of characters that should be included in the output.
 
-        :param exclude: names (keys) for those classes of characters that should be included in the output.
-        :type exclude: List[str]
+        Returns: 
+            List[Union[List,str]]: a list of individual chars or list of chars. Eg.::
 
-        :returns: a list of individual chars or list of chars.
-        :rtype: List[Union[List,str]]
-
-        .. code-block::
-
-            >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
-            [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$'] 
+                >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
+                [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$']
 
         """
         #{ self.get_key(),c for c in chars }
