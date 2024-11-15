@@ -9,7 +9,7 @@ from functools import partial
 # Append app's root directory to the Python search path
 sys.path.append( str( Path(__file__).parents[1] ) )
 
-from didip_handwriting_datasets import monasterium
+from didip_handwriting_datasets import charters
 
 @pytest.fixture(scope="session")
 def data_path():
@@ -18,17 +18,17 @@ def data_path():
 
 @pytest.fixture(scope="session")
 def bbox_data_set( data_path ):
-    return monasterium.MonasteriumDataset(
+    return charters.ChartersDataset(
             task='htr', shape='bbox',
-            from_line_tsv_file=data_path.joinpath('bbox', 'monasterium_ds_train.tsv'),
-            transform=Compose([ monasterium.ResizeToHeight(300,2000), monasterium.PadToWidth(2000) ]))
+            from_line_tsv_file=data_path.joinpath('bbox', 'charters_ds_train.tsv'),
+            transform=Compose([ charters.ResizeToHeight(300,2000), charters.PadToWidth(2000) ]))
 
 @pytest.fixture(scope="session")
 def polygon_data_set( data_path ):
-    return monasterium.MonasteriumDataset(
+    return charters.ChartersDataset(
             task='htr', shape='polygons',
-            from_line_tsv_file=data_path.joinpath('polygons', 'monasterium_ds_train.tsv'),
-            transform=Compose([ monasterium.ResizeToHeight(300,2000), monasterium.PadToWidth(2000) ]))
+            from_line_tsv_file=data_path.joinpath('polygons', 'charters_ds_train.tsv'),
+            transform=Compose([ charters.ResizeToHeight(300,2000), charters.PadToWidth(2000) ]))
 
 @pytest.mark.parametrize(
         "subset, set_length",
@@ -39,7 +39,7 @@ def test_split_set( subset, set_length):
     the proper subset, with the proper size
     """
     samples = [ {'a':1.2, 'b':(4,5), 'c':'some' } for i in range(10) ]
-    s = monasterium.MonasteriumDataset._split_set( samples, (.5,.3,.2), subset )
+    s = charters.ChartersDataset._split_set( samples, (.5,.3,.2), subset )
 
     assert len(s) == set_length
     assert s[0]['b'] == (4,5)
@@ -50,7 +50,7 @@ def test_ResizeToiHeight():
     Raw transform
     """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.ResizeToHeight(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
+    sample_dict = charters.ResizeToHeight(30, 200)( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc'} )
     assert sample_dict['img'].shape == torch.Size([3,30,150])
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
@@ -63,7 +63,7 @@ def test_PadToWidth():
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
+    sample_dict = charters.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['img'].shape == torch.Size([3,100,600])
     assert sample_dict['height'] == 100
     assert sample_dict['width'] == 500
@@ -74,7 +74,7 @@ def test_PadToWidth_mask():
     Raw transform
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
-    sample_dict = monasterium.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
+    sample_dict = charters.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     mask = torch.zeros((3,100,600), dtype=torch.bool)
     mask[:,:100,:500]=1
     assert sample_dict['mask'].shape == torch.Size( [3,100,600])
@@ -87,7 +87,7 @@ def test_PadToWidth_mask_field_handling_holes():
     """
     img_to_pad = torch.randint(10,255, (3, 100, 500))
     img_to_pad[:,30:60, 2:10]=0
-    sample_dict = monasterium.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
+    sample_dict = charters.PadToWidth(600)( {'img': img_to_pad, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     mask = torch.zeros((3,100,600), dtype=torch.bool)
     mask[:,:100,:500]=1
     assert sample_dict['mask'].shape == torch.Size( [3,100,600])
@@ -99,8 +99,8 @@ def test_ResizePadCompose():
     """ Resize and Pad """
     img_to_resize = torch.randint(10,255, (3, 100, 500))
     sample_dict = Compose([ 
-            monasterium.ResizeToHeight(30, 200),
-            monasterium.PadToWidth(600)])( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
+            charters.ResizeToHeight(30, 200),
+            charters.PadToWidth(600)])( {'img': img_to_resize, 'height': 100, 'width': 500, 'transcription': 'abc' } )
     assert sample_dict['img'].shape == torch.Size([3,30,600])
     assert sample_dict['height'] == 30
     assert sample_dict['width'] == 150
@@ -162,11 +162,11 @@ def test_getitem_polygons( polygon_data_set ):
     assert type(sample['mask']) is Tensor
 
 def test_load_from_tsv_bbox( data_path ):
-    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('bbox', 'monasterium_ds_train.tsv') )
+    samples = charters.ChartersDataset.load_from_tsv( data_path.joinpath('bbox', 'charters_ds_train.tsv') )
     assert len(samples) == 10
 
 def test_load_from_tsv_polygons( data_path ):
-    samples = monasterium.MonasteriumDataset.load_from_tsv( data_path.joinpath('polygons', 'monasterium_ds_train.tsv'))
+    samples = charters.ChartersDataset.load_from_tsv( data_path.joinpath('polygons', 'charters_ds_train.tsv'))
     assert len(samples) == 10
 
 def test_dataset_from_tsv_item_type_bbox( bbox_data_set ):
@@ -212,7 +212,7 @@ def test_alphabet_initialization( bbox_data_set ):
     assert all( [ chr(i) in bbox_dataset.alphabet for i in range(ord('A')-ord('Z'))] )
 
 def test_dummy( data_path ):
-    assert monasterium.dummy()
+    assert charters.dummy()
     assert isinstance(data_path, Path )
 
 
