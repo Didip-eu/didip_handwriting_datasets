@@ -111,7 +111,30 @@ The following call leaves the first two folders untouched and uses their data to
 Alphabets: notes for myself
 ===========================
 
-Problem: fitting data actual charset to a model
+-----------------
+Desired features
+-----------------
+
+
+* An alphabet is a glorified dictionary; if it is many-to-one (*n* symbols map to 1 code), the operation
+  that maps a code to a symbol (for decoding) is consistently returns the same symbol, no matter how the
+  dictionary was created.
+* No matter how it has been created (from a in-memory dictionary or a file), the alphabet used for instantiating
+  a dataset is ultimately stored in a file ``alphabet.tsv`` in the same directory as the work samples.
+* Any dataset that is read from an existing TSV file is assigned by default the alphabet stored in ``alphabet.tsv``.
+* The ``alphabet`` attribute of a dataset can be assigned with an Alphabet object, that overrides the default:
+  + at initialization time, this alphabet overrides the on-disk alphabet (``alphabet.tsv`` file).
+  + if the alphabet is set in a later stage, the on-disk alphabet is not modified.
+  This puts a premimum on the alphabet used for creating the dataset on-disk; it can easily be read back and
+  examined later (and modified on-disk, if ever needed). Assigning an alphabet on a live dataset object at a
+  latere stage may be useful, but it should not mess with the existing on-disk data.
+
+The ChartersDataset class initializes a default alphabet, that can be replaced
+>>>>>>> 9ce1312 (Doc: alphabet subsection.)
+
+-----------------------------------------
+Fitting data actual charset to a model
+-----------------------------------------
 
 Distinguish between:
 
