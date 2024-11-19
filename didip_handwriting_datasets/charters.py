@@ -45,7 +45,7 @@ Utility classes to manage charter data.
 """
 
 import logging
-logging.basicConfig( level=logging.DEBUG, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
+logging.basicConfig( level=logging.INFO, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
 logger = logging.getLogger(__name__)
 
 # this is the tarball's top folder, automatically created during the extraction  (not configurable)
@@ -86,7 +86,7 @@ class ChartersDataset(VisionDataset):
 
     alphabet_tsv_name="alphabet.tsv"
 
-    default_alphabet = alphabet.Alphabet.prototype_from_scratch( exclude=["Hebrew","Diacritic","Parenthesis",], unknown='&' )
+    default_alphabet = alphabet.Alphabet.prototype_from_scratch( exclude=["Hebrew","Diacritic","Parenthesis","Abbreviation", "Subscript"] )
     #"Alphabet to be used if no other alphabet is provided."
 
     def __init__( self,
@@ -1305,7 +1305,7 @@ class KoenigsfeldenDataset(ChartersDataset):
             'desc': 'Koenigsfelden ground truth data',
             'origin': 'local',
             'tarball_root_name': 'koenigsfelden_1308-1662',
-            'comment': 'Minimal clean-up on transcriptions: removal of obvious junk or non-printable characters, as well a redundant punctuation marks (star-shaped unicode symbols); unicode-abbreviation marks have been kept.',
+            'comment': 'Transcriptions have been cleaned up (removal of obvious junk or non-printable characters, as well a redundant punctuation marks---star-shaped unicode symbols); unicode-abbreviation marks have been expanded.',
     }
 
     work_folder_name="KoenigsfeldenHandwritingDataset"
