@@ -119,18 +119,35 @@ Desired features
 * An alphabet is a glorified dictionary; if it is many-to-one (*n* symbols map to 1 code), the operation
   that maps a code to a symbol (for decoding) is consistently returns the same symbol, no matter how the
   dictionary was created.
+
 * No matter how it has been created (from a in-memory dictionary or a file), the alphabet used for instantiating
   a dataset is ultimately stored in a file ``alphabet.tsv`` in the same directory as the work samples.
+
 * Any dataset that is read from an existing TSV file is assigned by default the alphabet stored in ``alphabet.tsv``.
+
 * The ``alphabet`` attribute of a dataset can be assigned with an Alphabet object, that overrides the default:
+
   + at initialization time, this alphabet overrides the on-disk alphabet (``alphabet.tsv`` file).
   + if the alphabet is set in a later stage, the on-disk alphabet is not modified.
-<<<<<<< HEAD
+
   This puts a premimum on the alphabet used for creating the dataset on-disk; it can easily be read back and
   examined later (and modified on-disk, if ever needed). Assigning an alphabet on a live dataset object at a
-  latere stage may be useful, but it should not mess with the existing on-disk data.
+  later stage may be useful (albeit not encouraged), but it should not mess with the existing on-disk data.
 
-The ChartersDataset class initializes a default alphabet, that can be replaced
+The ChartersDataset class initializes a default, class-wide alphabet, that makes sense for most
+DiDip data. The alphabet attribute of a given work dataset is set in 3 steps:
+
+
+1. Every time a work dataset is created for an HTR task, the class-wide, default alphabet is serialized
+   first in the resulting work directory, no matter the initialization parameters.
+
+2. Any alphabet TSV file that is passed as a parameter to the dataset initialization method overrides the 
+   default alphabet in the same directory.
+
+3. The ``alphabet`` instance attribute (an Alphabet object) is initialized from the TSV file.
+
+This ensures that both on-disk and live alphabets are always in sync.
+ 
 
 -----------------------------------------
 Fitting data actual charset to a model
