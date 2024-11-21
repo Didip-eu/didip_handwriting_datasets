@@ -342,18 +342,7 @@ class Alphabet:
             charset.update( chars )
         charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
 
-        non_ascii_chars = set( char for char in charset if ord(char)>127 )
-        weird_chars = set( char for char in non_ascii_chars if not CharClass.in_domain( char ))
-        non_ascii_chars.difference_update( weird_chars )
-
-        if non_ascii_chars:
-            warnings.warn("The following characters are not in the ASCII set but look like reasonable Unicode symbols: {}".format( non_ascii_chars ))
-        if weird_chars:
-            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
-
-
         symbol_list = CharClass.build_subsets(charset, exclude=exclude) if many_to_one else sorted(charset)
-        
         symbol_list = cls.merge_sublists( symbol_list, merge )        
 
         return cls( cls.deep_sorted(symbol_list), unknown_class_representant=unknown)
