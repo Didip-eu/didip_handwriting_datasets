@@ -27,7 +27,7 @@ class Alphabet:
     end_of_seq_symbol = '\u21E5' # '⇥' i.e. '->|'
     unknown_symbol_utf = '?' 
 
-    def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None, unknown_class_representant:str='ƺ') -> None:
+    def __init__( self, alpha_repr: Union[str,dict,list]='', tokenizer=None, unknown_class_representative:str='ƺ') -> None:
         """Initialize a new Alphabet object. The special characters are added automatically.
 
             From a dictionary::
@@ -54,7 +54,7 @@ class Alphabet:
                 alpha_repr (Union[str, dict, list]): the input source--it may be a dictionary that maps chars to codes,
                        a nested list, a plain string, or the path of a TSV file.
 
-                unknown_class_representant (str): any character in this string should map to the code for 'unknown', as well
+                unknown_class_representative (str): any character in this string should map to the code for 'unknown', as well
                     as all members of its CharClass class.
         """
 
@@ -77,7 +77,7 @@ class Alphabet:
             self._utf_2_code = self.from_list( alpha_repr )
 
         # find code of unknown/uninterpretable chars and map it its predefined symbol 
-        self.unknown_class_representant = unknown_class_representant if unknown_class_representant else ''
+        self.unknown_class_representative = unknown_class_representative if unknown_class_representative else ''
 
         self.finalize()
 
@@ -88,7 +88,6 @@ class Alphabet:
     @property
     def many_to_one( self ):
         return not all(i==1 for i in Counter(self._utf_2_code.values()).values())
-
 
 
     def finalize( self ) -> None:
@@ -109,8 +108,8 @@ class Alphabet:
             
         self.default_symbol, self.default_code = self.null_symbol, self.null_value
 
-        if self.unknown_class_representant:
-            cr_code = self.get_code( self.unknown_class_representant )
+        if self.unknown_class_representative:
+            cr_code = self.get_code( self.unknown_class_representative )
             if cr_code is not None:
                 self._code_2_utf[ cr_code ] = self.unknown_symbol_utf
 
@@ -247,139 +246,6 @@ class Alphabet:
         alphadict = { s:c for (c,s) in enumerate(sorted(set( [ s for s in stg if not s.isspace() or s==' ' ])), start=1) }
         return alphadict
         
-    @classmethod
-    def prototype_from_data_paths(cls, 
-                                paths: List[str], 
-                                merge:List[str]=[],
-                                exclude:List[str]=[],
-                                many_to_one:bool=False,
-                                unknown:str='') -> Tuple[ Alphabet, Dict[str,str]]:
-        """Given a list of GT transcription file paths, return an alphabet.
-
-        Args:
-            paths (List[str]): a list of file path (wildards accepted).
-            merge (List[str]): for each of the provided subsequences, merge those output sublists that
-                contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
-                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
-                categories attribute).
-            unknown (str): a stand-in for the one class of characters that have to map on
-                the 'unknown' code.
-            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on the
-                Alphabet class' character classes.
-
-        Returns:
-            Tuple[Alphabet, Dict[str,str]]: a pair with * an Alphabet object * a dictionary 
-                `{ symbol: [filepath, ... ]}` that assigns to each symbols all the files in which it appears.
-        """
-        assert type(paths) is list
-        charset = set()
-        file_paths = []
-        for p in paths:
-            path = Path(p)
-            if '*' in path.name:
-                file_paths.extend( path.parent.glob( path.name ))
-            elif path.exists():
-                file_paths.append( path )
-
-        char_to_file = {}
-        for fp in file_paths:
-            with open(fp, 'r') as infile:
-                chars_in_this_file = set( char for line in infile for char in list(line.strip())  )
-                for c in chars_in_this_file:
-                    if c in char_to_file:
-                        char_to_file[ c ].append( fp.name )
-                    else:
-                        char_to_file[ c ] = [ fp.name ]
-                charset.update( chars_in_this_file )
-
-        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
-
-        weird_chars = set( char for char in charset if not CharClass.in_domain( char ))
-
-        if weird_chars:
-            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
-
-        symbol_list = CharClass.build_subsets(charset, exclude=exclude) if many_to_one else sorted(charset)
-        
-        symbol_list = cls.merge_sublists( symbol_list, merge )
-
-        return ( cls(cls.deep_sorted(symbol_list), unknown_class_representant=unknown), char_to_file)
-
-    @classmethod
-    def prototype_from_data_samples(cls, 
-                                    transcriptions: List[str], 
-                                    merge:List[str]=[], 
-                                    exclude:List[str]=[],
-                                    many_to_one:bool=False,
-                                    unknown:str='') -> Alphabet:
-        """Given a list of GT transcription strings, return an Alphabet.
-
-        Args:
-            paths (List[str]): a list of transcriptions.
-
-            merge (List[str]): for each of the provided subsequences, merge those output 
-                sublists that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'`
-                sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-
-            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
-                categories attribute).
-
-            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on
-                the Alphabet class' character classes.
-
-            unknown (str) a stand-in for the one class of characters that have to map
-                on the 'unknown' code.
-        
-        Returns:
-                Alphabet: an Alphabet object
-
-        """
-        charset = set()
-
-        for tr in transcriptions:
-            chars = set( list(tr.strip())  )
-            charset.update( chars )
-        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
-
-        symbol_list = CharClass.build_subsets(charset, exclude=exclude) if many_to_one else sorted(charset)
-        symbol_list = cls.merge_sublists( symbol_list, merge )        
-
-        return cls( cls.deep_sorted(symbol_list), unknown_class_representant=unknown)
-
-
-
-        
-    @classmethod
-    def prototype_from_scratch(cls, 
-                                merge:List[str]=[], 
-                                exclude:List[str]=[],
-                                unknown:str='') -> Alphabet:
-        """Build a tentative, "universal", alphabet from scratch, without regard to the data: it
-        maps classes of characters to common code, as described in the CharacterClass below.
-        The resulting encoding is rather short and lends itself to a variety of datasets.
-        The output can be redirected on file, reworked and then fed back through `from_tsv()`.
-
-        Args:
-            merge (List[str]): for each of the provided subsequences, merge those output sublists
-                that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
-                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-
-            exclude (List[str]): a list of Alphabet class names to exclude (keys in the Alphabet
-                categories attribute).
-
-            unknowni (str): a stand-in for the one class of characters that have to map on the
-                'unknown' code.
-
-        Returns:
-             Alphabet: an Alphabet object
-        """
-
-        symbol_list = CharClass.build_subsets( exclude=exclude )
-        symbol_list = cls.merge_sublists( symbol_list, merge )        
-
-        return cls(cls.deep_sorted(symbol_list), unknown_class_representant=unknown)
-
         
     def __len__( self ):
         return len( self._code_2_utf )
@@ -415,13 +281,13 @@ class Alphabet:
             return self._code_2_utf[i]
 
     def get_symbol( self, code, all=False ) -> Union[str, List[str]]:
-        """Return the class representant (default) or all symbols that map on the given code.
+        """Return the class representative (default) or all symbols that map on the given code.
 
         Args:
             code (int): a integer code.
 
             all (bool): if True, returns all symbols that map to the given code; if False (default),
-                returns the class representant.
+                returns the class representative.
 
         Returns:
             Union[str, List[str]]: the default symbol for this code, or the list of matching symbols.
@@ -534,19 +400,6 @@ class Alphabet:
             Alphabet: the alphabet itself.
         """
         self._utf_2_code = self.from_list( self.to_list( exclude=symbol_list))
-        self.finalize()
-        return self
-
-    def remove_symbol_class( self, symbol_class: str ):
-        """Suppress a class of symbols from the alphabet.
-
-        Args:
-            symbol_class (list): a key in the CharacterClass' character_classes dictionary.
-
-        Returns:
-            Alphabet: the alphabet itself.
-        """
-        self._utf_2_code = self.from_list( self.to_list( exclude=list( CharClass.get(symbol_class) )))
         self.finalize()
         return self
 
@@ -721,6 +574,128 @@ class Alphabet:
         return re.sub( r'\s+', ' ', mesg.strip())
         
 
+    @classmethod
+    def prototype_from_data_paths(cls, 
+                                std_charsets: List[Union[list,str]],
+                                paths: List[str], 
+                                merge:List[str]=[],
+                                many_to_one:bool=True,) -> Tuple[ Alphabet, Dict[str,str]]:
+        """Given a list of GT transcription file paths, return an alphabet.
+
+        Args:
+            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset
+            paths (List[str]): a list of file path (wildards accepted).
+            merge (List[str]): for each of the provided subsequences, merge those output sublists that
+                contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
+                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on the
+                Alphabet class' character classes.
+
+        Returns:
+            Tuple[Alphabet, Dict[str,str]]: a pair with * an Alphabet object * a dictionary 
+                `{ symbol: [filepath, ... ]}` that assigns to each symbols all the files in which it appears.
+        """
+        assert type(paths) is list
+        charset = set()
+        file_paths = []
+        for p in paths:
+            path = Path(p)
+            if '*' in path.name:
+                file_paths.extend( path.parent.glob( path.name ))
+            elif path.exists():
+                file_paths.append( path )
+
+        char_to_file = {}
+        for fp in file_paths:
+            with open(fp, 'r') as infile:
+                chars_in_this_file = set( char for line in infile for char in list(line.strip())  )
+                for c in chars_in_this_file:
+                    if c in char_to_file:
+                        char_to_file[ c ].append( fp.name )
+                    else:
+                        char_to_file[ c ] = [ fp.name ]
+                charset.update( chars_in_this_file )
+
+        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
+
+        weird_chars = itertools.filterfalse( lambda c: c in ''.join(charsets), charset )
+        if weird_chars:
+            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
+
+        symbol_list = cls.build_charsets_from_chars(std_charsets, charset) if many_to_one else sorted(charset)
+        
+        symbol_list = cls.merge_sublists( symbol_list, merge )
+
+        return ( cls(cls.deep_sorted(symbol_list)), char_to_file)
+
+    @classmethod
+    def prototype_from_data_samples(cls, 
+                                    std_charsets: List[Union[list,str]],
+                                    transcriptions: List[str], 
+                                    merge:List[str]=[], 
+                                    many_to_one:bool=True,) -> Alphabet:
+        """Given a list of GT transcription strings, return an Alphabet.
+
+        Args:
+            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset
+
+            transcriptions (List[str]): a list of transcriptions.
+
+            merge (List[str]): for each of the provided subsequences, merge those output 
+                sublists that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'`
+                sublist (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+
+            many_to_one (bool): if True (default), builds a many-to-one alphabet, based on
+                the Alphabet class' character classes.
+
+        Returns:
+                Alphabet: an Alphabet object
+
+        """
+        charset = set()
+
+        for tr in transcriptions:
+            chars = set( list(tr.strip())  )
+            charset.update( chars )
+        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
+
+        symbol_list = cls.build_charsets_from_chars(std_charsets, charset) if many_to_one else sorted(charset)
+        symbol_list = cls.merge_sublists( symbol_list, merge )        
+
+        return cls( cls.deep_sorted(symbol_list))
+
+
+
+        
+    @classmethod
+    def prototype_from_scratch(cls, 
+                                std_charsets: List[Union[list,str]],
+                                merge:List[str]=[],) -> Alphabet:
+        """Build a tentative, "universal", alphabet from scratch, without regard to the data: it
+        maps classes of characters to common code, as described in the CharacterClass below.
+        The resulting encoding is rather short and lends itself to a variety of datasets.
+        The output can be redirected on file, reworked and then fed back through `from_tsv()`.
+
+        Args:
+            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset
+
+            merge (List[str]): for each of the provided subsequences, merge those output sublists
+                that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
+                (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+
+
+        Returns:
+             Alphabet: an Alphabet object
+        """
+
+        symbol_list = cls.build_charsets_from_chars( std_charsets )
+        symbol_list = cls.merge_sublists( symbol_list, merge )        
+
+        return cls(cls.deep_sorted(symbol_list))
+
     @staticmethod
     def merge_sublists( symbol_list: List[Union[str,list]], merge:List[str]=[] ) -> List[Union[str,list]]:
         """Given a nested list and a list of strings, merge the lists contained in <symbol_list>
@@ -729,7 +704,7 @@ class Alphabet:
         Args:
             merge (List[str]): for each of the provided subsequences, merge those output sublists
                 that contain the characters in it. Eg. ``merge=['ij']`` will merge the ``'i'``
-                sublist (``[iI$î...]``) with the ``'j'`` sublist (``[jJ...]``)
+                sublist (``[iIî...]``) with the ``'j'`` sublist (``[jJ...]``)
 
         Returns:
             List[Union[str,list]]: a list of lists.
@@ -758,80 +733,38 @@ class Alphabet:
             symbol_list.extend( to_add ) 
         return symbol_list
 
-    @classmethod
-    def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:
-        """From a set of chars, return a list of lists, where each sublist matches one
-                of the categories above.
+
+    @staticmethod
+    def build_charsets_from_chars(list_charsets: List[Union[list,str]], chars: set = None, exclude=[]) -> List[Union[list,str]]:
+        """Given a list of charsets and a list of chars, return an alphabet as a list of lists.
+        Symbols that are not in the first list of charsets are included as atomic elements.
 
         Args:
+            list_charsets (List[Union[list,str]]): sets of chars which determine the grouping.
             chars (set): set of individual chars.
 
-            exclude (List[str]): names (keys) for those classes of characters that should be included in the output.
-
         Returns: 
-            List[Union[List,str]]: a list of individual chars or list of chars. Eg.::
+            List[Union[List,str]]: a list of individual chars or list of chars.
 
-                >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
-                [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$']
+        Example::
+
+            >>> build_intersection( ['1','2','3','9','JĴ','jĵɉ','Q','UÙÚÛÜŨŪŬŮŰŲ','uùúûüũūŭůűų'], ['u','2','%','9','j','Ų','J','Q','U','ũ'])
+            ['2', '9', 'J', 'j', 'Q', ['Ų', 'U'], ['u', 'ũ'], '%']
+
 
         """
-        #{ self.get_key(),c for c in chars }
-        chardict = { k:set()  for k in .character_classes.keys() }
-        lone_chars = []
-
-        # simply returns the classes as a list of list
-        complete_list = [ list(cs[1]) if len(cs[1])>1 else cs[1] for cs in cc.all_charsets ]
         if chars is None:
-            return complete_list
+            return [ list(l) if len(l)>1 else l for l in list_charsets ]
+
+        all_char_set = ''.join( list_charsets )
+        unknown_chars = set( c for c in chars if c not in all_char_set )
+
+        chars = chars.difference( unknown_chars )
+        keys=[ [ c in sl for sl in list_charsets ].index(True) for c in chars]
+        charsets_new = []
+        keyfunc = lambda x: x[0]
+        charsets_new = [ [ t[1] for t in l ] for k, l in itertools.groupby( sorted( zip(keys, chars), key=keyfunc), key=keyfunc) ]
+
+        return [ l[0] if len(l)==1 else l for l in charsets_new ] + list(unknown_chars)
         
 
-        for (k,c) in [ (cls.get_key(c),c) for c in chars ]:
-            if k is None:
-                lone_chars.append(c)
-            elif k not in exclude:
-                chardict[k].add(c)
-        return [ list(s) if len(s) > 1 else list(s)[0] for s in chardict.values() if len(s) ] + lone_chars
-
-
-
-class CharClass():
-     
-    @classmethod
-    def get_key(cls, char: str ) -> str:
-        """Get key for given character
-
-        Args:
-           char (str): a UTF character. Eg. `'Ä'`
-
-        Returns:
-            str: UTF character or string that serves as a key for its category. Eg. `'a'`
-        """
-        for (k, cat) in cls.character_classes.items():
-            if char in cat[1]:
-                return k
-        return None
-
-
-    @classmethod
-    def get_representant(cls, char: str ) -> str:
-        """Get "head character" for given character's class.
-
-        Args:
-            char (str): a UTF character. Eg. `'Ä'`
-
-        Returns:
-            str: a UTF character, i.e. head-character for its category. Eg. `'a'`
-        """
-        for (k, cat) in cls.character_classes.items():
-            if char in cat[1]:
-                return cat[0]
-        return None
-
-
-    
-
-
-
-
-def dummy():
-    return True
