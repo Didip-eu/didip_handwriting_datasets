@@ -758,129 +758,44 @@ class Alphabet:
             symbol_list.extend( to_add ) 
         return symbol_list
 
+    @classmethod
+    def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:
+        """From a set of chars, return a list of lists, where each sublist matches one
+                of the categories above.
+
+        Args:
+            chars (set): set of individual chars.
+
+            exclude (List[str]): names (keys) for those classes of characters that should be included in the output.
+
+        Returns: 
+            List[Union[List,str]]: a list of individual chars or list of chars. Eg.::
+
+                >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
+                [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$']
+
+        """
+        #{ self.get_key(),c for c in chars }
+        chardict = { k:set()  for k in .character_classes.keys() }
+        lone_chars = []
+
+        # simply returns the classes as a list of list
+        complete_list = [ list(cs[1]) if len(cs[1])>1 else cs[1] for cs in cc.all_charsets ]
+        if chars is None:
+            return complete_list
+        
+
+        for (k,c) in [ (cls.get_key(c),c) for c in chars ]:
+            if k is None:
+                lone_chars.append(c)
+            elif k not in exclude:
+                chardict[k].add(c)
+        return [ list(s) if len(s) > 1 else list(s)[0] for s in chardict.values() if len(s) ] + lone_chars
 
 
 
 class CharClass():
-    """Those character classes should be make it easier to deal with exotic characters
-    at different stages of an HTR pipeline:
-
-    * in the pre-processing stage: filter textual unicode-rich transcription
-      data by merging, removing, or replacing entire classes of characters, without having
-      to hard-code the in the script.
-
-    * in the model+alphabet building stage: build prototype alphabets and many-to-one
-      mappings, where subsets of characters can be used as such, or merged at will.
-
-    Most of the dictionary's keys consist of a single symbol that serves as a stand-in
-    for its class, and is typically used for backward (code-to-symbol) mapping during
-    the decoding phase. However, because some classes need both a more explicit key (eg. abbreviations),
-    there is a need to distinguish the key function and the stand-in function,
-    by using the first elt of each value to set the class representant.
-    Eg. `'g': ('g', 'gĝğġģḡ')` means that 'g' is both the key for the
-    set `'gĝğġģḡ'`, as well as its stand-in or class representant.
-    `'Parenthesis': ('|', '()[]/\\|')` means that the set "Parenthesis"
-    has the `'|'` symbol as a stand-in.
-
-    Notes about the categories:
-
-    * Capital and lowercase letters in distinct categories (a consumer script
-      may merge them later);
-    * Recognizable subscript marks ('a', 'o', ...) belong to their 'headletter'
-      class (eg. subscript a '\u0363' belongs to the lowercase 'a' class);
-    * One-symbol (= 1 Unicode) abbreviations that are clearly anchored on a
-      recognizable letter (eg. 'ꝗ','ꝓ', 'ꝑ', ...) belong to that letters'
-      character class;
-    * Marks or abbrevations whose expansion depends on the context (eg. subscript
-      bar =' ̄', 'ƺ', 'ꝰ', 'Ꝯ', ...) are in a category of their own: a HTR pipeline
-      consuming data that contain them may chose to ignore them, or include them
-      in the alphabet;
-    """
      
-    character_classes = {
-        ' ': (' ', ' '),
-        '0': ('0','0'), '1': ('1','1'), '2': ('2','2'), '3': ('3','3'), '4': ('4','4'), 
-        '5': ('5','5'), '6': ('6','6'), '7': ('7','7'), '8': ('8','8'), '9': ('9','9'),
-        'A': ('A', 'AÁÂÃÄÅÆĂĄÀ'),
-        'a': ('a', 'aáâãäåæāăąàæ'),
-        'B': ('B', 'B'),
-        'b': ('b', 'b'),
-        'C': ('C', 'CÇĆĈĊČ'),
-        'c': ('c', 'cçćĉċč'),
-        'D': ('D', 'DÐĎĐ'),
-        'd': ('d', 'dðďđď'),
-        'E': ('E', 'EÈÉÊËĒĔĖĘĚ'),
-        'e': ('e', 'eèéêëēĕėęě'),
-        'F': ('F', 'F'),
-        'f': ('f', 'f'),
-        'G': ('G', 'GĜĞĠĢ'),
-        'g': ('g', 'gĝğġģḡ'),
-        'H': ('H', 'HĤĦ'),
-        'h': ('h', 'hĥħ'),
-        'I': ('I', 'IÌÍÎÏĨĪĬĮİĲ'),
-        'i': ('i', 'iìíîïĩīĭįıĳ'),
-        'J': ('J', 'JĴ'),
-        'j': ('j', 'jĵɉ'),
-        'K': ('K', 'KĶ'),
-        'k': ('k', 'kķĸ'),
-        'L': ('L', 'LĹĻĽĿŁ£'),
-        'l': ('l', 'lĺļľŀł'),
-        'M': ('M', 'M'),
-        'm': ('m', 'm'),
-        'N': ('N', 'NÑŃŅŇŊ'),
-        'n': ('n', 'nñńņňŉŋ'),
-        'O': ('O', 'OÒÓÔÕÖŌŎŐŒ'),
-        'o': ('o', 'oòóôõöōŏőœ°'),
-        'P': ('P', 'P'),
-        'p': ('p', 'pꝑꝓ'),
-        'Q': ('Q', 'Q'),
-        'q': ('q', 'qꝗꝙ'),
-        'R': ('R', 'RŔŖŘ'),
-        'r': ('r', 'rŕŗřˀ'),
-        'S': ('S', 'SŚŜŞŠß'),
-        's': ('s', 'sśŝşš'),
-        'T': ('T', 'TŢŤŦ'),
-        't': ('t', 'tţťŧꝷ'),
-        'U': ('U', 'UÙÚÛÜŨŪŬŮŰŲ'),
-        'u': ('u', 'uùúûüũūŭůűų'), 
-        'V': ('V', 'V'),
-        'v': ('v', 'vꝟ'), 
-        'W': ('W', 'WŴ'),
-        'w': ('w', 'wŵ'),
-        'X': ('X', 'X'),
-        'x': ('x', 'x'), 
-        'Y': ('Y', 'YŶŸ'),
-        'y': ('y', 'yýÿŷ'),
-        'Z': ('Z', 'ZŹŻŽ'),
-        'z': ('z', 'zźżž'),
-        '.': ('.', '.✳'),
-        ',': (',', ':;'),
-        '-': ('-', '-¬—='),
-        'Subscripts': '\u0363\u0368\u0369\u0364\u036a\u0365\u036b\u0366\u036c\u036d\u0367\u036e\u036f', # respectively: acdehimortuvx
-        'Diacritic': ('^', "'ʼ" + ''.join([ chr(c) for c in range(0x300,0x316) ])), # variety of diacritics
-        'Parenthesis': ('|', '()[]/\\|'),
-        'Abbreviation': ('', 'ƺꝙꝮꝯꝫȝꝝ₰ꝛꝰꝭ&§₎כּ'),
-        'Hebrew': ('א', ''.join([ chr(c) for c in range(0x0591,0x05f5) ])),
-    }
-
-    @classmethod
-    def is_ascii(cls, char: str) -> bool:
-        return ord(char) <= 127
-
-    @classmethod
-    def in_domain(cls, char: str) -> bool:
-        """Check that a symbol is in the dictionary."""
-        return cls.get_key( char ) is not None
-
-    @classmethod
-    def get_class(cls, classname:str) -> str:
-        """Get characters in the given class.
-
-        Args:
-            classname (str): a key in the dictionary.
-        """
-        return cls.character_classes[classname][1] if classname in cls.character_classes else None
-
     @classmethod
     def get_key(cls, char: str ) -> str:
         """Get key for given character
@@ -914,37 +829,6 @@ class CharClass():
 
 
     
-    @classmethod
-    def build_subsets(cls, chars: set = None, exclude=[]) -> List[Union[List,str]]:
-        """From a set of chars, return a list of lists, where each sublist matches one
-                of the categories above.
-
-        Args:
-            chars (set): set of individual chars.
-
-            exclude (List[str]): names (keys) for those classes of characters that should be included in the output.
-
-        Returns: 
-            List[Union[List,str]]: a list of individual chars or list of chars. Eg.::
-
-                >>> build_subsets({'$', 'Q', 'Ô', 'ß', 'á', 'ç', 'ï', 'ô', 'õ', 'ā', 'Ă', 'ķ', 'ĸ', 'ś'})
-                [['Ă', 'ā', 'á'], 'ç', 'ï', ['ĸ', 'ķ'], ['Ô', 'õ', 'ô'], 'Q', ['ś', 'ß'], '$']
-
-        """
-        #{ self.get_key(),c for c in chars }
-        chardict = { k:set()  for k in cls.character_classes.keys() }
-        lone_chars = []
-
-        # simply returns the classes as a list of list
-        if chars is None:
-            return [ list(v[1]) if len(v[1])>1 else v[1] for (k,v) in cls.character_classes.items() if k not in exclude ]
-
-        for (k,c) in [ (cls.get_key(c),c) for c in chars ]:
-            if k is None:
-                lone_chars.append(c)
-            elif k not in exclude:
-                chardict[k].add(c)
-        return [ list(s) if len(s) > 1 else list(s)[0] for s in chardict.values() if len(s) ] + lone_chars
 
 
 
