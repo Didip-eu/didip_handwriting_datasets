@@ -15,8 +15,7 @@ from typing import *
 from tqdm import tqdm
 import defusedxml.ElementTree as ET
 #import xml.etree.ElementTree as ET
-from PIL import Image, ImageDraw
-from PIL import ImagePath as IP
+from PIL import Image
 import skimage as ski
 
 import numpy as np
@@ -29,7 +28,7 @@ import torchvision.transforms as transforms
 from . import download_utils as du
 from . import xml_utils as xu
 
-from . import alphabet
+from . import alphabet, character_classes.py
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
@@ -72,10 +71,6 @@ class ChartersDataset(VisionDataset):
                 By default, a folder named ``data/<root_folder_basename>`` is created in the *project directory*,
                 if no other path is passed to the constructor.
 
-            default_alphabet (list): a many-to-one alphabet in list form, to be used if no other alphabet is passed
-                to the initialization function.
-
-            alphabet_tsv_name (str): default name for the on-disk alphabet in the work dataset.
     """
 
     dataset_resource = None
@@ -83,11 +78,6 @@ class ChartersDataset(VisionDataset):
     work_folder_name = "ChartersHandwritingDataset"
 
     root_folder_basename="Charters"
-
-    alphabet_tsv_name="alphabet.tsv"
-
-    default_alphabet = alphabet.Alphabet.prototype_from_scratch( exclude=["Hebrew","Diacritic","Parenthesis","Abbreviation", "Subscript"] )
-    #"Alphabet to be used if no other alphabet is provided."
 
     def __init__( self,
                 root: str='',
@@ -103,7 +93,6 @@ class ChartersDataset(VisionDataset):
                 task: str = '',
                 shape: str = '',
                 count: int = 0,
-                alphabet_tsv: str = None,
                 line_padding_style: str = 'median',
                 resume_task: bool = False
                 ) -> None:
@@ -119,8 +108,7 @@ class ChartersDataset(VisionDataset):
                 created; default:
                 '<root>/MonasteriumHandwritingDatasetHTR'; if parameter
                 is a relative path, the work folder is created under
-                <root>; an absolute path overrides this. For HTR task,
-                the work folder also contains the alphabet in TSV form.
+                <root>; an absolute path overrides this.
             subset (str): 'train' (default), 'validate' or 'test'.
             subset_ratios (Tuple[float, float, float]): ratios for
                 respective ('train', 'validate', ...) subsets
@@ -147,7 +135,6 @@ class ChartersDataset(VisionDataset):
                 work folder, superceding the work_folder option).
             count (int): Stops after extracting {count} image items (for
                 testing purpose only).
-            alphabet_tsv (str): TSV file containing the alphabet
             line_padding_style (str): When extracting line bounding
                 boxes for an HTR task, padding to be used around the
                 polygon: 'median' (default) pads with the median value
@@ -167,7 +154,7 @@ class ChartersDataset(VisionDataset):
         if transform:
             trf = v2.Compose( [ v2.PILToTensor(), transform ] )
 
-        super().__init__(root, transform=trf, target_transform=target_transform if target_transform else self.filter_transcription)
+        super().__init__(root, transform=trf, target_transform=target_transform ) # if target_transform else self.filter_transcription)
 
         print( "from_page_xml_dir=", from_page_xml_dir )
         print( "self.dataset_resource=", self.dataset_resource)
@@ -208,9 +195,6 @@ class ChartersDataset(VisionDataset):
 
         self.data = []
 
-        # Used only for HTR tasks: initialized by _build_task()
-        self.alphabet = None
-
         self.resume_task = resume_task
 
         self._task = ''
@@ -220,7 +204,6 @@ class ChartersDataset(VisionDataset):
             self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, 
-                             alphabet_tsv=alphabet_tsv, 
                              line_padding_style=line_padding_style,)
 
             logger.debug("data={}".format( self.data[:6]))
@@ -234,7 +217,6 @@ class ChartersDataset(VisionDataset):
                    count: int=0, 
                    work_folder: str='', 
                    crop=False,
-                   alphabet_tsv='',
                    line_padding_style='median',
                    )->None:
         """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
@@ -263,7 +245,6 @@ class ChartersDataset(VisionDataset):
                 are to be created; default: './MonasteriumHandwritingDatasetHTR'.
             crop (bool): (for segmentation set only) crop text regions from both image and 
                 PageXML file. (Default value = False)
-            alphabet_tsv (str): TSV file containing the alphabet (Default value = '')
             line_padding_style (str): When extracting line bounding boxes for an HTR task,
                 padding to be used around the polygon: 'median' (default) pads with the
                 median value of the polygon; 'noise' pads with random noise.
@@ -272,8 +253,7 @@ class ChartersDataset(VisionDataset):
             None
 
         Raises:
-            FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist, or the
-                specified TSV alphabet does not exist.
+            FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist.
         """
         if task == 'htr':
             
@@ -282,7 +262,6 @@ class ChartersDataset(VisionDataset):
             
             # create from existing TSV files - passed directory that contains:
             # + image to GT mapping (TSV)
-            # + alphabet.tsv
             if from_line_tsv_file != '':
                 tsv_path = Path( from_line_tsv_file )
                 if tsv_path.exists():
@@ -326,21 +305,7 @@ class ChartersDataset(VisionDataset):
                 self._generate_readme("README.md", 
                         { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
                           'task': task, 'crop': crop, 'count': count, 'from_line_tsv_file': from_line_tsv_file,
-                          'work_folder': work_folder, 'alphabet_tsv': alphabet_tsv, 
-                          'line_padding_style': line_padding_style} )
-
-                # serialize the alphabet into the work folder
-                logger.debug("Serialize default (hard-coded) alphabet into {}".format(self.work_folder_path.joinpath('alphabet.tsv')))
-                self.default_alphabet.to_tsv( self.work_folder_path.joinpath('alphabet.tsv'))
-                #shutil.copy(self.root.joinpath( self.alphabet_tsv_name ), self.work_folder_path )
-            
-            # load alphabet
-            alphabet_tsv_input = Path( alphabet_tsv ) if alphabet_tsv else self.work_folder_path.joinpath( self.alphabet_tsv_name )
-            if not alphabet_tsv_input.exists():
-                raise FileNotFoundError("Alphabet file: {}".format( alphabet_tsv_input))
-            logger.debug('alphabet path: {}'.format( str(alphabet_tsv_input)))
-            self.alphabet = alphabet.Alphabet( alphabet_tsv_input )
-                
+                          'work_folder': work_folder, 'line_padding_style': line_padding_style} )
 
         elif task == 'segment':
             self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
@@ -391,7 +356,6 @@ class ChartersDataset(VisionDataset):
 
         + avg, median, min, max on image heights and widths
         + avg, median, min, max on transcriptions
-        + effective character set + which subset of the default alphabet is being used
 
         Args:
             samples (List[dict]): a list of samples.
@@ -1074,10 +1038,10 @@ class ChartersDataset(VisionDataset):
                     f"{self.dataset_stats(self.data)}" if self.data else 'No data',])
         if self.from_line_tsv_file:
              summary += "\nBuilt from TSV input:\t{}".format( self.from_line_tsv_file )
-        if self.task == 'HTR':
-            summary += "\nAlphabet:\t{} ({} codes)".format( self.work_folder_path.joinpath(self.alphabet_tsv_name), len(self.alphabet))
         
-        prototype_alphabet = self.get_prototype_alphabet()
+        prototype_alphabet = alphabet.Alphabet.prototype_from_data_samples( 
+                list(itertools.chain.from_iterable( character_classes.charsets )),
+                self.data ) if data else None
 
         if prototype_alphabet is not None:
             summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes." 
@@ -1113,29 +1077,16 @@ class ChartersDataset(VisionDataset):
                 )
 
 
-    def get_prototype_alphabet( self ) -> alphabet.Alphabet:
-        """Return a prototype alphabet, generated from the transcriptions.
-
-        Returns:
-            alphabet.Alphabet: alphabet.Alphabet: a prototypical alphabet instance, generated
-                from the transcriptions.
-        """
-        if self.data == []:
-            logger.warning("Sample set is empty!")
-            return None
-        return alphabet.Alphabet.prototype_from_data_samples( [ s['transcription'] for s in self.data ])
-
-
-    def filter_transcription(self, transcription:str ) -> str:
-        """Rewrite a message by using only the symbols that are in the alphabet.
-
-        Args:
-            transcription (str): A transcription ground truth.
-
-        Returns:
-            str: a rewritten message.
-        """
-        return ''.join([ self.alphabet.get_symbol(c) if c != self.alphabet.null_value else '' for c in self.alphabet.encode( transcription ) ])
+#    def filter_transcription(self, transcription:str ) -> str:
+#        """Rewrite a message by using only the symbols that are in the alphabet.
+#
+#        Args:
+#            transcription (str): A transcription ground truth.
+#
+#        Returns:
+#            str: a rewritten message.
+#        """
+#        return ''.join([ self.alphabet.get_symbol(c) if c != self.alphabet.null_value else '' for c in self.alphabet.encode( transcription ) ])
             
     @staticmethod
     def bbox_median_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
