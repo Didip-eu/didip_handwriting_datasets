@@ -576,25 +576,32 @@ class Alphabet:
 
     @classmethod
     def prototype_from_data_paths(cls, 
-                                std_charsets: List[Union[list,str]],
+                                std_charsets: List[str],
                                 paths: List[str], 
                                 merge:List[str]=[],
                                 many_to_one:bool=True,) -> Tuple[ Alphabet, Dict[str,str]]:
         """Given a list of GT transcription file paths, return an alphabet.
 
         Args:
-            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
-                "standard" for the dataset
-            paths (List[str]): a list of file path (wildards accepted).
+            std_charsets (List[str]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset. Eg.::
+            
+                    [' ', '1', '2', ..., '9', 'AÁÂÃÄÅÆĂĄÀ', 'aáâãäåæāăąàæ', ..., 'zźżž']
+
+            paths (List[str]): a list of file paths (wildards accepted).
+
             merge (List[str]): for each of the provided subsequences, merge those output sublists that
                 contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
                 (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
+
             many_to_one (bool): if True (default), builds a many-to-one alphabet, based on the
                 Alphabet class' character classes.
 
         Returns:
-            Tuple[Alphabet, Dict[str,str]]: a pair with * an Alphabet object * a dictionary 
-                `{ symbol: [filepath, ... ]}` that assigns to each symbols all the files in which it appears.
+            Tuple[Alphabet, Dict[str,str]]: a pair with 
+                * an Alphabet object 
+                * a dictionary `{ symbol: [filepath, ... ]}` that assigns to each non-standard symbol
+                  all the files in which it appears.
         """
         assert type(paths) is list
         charset = set()
@@ -606,40 +613,35 @@ class Alphabet:
             elif path.exists():
                 file_paths.append( path )
 
+        # for diagnosis on unexpected, non-standard symbols: populate 
+        # a symbol-to-file(s) dictionary
         char_to_file = {}
         for fp in file_paths:
             with open(fp, 'r') as infile:
-                chars_in_this_file = set( char for line in infile for char in list(line.strip())  )
-                for c in chars_in_this_file:
+                chars_in_this_file = set( char for line in infile for char in list(line.strip())  ).difference()
+                for c in chars_in_this_file.difference( set(''.join(std_charsets))) :
                     if c in char_to_file:
                         char_to_file[ c ].append( fp.name )
                     else:
                         char_to_file[ c ] = [ fp.name ]
                 charset.update( chars_in_this_file )
 
-        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
+        return (cls.charset_to_alphabet( charset, std_charsets, merge, many_to_one ), char_to_file )
 
-        weird_chars = itertools.filterfalse( lambda c: c in ''.join(charsets), charset )
-        if weird_chars:
-            warnings.warn("You may want to double-check the following characters: {}".format( weird_chars ))
-
-        symbol_list = cls.build_charsets_from_chars(std_charsets, charset) if many_to_one else sorted(charset)
-        
-        symbol_list = cls.merge_sublists( symbol_list, merge )
-
-        return ( cls(cls.deep_sorted(symbol_list)), char_to_file)
 
     @classmethod
     def prototype_from_data_samples(cls, 
-                                    std_charsets: List[Union[list,str]],
+                                    std_charsets: List[str],
                                     transcriptions: List[str], 
                                     merge:List[str]=[], 
                                     many_to_one:bool=True,) -> Alphabet:
         """Given a list of GT transcription strings, return an Alphabet.
 
         Args:
-            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
-                "standard" for the dataset
+            std_charsets (List[str]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset. Eg.::
+            
+                    [' ', '1', '2', ..., '9', 'AÁÂÃÄÅÆĂĄÀ', 'aáâãäåæāăąàæ', ..., 'zźżž']
 
             transcriptions (List[str]): a list of transcriptions.
 
@@ -659,33 +661,26 @@ class Alphabet:
         for tr in transcriptions:
             chars = set( list(tr.strip())  )
             charset.update( chars )
-        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
 
-        symbol_list = cls.build_charsets_from_chars(std_charsets, charset) if many_to_one else sorted(charset)
-        symbol_list = cls.merge_sublists( symbol_list, merge )        
-
-        return cls( cls.deep_sorted(symbol_list))
-
-
+        return cls.charset_to_alphabet( charset, std_charsets, merge, many_to_one )
 
         
     @classmethod
-    def prototype_from_scratch(cls, 
-                                std_charsets: List[Union[list,str]],
-                                merge:List[str]=[],) -> Alphabet:
+    def prototype_from_scratch( cls, std_charsets: List[str], merge:List[str]=[],) -> Alphabet:
         """Build a tentative, "universal", alphabet from scratch, without regard to the data: it
-        maps classes of characters to common code, as described in the CharacterClass below.
+        maps every class of characters (charset) to a common code.
         The resulting encoding is rather short and lends itself to a variety of datasets.
         The output can be redirected on file, reworked and then fed back through `from_tsv()`.
 
         Args:
-            std_charsets (List[Union[list,str]]): a list of charsets (strings of chars), considered 
-                "standard" for the dataset
+            std_charsets (List[str]): a list of charsets (strings of chars), considered 
+                "standard" for the dataset. Eg.::
+            
+                    [' ', '1', '2', ..., '9', 'AÁÂÃÄÅÆĂĄÀ', 'aáâãäåæāăąàæ', ..., 'zźżž']
 
             merge (List[str]): for each of the provided subsequences, merge those output sublists
                 that contain the characters in it. Eg. `merge=['ij']` will merge the `'i'` sublist
                 (`[iI$î...]`) with the `'j'` sublist (`[jJ...]`)
-
 
         Returns:
              Alphabet: an Alphabet object
@@ -695,6 +690,22 @@ class Alphabet:
         symbol_list = cls.merge_sublists( symbol_list, merge )        
 
         return cls(cls.deep_sorted(symbol_list))
+
+
+    @classmethod
+    def charset_to_alphabet( cls, charset: List[str], std_charsets: List[str], merge:List[str], many_to_one):
+
+        charset.difference_update( set( char for char in charset if char.isspace() and char!=' '))    
+
+        weird_chars = charset.difference( set(''.join( std_charsets )))
+        if weird_chars:
+            warnings.warn("The following characters are in the data, but not in the 'standard' charsets used by this prototype: {}".format( weird_chars ))
+
+        symbol_list = cls.build_charsets_from_chars(std_charsets, charset) if many_to_one else sorted(charset)
+        symbol_list = cls.merge_sublists( symbol_list, merge )
+
+        return cls(cls.deep_sorted(symbol_list))
+
 
     @staticmethod
     def merge_sublists( symbol_list: List[Union[str,list]], merge:List[str]=[] ) -> List[Union[str,list]]:
