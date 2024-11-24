@@ -26,9 +26,8 @@ from torchvision.datasets import VisionDataset
 import torchvision.transforms as transforms
 
 from . import download_utils as du
-from . import xml_utils as xu
 
-from . import alphabet, character_classes.py
+#from . import alphabet, character_classes.py
 
 torchvision.disable_beta_transforms_warning() # transforms.v2 namespaces are still Beta
 from torchvision.transforms import v2
@@ -56,7 +55,6 @@ class ChartersDataset(VisionDataset):
 
         * region and line/transcription extraction methods (from original page images and XML metadata)
         * commonly-used transforms, for use in getitem()
-        * default alphabet
 
         Attributes:
             dataset_resource (dict): meta-data (URL, archive name, type of repository).
@@ -1039,23 +1037,23 @@ class ChartersDataset(VisionDataset):
         if self.from_line_tsv_file:
              summary += "\nBuilt from TSV input:\t{}".format( self.from_line_tsv_file )
         
-        prototype_alphabet = alphabet.Alphabet.prototype_from_data_samples( 
-                list(itertools.chain.from_iterable( character_classes.charsets )),
-                self.data ) if data else None
-
-        if prototype_alphabet is not None:
-            summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes." 
-        
-            symbols_shared = self.alphabet.symbol_intersection( prototype_alphabet )
-            symbols_only_here, symbols_only_prototype = self.alphabet.symbol_differences( prototype_alphabet )
-
-
-            summary += f"\n + Dataset alphabet shares {len(symbols_shared)} symbols with a data-generated charset."
-            summary += f"\n + Dataset alphabet and a data-generated charset are identical: {self.alphabet == prototype_alphabet}"
-            if symbols_only_here:
-                summary += f"\n + Dataset alphabet's symbols that are not in a data-generated charset: {symbols_only_here}"
-            if symbols_only_prototype:
-                summary += f"\n + Data-generated charset's symbols that are not in the dataset alphabet: {symbols_only_prototype}"
+#        prototype_alphabet = alphabet.Alphabet.prototype_from_data_samples( 
+#                list(itertools.chain.from_iterable( character_classes.charsets )),
+#                self.data ) if data else None
+#
+#        if prototype_alphabet is not None:
+#            summary += f"\n + A prototype alphabet generated from this subset would have {len(prototype_alphabet)} codes." 
+#        
+#            symbols_shared = self.alphabet.symbol_intersection( prototype_alphabet )
+#            symbols_only_here, symbols_only_prototype = self.alphabet.symbol_differences( prototype_alphabet )
+#
+#
+#            summary += f"\n + Dataset alphabet shares {len(symbols_shared)} symbols with a data-generated charset."
+#            summary += f"\n + Dataset alphabet and a data-generated charset are identical: {self.alphabet == prototype_alphabet}"
+#            if symbols_only_here:
+#                summary += f"\n + Dataset alphabet's symbols that are not in a data-generated charset: {symbols_only_here}"
+#            if symbols_only_prototype:
+#                summary += f"\n + Data-generated charset's symbols that are not in the dataset alphabet: {symbols_only_prototype}"
 
         return ("\n________________________________\n"
                 f"\n{summary}"
@@ -1077,17 +1075,6 @@ class ChartersDataset(VisionDataset):
                 )
 
 
-#    def filter_transcription(self, transcription:str ) -> str:
-#        """Rewrite a message by using only the symbols that are in the alphabet.
-#
-#        Args:
-#            transcription (str): A transcription ground truth.
-#
-#        Returns:
-#            str: a rewritten message.
-#        """
-#        return ''.join([ self.alphabet.get_symbol(c) if c != self.alphabet.null_value else '' for c in self.alphabet.encode( transcription ) ])
-            
     @staticmethod
     def bbox_median_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
         """Pad a polygon BBox with the median value of the polygon. Used by
