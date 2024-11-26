@@ -207,7 +207,23 @@ class ChartersDataset(VisionDataset):
                              work_folder=work_folder, count=count, 
                              line_padding_style=line_padding_style,)
 
-            logger.debug("data={}".format( self.data[:6]))
+            if self.data:
+                # Generate a TSV file with one entry per img/transcription pair
+                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
+                self._generate_readme("README.md", 
+                        { 'subset': subset,
+                          'subset_ratios': subset_ratios, 
+                          'build_items': build_items, 
+                          'task': task, 
+                          'count': count, 
+                          'from_line_tsv_file': from_line_tsv_file,
+                          'from_page_xml_dir': from_page_xml_dir,
+                          'from_work_folder': from_work_folder,
+                          'work_folder': work_folder, 
+                          'line_padding_style': line_padding_style,
+                          'shape': shape,
+                         } )
+
 
     def _build_task( self, 
                    task: str='htr',
@@ -301,12 +317,6 @@ class ChartersDataset(VisionDataset):
                 logger.info(f"Subset contains {len(self.data)} samples.")
 
                 
-                # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
-                self._generate_readme("README.md", 
-                        { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
-                          'task': task, 'crop': crop, 'count': count, 'from_line_tsv_file': from_line_tsv_file,
-                          'work_folder': work_folder, 'line_padding_style': line_padding_style} )
 
         elif task == 'segment':
             self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
@@ -403,9 +413,10 @@ class ChartersDataset(VisionDataset):
         filepath = Path(self.work_folder_path, filename )
         
         with open( filepath, "w") as of:
-            print('Task was built with the following options:\n' + 
+            print('Task was built with the following options:\n\n\t+ ' + 
                   '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
                   file=of)
+            print( repr(self), file=of)
 
 
     def download_and_extract(
