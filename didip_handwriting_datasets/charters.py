@@ -15,8 +15,9 @@ from typing import *
 from tqdm import tqdm
 import defusedxml.ElementTree as ET
 #import xml.etree.ElementTree as ET
-from PIL import Image
+from PIL import Image, ImagePath
 import skimage as ski
+import gzip
 
 import numpy as np
 import torch
@@ -45,8 +46,6 @@ Utility classes to manage charter data.
 import logging
 logging.basicConfig( level=logging.INFO, format="%(asctime)s - %(funcName)s: %(message)s", force=True )
 logger = logging.getLogger(__name__)
-
-# this is the tarball's top folder, automatically created during the extraction  (not configurable)
 
 
 
@@ -118,7 +117,8 @@ class ChartersDataset(VisionDataset):
                 segmentation = cropped TextRegion images, with corresponding PageXML files.
                 If '' (default), the dataset archive is extracted but no actual data get
                 built.
-            shape (str): 'bbox' (default) for line bounding boxes or 'polygons'.
+            shape (str): Extract each line as bbox ('bbox': default), 
+                bbox+mask (2 files, 'mask'), or as padded polygons ('polygon')
             build_items (bool): if True (default), extract and store images for the task
                 from the pages; otherwise, just extract the original data from the archive.
             from_line_tsv_file (str): if set, the data are to be loaded from the given file
@@ -128,7 +128,7 @@ class ChartersDataset(VisionDataset):
                 raw page data contained in the given directory.
             from_work_folder (str): if set, the samples are to be loaded from the 
                 given directory, without prior processing.
-            folder count (int): Stops after extracting {count} image items (for testing 
+            count (int): Stops after extracting {count} image items (for testing 
                 purpose only).
             line_padding_style (str): When extracting line bounding boxes for an HTR task,
                 padding to be used around the polygon: 'median' (default) pads with the
@@ -201,7 +201,7 @@ class ChartersDataset(VisionDataset):
         if (task != ''):
             self._task = task # for self-documentation only
             build_ok = False if (from_line_tsv_file!='' or from_work_folder!='' ) else build_items
-            print(build_ok)
+            
             self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, 
@@ -302,7 +302,7 @@ class ChartersDataset(VisionDataset):
 
                 
                 # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"monasterium_ds_{subset}.tsv")) )
+                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
                 self._generate_readme("README.md", 
                         { 'subset': subset, 'subset_ratios': subset_ratios, 'build_items': build_items, 
                           'task': task, 'crop': crop, 'count': count, 'from_line_tsv_file': from_line_tsv_file,
@@ -332,19 +332,26 @@ class ChartersDataset(VisionDataset):
         Returns:
             List[dict]: a list of samples.
         """
+        logger.debug('In function')
         samples = []
         if type(work_folder_path) is str:
             work_folder_path = Path( work_folder_path )
-        for img_file in work_folder_path.glob('*.png'):
+        for img_file_path in work_folder_path.glob('*.png'):
             sample=dict()
-            logger.debug(img_file)            
-            gt_file_name = img_file.with_suffix('.gt.txt')
-            sample['img']=img_file
-            img = Image.open( img_file, 'r')
-            sample['width'], sample['height'] = img.size
+            logger.debug(img_file_path)            
+            gt_file_name = img_file_path.with_suffix('.gt.txt')
+            sample['img']=img_file_path
+            with Image.open( img_file_path, 'r') as img:
+                sample['width'], sample['height'] = img.size
             
             with open(gt_file_name, 'r') as gt_if:
                 sample['transcription']=gt_if.read().rstrip()
+
+            # optional mask
+            mask_file_path = img_file_path.with_suffix('.mask.npy.gz')
+            if mask_file_path.exists():
+                sample['polygon_mask']=mask_file_path
+
             samples.append( sample )
 
         logger.debug(f"Loaded {len(samples)} samples from {work_folder_path}")
@@ -498,7 +505,7 @@ class ChartersDataset(VisionDataset):
                                              gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'),
                                              int(height), int(width) ))
                 if 'polygon_mask' in sample and sample['polygon_mask'] is not None:
-                    of.write('\t{}'.format( sample['polygon_mask'] ))
+                    of.write('\t{}'.format( sample['polygon_mask'].name ))
                 of.write('\n')
                                             
 
@@ -517,30 +524,36 @@ class ChartersDataset(VisionDataset):
             {'img': <img file path>,
              'transcription': <transcription text>,
              'height': <original height>,
-             'width': <original width>,}
+             'width': <original width>,
+            ['polygon_mask': <1-D binary mask> ]
+            }
 
-        Raises:
-            ValueError: the TSV file has an incorrect number of fields.
         """
         work_folder_path = file_path.parent
         samples=[]
         with open( file_path, 'r') as infile:
             # Detection: 
             # - is the transcription passed as a filepath or as text?
-            img_path, file_or_text, height, width = next( infile )[:-1].split('\t')[:4]
+            first_line = next( infile )[:-1]
+            img_path, file_or_text, height, width = first_line.split('\t')[:4]
             inline_transcription = False if Path(file_or_text).exists() else True
-
-            infile.seek(0) 
+            # - Is there a mask field?
+            has_mask = len(first_line.split('\t')) > 4
+            infile.seek(0)
 
             # Note: polygons are not read
             for tsv_line in infile:
-                img_file, gt_field, height, width = tsv_line[:-1].split('\t')[:4]
+                fields = tsv_line[:-1].split('\t')
+                img_file, gt_field, height, width = fields[:4]
                 if not inline_transcription:
                     with open( work_folder_path.joinpath( gt_field ), 'r') as igt:
                         gt_field = '\n'.join( igt.readlines())
-                samples.append( {'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_field,
-                                 'height': int(height), 'width': int(width) } )
-
+                spl = { 'img': str(work_folder_path.joinpath( img_file )), 'transcription': gt_field,
+                        'height': int(height), 'width': int(width) }
+                if has_mask:
+                    spl['polygon_mask']=fields[4]
+                samples.append( spl )
+                               
         return samples
 
 
@@ -650,7 +663,7 @@ class ChartersDataset(VisionDataset):
                     #
                     #polygon_string=textregion_elt.find('pc:Coords', ns).get('points')
                     #coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-                    #textregion['bbox'] = IP.Path( coordinates ).getbbox()
+                    #textregion['bbox'] = ImagePath.Path( coordinates ).getbbox()
 
                     # fix bbox for given region, according to the line points it contains
                     textregion['bbox'] = self._compute_bbox( page, textregion['id'] )
@@ -704,7 +717,7 @@ class ChartersDataset(VisionDataset):
             region_elt = page_root.find( ".//pc:TextRegion[@id='{}']".format( region_id), ns )
             polygon_string=region_elt.find('pc:Coords', ns).get('points')
             coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-            original_bbox = IP.Path( coordinates ).getbbox()
+            original_bbox = ImagePath.Path( coordinates ).getbbox()
 
             all_points = []
             valid_lines = 0
@@ -723,7 +736,7 @@ class ChartersDataset(VisionDataset):
             not_ok = [ p for p in all_points if not within( p, original_bbox) ]
             if not_ok:
                 logger.warning("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, region_id, not_ok))
-            bbox = IP.Path( all_points ).getbbox()
+            bbox = ImagePath.Path( all_points ).getbbox()
             logger.debug("region {}, bbox={}".format( region_id, bbox))
             return bbox
 
@@ -873,7 +886,7 @@ class ChartersDataset(VisionDataset):
 
                     polygon_string=textline_elt.find('./pc:Coords', ns).get('points')
                     coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-                    textline['bbox'] = IP.Path( coordinates ).getbbox()
+                    textline['bbox'] = ImagePath.Path( coordinates ).getbbox()
                     
                     x_left, y_up, x_right, y_low = textline['bbox']
                     textline['width'], textline['height'] = x_right-x_left, y_low-y_up
@@ -901,16 +914,23 @@ class ChartersDataset(VisionDataset):
 
                             if not (self.resume_task and textline['img_path'].exists()):
                                 boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
-                                # Pad around the polygon
-                                img_chw = padding_func( img_chw, boolean_mask )
-                                Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
+                                
+                                if shape=='polygon':
+                                    # Pad around the polygon
+                                    img_chw = padding_func( img_chw, boolean_mask )
+                                    Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
+                                elif shape=='mask':
+                                    textline['mask_path']=img_path_prefix.with_suffix('.mask.npy.gz')
+                                    bbox_img.save( textline['img_path'] )
+                                    with gzip.GzipFile(textline['mask_path'], 'w') as zf:
+                                        np.save( zf, boolean_mask ) 
 
 
                     sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
                                'height': textline['height'], 'width': textline['width'] }
                     #logger.debug("_extract_lines(): sample=", sample)
-                    if textline['polygon'] is not None:
-                        sample['polygon_mask'] = textline['polygon']
+                    if textline['mask_path'] is not None:
+                        sample['polygon_mask'] = textline['mask_path'] #textline['polygon']
                     samples.append( sample )
 
                     with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
@@ -991,6 +1011,11 @@ class ChartersDataset(VisionDataset):
         sample = self.data[index].copy()
         sample['transcription']=self.target_transform( sample['transcription'] )
         sample['img'] = Image.open( img_path, 'r')
+
+        if 'polygon_mask' in self.data[index]:
+            with gzip.GzipFile(self.data[index]['polygon_mask'], 'r') as mask_in:
+                sample['polygon_mask'] = torch.tensor( np.load( mask_in ))
+
         # if resized, should store new height and width
         sample = self.transform( sample )
         sample['id'] = Path(img_path).name
