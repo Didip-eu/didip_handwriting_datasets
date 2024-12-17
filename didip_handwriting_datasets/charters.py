@@ -89,7 +89,11 @@ class ChartersDataset(VisionDataset):
                 from_work_folder: str = '',
                 build_items: bool = True,
                 task: str = '',
+<<<<<<< HEAD
                 expansion_masks = True,
+=======
+                expansion_masks = False,
+>>>>>>> 24abbb9 (Moving code around.)
                 shape: str = 'polygon',
                 count: int = 0,
                 line_padding_style: str = 'median',
@@ -209,7 +213,8 @@ class ChartersDataset(VisionDataset):
             self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
                              subset=subset, subset_ratios=subset_ratios, 
                              work_folder=work_folder, count=count, 
-                             line_padding_style=line_padding_style,)
+                             line_padding_style=line_padding_style,
+                             expansion_masks=expansion_masks)
 
             if self.data and not from_line_tsv_file:
                 # Generate a TSV file with one entry per img/transcription pair
@@ -229,6 +234,7 @@ class ChartersDataset(VisionDataset):
                          } )
 
 
+<<<<<<< HEAD
     def _build_task( self, 
                    task: str='htr',
                    build_items: bool=True, 
@@ -427,6 +433,8 @@ class ChartersDataset(VisionDataset):
                   file=of)
             print( repr(self), file=of)
 
+=======
+>>>>>>> 24abbb9 (Moving code around.)
 
     def download_and_extract(
             self,
@@ -480,36 +488,56 @@ class ChartersDataset(VisionDataset):
                 archive.extractall( raw_data_folder_path )
 
 
-    def _purge(self, folder: str) -> int:
-        """Empty the line image subfolder: all line images and transcriptions are
-        deleted, as well as the TSV file.
+    def _build_task( self, 
+                   task: str='htr',
+                   build_items: bool=True, 
+                   from_line_tsv_file: str='',
+                   subset: str='train', 
+                   subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
+                   count: int=0, 
+                   work_folder: str='', 
+                   crop=False,
+                   line_padding_style='median',
+                   expansion_masks=False,
+                   )->None:
+        """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
+
+        + only creates the files needed for a particular task (train, validate, or test): if more than one subset
+          is needed, just initialize a new dataset with desired parameters (work directory, subset)
+        + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
+        + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
         Args:
-            folder (str): Name of the subfolder to _purge (relative the caller's pwd
-
-        Returns:
-            int: number of deleted files.
-        """
-        cnt = 0
-        for item in [ f for f in Path( folder ).iterdir() if not f.is_dir()]:
-            item.unlink()
-            cnt += 1
-        return cnt
-
-
-    @staticmethod
-    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False) -> None:
-        """Create a CSV file with all tuples (`<line image absolute path>`, `<transcription>`, `<height>`, `<width>` `[<polygon points]`).
-        Height and widths are the original heights and widths.
-
-        Args:
-            samples (List[dict]): dataset samples.
-            file_path (str): A TSV (absolute) file path (Default value = '')
-            all_path_style (bool): list GT file name instead of GT content. (Default value = False)
+            task (str): 'htr' for HTR set = pairs (line, transcription),
+                'segment' for segmentation (Default value = 'htr')
+            build_items (bool): if True (default), extract and store
+                images for the task from the pages;
+            from_line_tsv_file (str): TSV file from which the data are
+                to be loaded (containing folder is assumed to be the work folder, superceding
+                the work_folder option). (Default value = '')
+            subset (str): 'train', 'validate' or 'test'. (Default value
+                = 'train')
+            subset_ratios (Tuple[float,float,float]): ratios for
+                respective ('train', 'validate', ...) subsets (Default
+                value = (.7, 0.1, 0.2))
+            count (int): Stops after extracting {count} image items (for
+                testing purpose only). (Default value = 0)
+            work_folder (str): Where line images and ground truth transcriptions fitting a particular task
+                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
+            crop (bool): (for segmentation set only) crop text regions from both image and 
+                PageXML file. (Default value = False)
+            line_padding_style (str): When extracting line bounding boxes for an HTR task,
+                padding to be used around the polygon: 'median' (default) pads with the
+                median value of the polygon; 'noise' pads with random noise.
+            expansion_masks (List[Tuple[int,int]]): for HTR, masks for CER computation.
 
         Returns:
             None
+
+        Raises:
+            FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist.
         """
+<<<<<<< HEAD
         if file_path == '':
             for sample in samples:
                 # note: TSV only contains the image file name (load_from_tsv() takes care of applying the correct path prefix)
@@ -530,9 +558,113 @@ class ChartersDataset(VisionDataset):
                     of.write('\t{}'.format( sample['polygon_mask'].name ))
                 of.write('\n')
                                             
+=======
+        if task == 'htr':
+             
+            if crop:
+                self.logger.warning("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
+            
+            # create from existing TSV files - passed directory that contains:
+            # + image to GT mapping (TSV)
+            if from_line_tsv_file != '':
+                tsv_path = Path( from_line_tsv_file )
+                if tsv_path.exists():
+                    self.work_folder_path = tsv_path.parent
+                    # paths are assumed to be absolute
+                    self.data = self.load_from_tsv( tsv_path, expansion_masks )
+                    logger.debug("data={}".format( self.data[:6]))
+                    logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
+                    #logger.debug(self.data[0]['polygon_mask'])
+                else:
+                    raise FileNotFoundError(f'File {tsv_path} does not exist!')
+
+            else:
+                if work_folder=='':
+                    self.work_folder_path = Path(self.root, self.work_folder_name+'HTR') 
+                    logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
+                else:
+                    # if work folder is an absolute path, it overrides the root
+                    self.work_folder_path = self.root.joinpath( work_folder )
+                    logger.debug("Work folder: {}".format( self.work_folder_path ))
+
+                if not self.work_folder_path.is_dir():
+                    self.work_folder_path.mkdir(parents=True)
+                    logger.debug("Creating work folder = {}".format( self.work_folder_path ))
+
+                # samples: all of them! (Splitting into subsets happens in an ulterior step.)
+                if build_items:
+                    samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, 
+                                                    count=count, shape=self.shape,
+                                                    padding_func=self.bbox_noise_pad if line_padding_style=='noise' else self.bbox_median_pad,
+                                                    expansion_masks=expansion_masks,)
+                else:
+                    logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
+                    samples = self.load_line_items_from_dir( self.work_folder_path )
+
+                self.data = self._split_set( samples, ratios=subset_ratios, subset=subset)
+                logger.info(f"Subset contains {len(self.data)} samples.")
+
+                
+
+        elif task == 'segment':
+            self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
+            if not self.work_folder_path.is_dir():
+                self.work_folder_path.mkdir(parents=True) 
+
+            if build_items:
+                if crop:
+                    self.data = self._extract_text_regions( self.raw_data_folder_path, self.work_folder_path, count=count )
+                else:
+                    self.data = self._build_page_lines_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
+
+>>>>>>> 24abbb9 (Moving code around.)
 
     @staticmethod
-    def load_from_tsv(file_path: Path) -> List[dict]:
+    def load_line_items_from_dir( work_folder_path: Union[Path,str] ) -> List[dict]:
+        """Construct a list of samples from a directory that has been populated with
+        line images and line transcriptions
+
+        Args:
+            work_folder_path (Union[Path,str]): a folder containing images (`*.png`) and
+            transcription files (`*.gt.txt`)
+
+        Returns:
+            List[dict]: a list of samples.
+        """
+        logger.debug('In function')
+        samples = []
+        if type(work_folder_path) is str:
+            work_folder_path = Path( work_folder_path )
+        for img_file_path in work_folder_path.glob('*.png'):
+            sample=dict()
+            logger.debug(img_file_path)            
+            gt_file_name = img_file_path.with_suffix('.gt.txt')
+            sample['img']=img_file_path
+            with Image.open( img_file_path, 'r') as img:
+                sample['width'], sample['height'] = img.size
+            
+            with open(gt_file_name, 'r') as gt_if:
+                transcription=gt_if.read().rstrip()
+                expansion_masks_match = re.search(r'^(.+)<([^>]+)>$', transcription)
+                if expansion_masks_match is not None:
+                    sample['transcription']=expansion_masks_match.group(1)
+                    sample['expansion_masks']=eval(expansion_masks_match.group(2))
+                else:
+                    sample['transcription']=transcription
+
+            # optional mask
+            mask_file_path = img_file_path.with_suffix('.mask.npy.gz')
+            if mask_file_path.exists():
+                sample['polygon_mask']=mask_file_path
+
+            samples.append( sample )
+
+        logger.debug(f"Loaded {len(samples)} samples from {work_folder_path}")
+        return samples
+                
+
+    @staticmethod
+    def load_from_tsv(file_path: Path, expansion_masks=False) -> List[dict]:
         """Load samples (as dictionaries) from an existing TSV file. Each input line is a tuple::
 
             <img file path> <transcription text> <height> <width> [<polygon points>]
@@ -582,11 +714,262 @@ class ChartersDataset(VisionDataset):
                         'height': int(height), 'width': int(width) }
                 if has_mask:
                     spl['polygon_mask']=work_folder_path.joinpath(fields[4])
+<<<<<<< HEAD
                 if expansion_masks_match is not None:
+=======
+                if expansion_masks and expansion_masks_match is not None:
+>>>>>>> 24abbb9 (Moving code around.)
                     spl['expansion_masks']=eval( expansion_masks_match.group(2))
                 samples.append( spl )
                                
         return samples
+
+    def _extract_lines(self, raw_data_folder_path: Path,
+                        work_folder_path: Path, 
+                        shape: str='polygon',
+                        text_only=False,
+                        expansion_masks=True,
+                        count=0,
+                        padding_func=None) -> List[Dict[str, Union[Tensor,str,int]]]:
+        """Generate line images from the PageXML files and save them in a local subdirectory
+        of the consumer's program.
+
+        Args:
+            raw_data_folder_path (Path): root of the (read-only) expanded archive.
+            work_folder_path (Path): Line images are extracted in this subfolder (relative to the
+                caller's pwd).
+            shape (str): Extract lines as polygons-within-boxes ('polygon': default) or as bboxes ('bbox').
+            text_only (bool): Store only the transcriptions (*.gt.txt files). (Default value = False)
+            expansion_masks (bool): retrieve offsets and lengths of the abbreviation expansions (if available)
+            count (int): Stops after extracting {count} images (for testing purpose). (Default value = 0)
+            padding_func (Callable[[np.ndarray], np.ndarray]): For polygons, a function that
+                accepts a (C,H,W) Numpy array and returns the line BBox image, with padding
+                around the polygon.
+
+        Returns:
+            List[Dict[str,Union[Tensor,str,int]]]: An array of dictionaries of the form:: 
+
+                {'img': <absolute img_file_path>,
+                 'transcription': <transcription text>,
+                 'height': <original height>,
+                 'width': <original width>}
+        """
+        logger.debug("_extract_lines()")
+
+        if padding_func is None:
+            padding_func = self.bbox_median_pad
+        logger.debug('padding_func={}'.format( padding_func ))
+
+        # filtering out Godzilla-sized images (a couple of them)
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+
+        Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
+
+        if not self.resume_task:
+            self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
+
+        gt_lengths = []
+        img_sizes = []
+        cnt = 0 # for testing purpose
+
+        samples = [] # each sample is a dictionary {'img': <img file path> , 'transcription': str,
+                     #                              'height': int, 'width': int}
+
+        for page in tqdm(self.pagexmls):
+
+            xml_id = Path( page ).stem
+            img_path = Path( raw_data_folder_path, f'{xml_id}.jpg')
+            logger.debug( img_path )
+
+            with open(page, 'r') as page_file:
+
+                page_tree = ET.parse( page_file )
+
+                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
+
+                page_root = page_tree.getroot()
+
+                if not text_only:
+
+                    try:
+                        page_image = Image.open( img_path, 'r')
+                    except Image.DecompressionBombWarning as dcb:
+                        logger.debug( f'{dcb}: ignoring page' )
+                        continue
+
+                for textline_elt in page_root.findall( './/pc:TextLine', ns ):
+                    if count and cnt == count:
+                        return samples
+
+                    textline = dict()
+                    textline['id']=textline_elt.get("id")
+                    transcription_element = textline_elt.find('./pc:TextEquiv', ns)
+                    if transcription_element is None:
+                        continue
+                    transcription_text_element = transcription_element.find('./pc:Unicode', ns)
+                    if transcription_text_element is None:
+                        continue
+             
+                    transcription = transcription_text_element.text
+
+                    if not transcription or re.match(r'\s+$', transcription):
+                        continue
+                    transcription = transcription.strip().replace("\t",' ')
+                    textline['transcription'] = transcription
+
+                    if expansion_masks and 'custom' in textline_elt.keys():
+                        textline['expansion_masks'] = [ (int(o), int(l)) for (o,l) in re.findall(r'expansion *{ *offset:(\d+); *length:(\d+);', textline_elt.get('custom')) ]
+
+                    # skip lines that don't have a transcription
+                    if not textline['transcription']:
+                        continue
+
+                    polygon_string=textline_elt.find('./pc:Coords', ns).get('points')
+                    coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
+                    textline['bbox'] = ImagePath.Path( coordinates ).getbbox()
+                    
+                    x_left, y_up, x_right, y_low = textline['bbox']
+                    textline['width'], textline['height'] = x_right-x_left, y_low-y_up
+                    
+                    img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textline['id']}" )
+                    textline['img_path'] = img_path_prefix.with_suffix('.png')
+
+                    textline['polygon'] = None
+
+                    #logger.debug("_extract_lines():", samples[-1])
+                    if not text_only: 
+                        bbox_img = page_image.crop( textline['bbox'] )
+
+                        if shape=='bbox':
+                            if not (self.resume_task and textline['img_path'].exists()):
+                                bbox_img.save( textline['img_path'] )
+
+                        else:
+                            # Image -> (C,H,W) array
+                            img_chw = np.array( bbox_img ).transpose(2,0,1)
+                            # 2D Boolean polygon mask, from points
+                            leftx, topy = textline['bbox'][:2]
+                            transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
+                            textline['polygon']=transposed_coordinates.tolist()
+
+                            if not (self.resume_task and textline['img_path'].exists()):
+                                boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
+                                
+                                if shape=='polygon':
+                                    # Pad around the polygon
+                                    img_chw = padding_func( img_chw, boolean_mask )
+                                    Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( textline['img_path'] ))
+                                elif shape=='mask':
+                                    textline['mask_path']=img_path_prefix.with_suffix('.mask.npy.gz')
+                                    bbox_img.save( textline['img_path'] )
+                                    with gzip.GzipFile(textline['mask_path'], 'w') as zf:
+                                        np.save( zf, boolean_mask ) 
+
+
+                    sample = {'img': textline['img_path'], 'transcription': textline['transcription'], \
+                               'height': textline['height'], 'width': textline['width'] }
+                    if 'expansion_masks' in textline:
+                        sample['expansion_masks'] = textline['expansion_masks']
+                    #logger.debug("_extract_lines(): sample=", sample)
+                    if 'mask_path' in textline:
+                        sample['polygon_mask'] = textline['mask_path'] #textline['polygon']
+                    samples.append( sample )
+
+                    with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
+                        gt_file.write( textline['transcription'])
+                        if 'expansion_masks' in textline:
+                            gt_file.write( '<{}>'.format( textline['expansion_masks']))
+                        gt_lengths.append(len( textline['transcription']))
+
+                    cnt += 1
+
+        return samples
+    
+
+
+    @staticmethod
+    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False) -> None:
+        """Create a CSV file with all tuples (`<line image absolute path>`, `<transcription>`, `<height>`, `<width>` `[<polygon points]`).
+        Height and widths are the original heights and widths.
+
+        Args:
+            samples (List[dict]): dataset samples.
+            file_path (str): A TSV (absolute) file path (Default value = '')
+            all_path_style (bool): list GT file name instead of GT content. (Default value = False)
+
+        Returns:
+            None
+        """
+        if file_path == '':
+            for sample in samples:
+                # note: TSV only contains the image file name (load_from_tsv() takes care of applying the correct path prefix)
+                img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
+                logger.debug("{}\t{}\t{}\t{}".format( img_path, 
+                      gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'), int(height), int(width)))
+            return
+        with open( file_path, 'w' ) as of:
+            for sample in samples:
+                img_path, gt, height, width = sample['img'].name, sample['transcription'], sample['height'], sample['width']
+                #logger.debug('{}\t{}'.format( img_path, gt, height, width ))
+                if 'expansion_masks' in sample and sample['expansion_masks'] is not None:
+                    gt = gt + '<{}>'.format( sample['expansion_masks'] )
+                of.write( '{}\t{}\t{}\t{}'.format( img_path,
+                                             gt if not all_path_style else Path(img_path).with_suffix('.gt.txt'),
+                                             int(height), int(width) ))
+                if 'polygon_mask' in sample and sample['polygon_mask'] is not None:
+                    of.write('\t{}'.format( sample['polygon_mask'].name ))
+                of.write('\n')
+                                            
+
+    @staticmethod
+    def dataset_stats( samples: List[dict] ) -> str:
+        """Compute basic stats about sample sets.
+
+        + avg, median, min, max on image heights and widths
+        + avg, median, min, max on transcriptions
+
+        Args:
+            samples (List[dict]): a list of samples.
+
+        Returns:
+            str: a string.
+        """
+        heights = np.array([ s['height'] for s in samples  ], dtype=int)
+        widths = np.array([ s['width'] for s in samples  ], dtype=int)
+        gt_lengths = np.array([ len(s['transcription']) for s in samples  ], dtype=int)
+
+        height_stats = [ int(s) for s in(np.mean( heights ), np.median(heights), np.min(heights), np.max(heights))]
+        width_stats = [int(s) for s in (np.mean( widths ), np.median(widths), np.min(widths), np.max(widths))]
+        gt_length_stats = [int(s) for s in (np.mean( gt_lengths ), np.median(gt_lengths), np.min(gt_lengths), np.max(gt_lengths))]
+
+        stat_list = ('Mean', 'Median', 'Min', 'Max')
+        row_format = "{:>10}" * (len(stat_list) + 1)
+        return '\n'.join([
+            row_format.format("", *stat_list),
+            row_format.format("Img height", *height_stats),
+            row_format.format("Img width", *width_stats),
+            row_format.format("GT length", *gt_length_stats),
+        ])
+
+
+    def _generate_readme( self, filename: str, params: dict )->None:
+        """Create a metadata file in the work directory.
+
+        Args:
+            filename (str): a filepath.
+            params (dict): dictionary of parameters passed to the dataset task builder.
+
+        Returns:
+            None
+        """
+        filepath = Path(self.work_folder_path, filename )
+        
+        with open( filepath, "w") as of:
+            print('Task was built with the following options:\n\n\t+ ' + 
+                  '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
+                  file=of)
+            print( repr(self), file=of)
+
 
 
     def _build_page_lines_pairs(self, raw_data_folder_path:Path,
@@ -825,6 +1208,7 @@ class ChartersDataset(VisionDataset):
                 page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
 
 
+<<<<<<< HEAD
     def _extract_lines(self, raw_data_folder_path: Path,
                         work_folder_path: Path, 
                         shape: str='polygon',
@@ -988,6 +1372,8 @@ class ChartersDataset(VisionDataset):
     
 
 
+=======
+>>>>>>> 24abbb9 (Moving code around.)
     @staticmethod
     def _split_set(samples: object, ratios: Tuple[float, float, float], subset: str) -> List[object]:
         """Split a dataset into 3 sets: train, validation, test.
@@ -1086,6 +1472,23 @@ class ChartersDataset(VisionDataset):
             int: number of data points.
         """
         return len( self.data )
+
+
+    def _purge(self, folder: str) -> int:
+        """Empty the line image subfolder: all line images and transcriptions are
+        deleted, as well as the TSV file.
+
+        Args:
+            folder (str): Name of the subfolder to _purge (relative the caller's pwd
+
+        Returns:
+            int: number of deleted files.
+        """
+        cnt = 0
+        for item in [ f for f in Path( folder ).iterdir() if not f.is_dir()]:
+            item.unlink()
+            cnt += 1
+        return cnt
 
     @property
     def task( self ):
