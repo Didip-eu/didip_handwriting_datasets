@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChartersDataset(VisionDataset):
-    """A generic dataset class for charters, equipped with a rich set of methods for both HTR and segmentation tasks:
+    """A generic dataset class for charters, equipped with a rich set of methods for HTR tasks:
 
         * region and line/transcription extraction methods (from original page images and XML metadata)
         * commonly-used transforms, for use in getitem()
@@ -88,10 +88,13 @@ class ChartersDataset(VisionDataset):
                 from_page_xml_dir: str = '',
                 from_work_folder: str = '',
                 build_items: bool = True,
+<<<<<<< HEAD:didip_handwriting_datasets/charters.py
                 task: str = '',
 <<<<<<< HEAD
                 expansion_masks = True,
 =======
+=======
+>>>>>>> c60aa3d (Splitting charters classes in two modules (HTR, segmentation).):didip_handwriting_datasets/charters_htr.py
                 expansion_masks = False,
 >>>>>>> 24abbb9 (Moving code around.)
                 shape: str = 'polygon',
@@ -118,10 +121,6 @@ class ChartersDataset(VisionDataset):
             extract_pages (bool): if True, extract the archive's content into the base
                 folder no matter what; otherwise (default), check first for a file tree 
                 with matching name and checksum.
-            task (str): 'htr' for HTR set = pairs (line, transcription), 'segment' for
-                segmentation = cropped TextRegion images, with corresponding PageXML files.
-                If '' (default), the dataset archive is extracted but no actual data get
-                built.
             expansion_masks (bool): if True (default), add transcription expansion offsets
                 to the sample if it is present in the XML source line annotations.
             shape (str): Extract each line as bbox ('bbox': default), 
@@ -137,9 +136,9 @@ class ChartersDataset(VisionDataset):
                 given directory, without prior processing.
             count (int): Stops after extracting {count} image items (for testing 
                 purpose only).
-            line_padding_style (str): When extracting line bounding boxes for an HTR task,
-                padding to be used around the polygon: 'median' (default) pads with the
-                median value of the polygon; 'noise' pads with random noise.
+            line_padding_style (str): When extracting line bounding boxes, padding to be 
+                used around the polygon: 'median' (default) pads with the median value of
+                the polygon; 'noise' pads with random noise.
             resume_task (bool): If True, the work folder is not purged. Only those page
                 items (lines, regions) that not already in the work folder are extracted.
                 (Partially implemented: works only for lines.)
@@ -204,35 +203,30 @@ class ChartersDataset(VisionDataset):
         self.data = []
 
         self.resume_task = resume_task
+        
+        build_ok = False if (from_line_tsv_file!='' or from_work_folder!='' ) else build_items
+        
+        self._build_task(build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
+                         subset=subset, subset_ratios=subset_ratios, 
+                         work_folder=work_folder, count=count, 
+                         line_padding_style=line_padding_style,
+                         expansion_masks=expansion_masks)
 
-        self._task = ''
-        if (task != ''):
-            self._task = task # for self-documentation only
-            build_ok = False if (from_line_tsv_file!='' or from_work_folder!='' ) else build_items
-            
-            self._build_task( task, build_items=build_ok, from_line_tsv_file=from_line_tsv_file, 
-                             subset=subset, subset_ratios=subset_ratios, 
-                             work_folder=work_folder, count=count, 
-                             line_padding_style=line_padding_style,
-                             expansion_masks=expansion_masks)
-
-            if self.data and not from_line_tsv_file:
-                # Generate a TSV file with one entry per img/transcription pair
-                self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
-                self._generate_readme("README.md", 
-                        { 'subset': subset,
-                          'subset_ratios': subset_ratios, 
-                          'build_items': build_items, 
-                          'task': task, 
-                          'count': count, 
-                          'from_line_tsv_file': from_line_tsv_file,
-                          'from_page_xml_dir': from_page_xml_dir,
-                          'from_work_folder': from_work_folder,
-                          'work_folder': work_folder, 
-                          'line_padding_style': line_padding_style,
-                          'shape': shape,
-                         } )
-
+        if self.data and not from_line_tsv_file:
+            # Generate a TSV file with one entry per img/transcription pair
+            self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
+            self._generate_readme("README.md", 
+                    { 'subset': subset,
+                      'subset_ratios': subset_ratios, 
+                      'build_items': build_items, 
+                      'count': count, 
+                      'from_line_tsv_file': from_line_tsv_file,
+                      'from_page_xml_dir': from_page_xml_dir,
+                      'from_work_folder': from_work_folder,
+                      'work_folder': work_folder, 
+                      'line_padding_style': line_padding_style,
+                      'shape': shape,
+                     } )
 
 <<<<<<< HEAD
     def _build_task( self, 
@@ -489,7 +483,6 @@ class ChartersDataset(VisionDataset):
 
 
     def _build_task( self, 
-                   task: str='htr',
                    build_items: bool=True, 
                    from_line_tsv_file: str='',
                    subset: str='train', 
@@ -508,8 +501,6 @@ class ChartersDataset(VisionDataset):
         + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
         Args:
-            task (str): 'htr' for HTR set = pairs (line, transcription),
-                'segment' for segmentation (Default value = 'htr')
             build_items (bool): if True (default), extract and store
                 images for the task from the pages;
             from_line_tsv_file (str): TSV file from which the data are
@@ -524,8 +515,6 @@ class ChartersDataset(VisionDataset):
                 testing purpose only). (Default value = 0)
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                 are to be created; default: './MonasteriumHandwritingDatasetHTR'.
-            crop (bool): (for segmentation set only) crop text regions from both image and 
-                PageXML file. (Default value = False)
             line_padding_style (str): When extracting line bounding boxes for an HTR task,
                 padding to be used around the polygon: 'median' (default) pads with the
                 median value of the polygon; 'noise' pads with random noise.
@@ -537,6 +526,7 @@ class ChartersDataset(VisionDataset):
         Raises:
             FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist.
         """
+<<<<<<< HEAD:didip_handwriting_datasets/charters.py
 <<<<<<< HEAD
         if file_path == '':
             for sample in samples:
@@ -560,62 +550,52 @@ class ChartersDataset(VisionDataset):
                                             
 =======
         if task == 'htr':
+=======
+>>>>>>> c60aa3d (Splitting charters classes in two modules (HTR, segmentation).):didip_handwriting_datasets/charters_htr.py
              
-            if crop:
-                self.logger.warning("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
-            
-            # create from existing TSV files - passed directory that contains:
-            # + image to GT mapping (TSV)
-            if from_line_tsv_file != '':
-                tsv_path = Path( from_line_tsv_file )
-                if tsv_path.exists():
-                    self.work_folder_path = tsv_path.parent
-                    # paths are assumed to be absolute
-                    self.data = self.load_from_tsv( tsv_path, expansion_masks )
-                    logger.debug("data={}".format( self.data[:6]))
-                    logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
-                    #logger.debug(self.data[0]['polygon_mask'])
-                else:
-                    raise FileNotFoundError(f'File {tsv_path} does not exist!')
-
+        if crop:
+            self.logger.warning("Warning: the 'crop' [to WritingArea] option ignored for HTR dataset.")
+        
+        # create from existing TSV files - passed directory that contains:
+        # + image to GT mapping (TSV)
+        if from_line_tsv_file != '':
+            tsv_path = Path( from_line_tsv_file )
+            if tsv_path.exists():
+                self.work_folder_path = tsv_path.parent
+                # paths are assumed to be absolute
+                self.data = self.load_from_tsv( tsv_path, expansion_masks )
+                logger.debug("data={}".format( self.data[:6]))
+                logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
+                #logger.debug(self.data[0]['polygon_mask'])
             else:
-                if work_folder=='':
-                    self.work_folder_path = Path(self.root, self.work_folder_name+'HTR') 
-                    logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
-                else:
-                    # if work folder is an absolute path, it overrides the root
-                    self.work_folder_path = self.root.joinpath( work_folder )
-                    logger.debug("Work folder: {}".format( self.work_folder_path ))
+                raise FileNotFoundError(f'File {tsv_path} does not exist!')
 
-                if not self.work_folder_path.is_dir():
-                    self.work_folder_path.mkdir(parents=True)
-                    logger.debug("Creating work folder = {}".format( self.work_folder_path ))
+        else:
+            if work_folder=='':
+                self.work_folder_path = Path(self.root, self.work_folder_name+'HTR') 
+                logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
+            else:
+                # if work folder is an absolute path, it overrides the root
+                self.work_folder_path = self.root.joinpath( work_folder )
+                logger.debug("Work folder: {}".format( self.work_folder_path ))
 
-                # samples: all of them! (Splitting into subsets happens in an ulterior step.)
-                if build_items:
-                    samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, 
-                                                    count=count, shape=self.shape,
-                                                    padding_func=self.bbox_noise_pad if line_padding_style=='noise' else self.bbox_median_pad,
-                                                    expansion_masks=expansion_masks,)
-                else:
-                    logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
-                    samples = self.load_line_items_from_dir( self.work_folder_path )
-
-                self.data = self._split_set( samples, ratios=subset_ratios, subset=subset)
-                logger.info(f"Subset contains {len(self.data)} samples.")
-
-                
-
-        elif task == 'segment':
-            self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
             if not self.work_folder_path.is_dir():
-                self.work_folder_path.mkdir(parents=True) 
+                self.work_folder_path.mkdir(parents=True)
+                logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
+            # samples: all of them! (Splitting into subsets happens in an ulterior step.)
             if build_items:
-                if crop:
-                    self.data = self._extract_text_regions( self.raw_data_folder_path, self.work_folder_path, count=count )
-                else:
-                    self.data = self._build_page_lines_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
+                samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, 
+                                                count=count, shape=self.shape,
+                                                padding_func=self.bbox_noise_pad if line_padding_style=='noise' else self.bbox_median_pad,
+                                                expansion_masks=expansion_masks,)
+            else:
+                logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
+                samples = self.load_line_items_from_dir( self.work_folder_path )
+
+            self.data = self._split_set( samples, ratios=subset_ratios, subset=subset)
+            logger.info(f"Subset contains {len(self.data)} samples.")
+
 
 >>>>>>> 24abbb9 (Moving code around.)
 
@@ -972,6 +952,7 @@ class ChartersDataset(VisionDataset):
 
 
 
+<<<<<<< HEAD:didip_handwriting_datasets/charters.py
     def _build_page_lines_pairs(self, raw_data_folder_path:Path,
                                 work_folder_path: Path, 
                                 text_only:bool=False, 
@@ -1374,6 +1355,8 @@ class ChartersDataset(VisionDataset):
 
 =======
 >>>>>>> 24abbb9 (Moving code around.)
+=======
+>>>>>>> c60aa3d (Splitting charters classes in two modules (HTR, segmentation).):didip_handwriting_datasets/charters_htr.py
     @staticmethod
     def _split_set(samples: object, ratios: Tuple[float, float, float], subset: str) -> List[object]:
         """Split a dataset into 3 sets: train, validation, test.
@@ -1490,21 +1473,11 @@ class ChartersDataset(VisionDataset):
             cnt += 1
         return cnt
 
-    @property
-    def task( self ):
-        """"""
-        if self._task == 'htr':
-            return "HTR"
-        if self._task == 'segment':
-            return "Segmentation"
-        return "None defined."
-
     def __repr__(self) -> str:
 
         summary = '\n'.join([
                     f"Root folder:\t{self.root}",
                     f"Files extracted in:\t{self.raw_data_folder_path}",
-                    f"Task: {self.task}",
                     f"Line shape: {self.shape}",
                     f"Work folder:\t{self.work_folder_path}",
                     f"Data points:\t{len(self.data)}",
