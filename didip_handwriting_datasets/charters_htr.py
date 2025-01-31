@@ -783,17 +783,14 @@ class ChartersDataset(VisionDataset):
         sample['transcription']=self.target_transform( sample['transcription'] )
         sample['img'] = Image.open( img_path, 'r')
 
+        # optional mask is concatenated to the image tensor by the transform
+        # in an ulterior step
         if 'img_mask' in self.data[index]:
             with gzip.GzipFile(self.data[index]['img_mask'], 'r') as mask_in:
-                # add mask to the img tensor instead
                 sample['img_mask'] = torch.tensor( np.load( mask_in ))
-                #mask_tensor = torch.tensor( np.load( mask_in ))
 
-
-        # if resized, should store new height and width
         sample = self.transform( sample )
         sample['id'] = Path(img_path).name
-        logger.debug('sample='.format(index), sample)
         return sample
 
     def __getitems__(self, indexes: list ) -> List[dict]:
@@ -942,26 +939,6 @@ class ChartersDataset(VisionDataset):
         mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
         img_out = img * mask_chw
         return img_out.transpose(1,2,0) if channel_dim == 2 else img_out
-
-    # 2D-mask functions, to be used in combination with either the BB image or the polygon/background image,
-    # as a possible value for the 'channel_func' constructor's parameter.
-    # Just shown as examples;
-    def bbox_focus_mask(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0, transparency=.4) -> np.ndarray:
-        """ Create an transparency mask that keeps polygon clear, but background faded.
-        Meant to be applied to a bounding box image."""
-        #img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
-        mask = np.full( mask_hw.shape, transparency ) * np.logical_not( mask_hw) + mask_hw 
-        return mask
-
-    def bbox_blurry_mask(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0,kernel_size=10) -> np.ndarray:
-        """ Create a mean-filtered version of the entire BB.
-        Meant to be applied to a polygon/background image."""
-        from skimage.filters.rank import mean
-        return mean( np.average( img_chw, axis=0 ), np.full((kernel_size,kernel_size),1))
-
-    def bbox_gray_mask(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0) -> np.ndarray:
-        """ Create a gray version of the entire BB."""
-        return np.average(img_chw, axis=0)
 
 
 class AddChannel():
