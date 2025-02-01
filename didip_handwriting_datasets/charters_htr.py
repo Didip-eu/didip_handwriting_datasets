@@ -10,6 +10,8 @@ import re
 import os
 from pathlib import *
 from typing import *
+import inspect
+import functools
 
 # 3rd-party
 from tqdm import tqdm
@@ -146,9 +148,11 @@ class ChartersDataset(VisionDataset):
                                     "\n\t + a valid resource dictionary (cf. 'dataset_resource' class attribute)" +
                                     "\n\t + one of the following options: -from_page_xml_dir, -from_work_folder, -from_line_tsv_file")
 
-        trf = v2.PILToTensor() if channel_func is None else v2.Compose( [v2.PILToTensor(), AddChannel()] )
+        trf = v2.Compose( [v2.PILToTensor(), v2.ToDtype(torch.float32, scale=True) ]) 
+        if channel_func is not None:
+            trf =  v2.Compose( [trf, AddChannel()] )
         if transform:
-            trf = v2.Compose( [ v2.PILToTensor(), transform ] ) if channel_func is None else v2.Compose([ v2.PILToTensor(), AddChannel(), transform] )
+            trf = v2.Compose( [ trf, transform ] ) 
 
         super().__init__(root, transform=trf, target_transform=target_transform ) # if target_transform else self.filter_transcription)
 
@@ -215,6 +219,12 @@ class ChartersDataset(VisionDataset):
         if self.data and not from_line_tsv_file:
             # Generate a TSV file with one entry per img/transcription pair
             self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
+            channel_function_def = None
+            if type(channel_func) is functools.partial:
+                channel_function_def = inspect.getsource(channel_func.func) + str( channel_func.keywords)
+            else:
+                channel_function_def = inspect.getsource( channel_func )
+
             self._generate_readme("README.md", 
                     { 'subset': subset,
                       'subset_ratios': subset_ratios, 
@@ -226,6 +236,7 @@ class ChartersDataset(VisionDataset):
                       'work_folder': work_folder, 
                       'line_padding_style': line_padding_style,
                       'shape': shape,
+                      'channel_func': channel_function_def,
                      } )
 
 
@@ -314,8 +325,7 @@ class ChartersDataset(VisionDataset):
                 # paths are assumed to be absolute
                 self.data = self.load_from_tsv( tsv_path, expansion_masks )
                 logger.debug("data={}".format( self.data[:6]))
-                logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
-                #logger.debug(self.data[0]['img_mask'])
+                #logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
             else:
                 raise FileNotFoundError(f'File {tsv_path} does not exist!')
 
@@ -562,24 +572,25 @@ class ChartersDataset(VisionDataset):
 
                     bbox_img = page_image.crop( textline_bbox )
 
-                    # Image -> (C,H,W) array
-                    img_chw = np.array( bbox_img ).transpose(2,0,1)
-                    # 2D Boolean polygon mask, from points
-                    leftx, topy = textline_bbox[:2]
-                    transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
-                    boolean_mask = ski.draw.polygon2mask( img_chw.shape[1:], transposed_coordinates )
-                    
                     if not (config['resume_task'] and sample['img'].exists()):
+                        # Image -> (H,W,C)-uint8 array
+                        img_hwc = np.array( bbox_img )
+                        # 2D Boolean polygon mask, from points
+                        leftx, topy = textline_bbox[:2]
+                        transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
+                        boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
+                    
                         # plain line image: save the bounding box
                         if config['shape'] == 'bbox':
                             bbox_img.save( sample['img'] )
                         # Pad around the polygon
                         else:
-                            img_chw = padding_func( img_chw, boolean_mask )
-                            Image.fromarray( img_chw.transpose(1,2,0) ).save( Path( sample['img'] ))
+                            img_hwc = padding_func( img_hwc, boolean_mask, channel_dim=2 )
+                            Image.fromarray(img_hwc).save( Path( sample['img'] ))
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
-                            img_mask_hw = config['channel_func']( img_chw, boolean_mask)
+                            img_mask_hw = config['channel_func']( img_hwc, boolean_mask)
+                            print("Out of channel_func():", img_mask_hw.dtype, np.max(img_mask_hw))
                             sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
                             with gzip.GzipFile(sample['img_mask'], 'w') as zf:
                                 np.save( zf, img_mask_hw ) 
@@ -673,7 +684,7 @@ class ChartersDataset(VisionDataset):
         
         with open( filepath, "w") as of:
             print('Task was built with the following options:\n\n\t+ ' + 
-                  '\n\t+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
+                  '\n+ '.join( [ f"{k}={v}" for (k,v) in params.items() ] ),
                   file=of)
             print( repr(self), file=of)
 
@@ -735,8 +746,6 @@ class ChartersDataset(VisionDataset):
         """
         img_path = self.data[index]['img']
         
-        #img_mask = self.data[index]['img_mask'] if 'img_mask' in self.data[index] else None
-
         assert isinstance(img_path, Path) or isinstance(img_path, str)
 
         # In the sample, image filename replaced with 
@@ -749,10 +758,13 @@ class ChartersDataset(VisionDataset):
         sample['img'] = Image.open( img_path, 'r')
 
         # optional mask is concatenated to the image tensor by the transform
-        # in an ulterior step
+        # in an ulterior step - it needs to be made into a Tensor here, because the v2.transform
+        # only converts the Image sample['img'], the other members being pass-through
+        # see https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_getting_started.html
         if 'img_mask' in self.data[index]:
             with gzip.GzipFile(self.data[index]['img_mask'], 'r') as mask_in:
-                sample['img_mask'] = torch.tensor( np.load( mask_in ))
+                mask_t = torch.tensor( np.load( mask_in )/255 )
+                sample['img_mask'] = mask_t
 
         sample = self.transform( sample )
         sample['id'] = Path(img_path).name
@@ -907,13 +919,14 @@ class ChartersDataset(VisionDataset):
 
 
 class AddChannel():
-    """Take the sample's mask/channel value and add it to the sample's image
+    """Take the sample's flat channel value and add it to the sample's image
     """
     def __call__(self, sample: dict) -> dict:
-        """The image is assumed to be a tensor already
+        """The image is assumed to be a tensor already, i.e. 0-1 float type; the channel is assumed
+        to have the same type.
         """
         transformed_sample = sample.copy()
-        print(sample['img_mask'])
+        print("AddChannel:", sample['img_mask'], sample['img_mask'].dtype)
         del transformed_sample['img_mask']
         transformed_sample['img']=torch.cat( [sample['img'], sample['img_mask'][None,:,:]] )
 
