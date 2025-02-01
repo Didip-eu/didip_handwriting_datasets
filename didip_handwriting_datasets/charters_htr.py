@@ -261,7 +261,6 @@ class ChartersDataset(VisionDataset):
             OSError: the base folder does not exist.
         """
         output_file_path = None
-        print(fl_meta)
         # downloadable archive
         if 'url' in fl_meta:
             output_file_path = root.joinpath( fl_meta['tarball_filename'])
@@ -590,7 +589,6 @@ class ChartersDataset(VisionDataset):
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
                             img_mask_hw = config['channel_func']( img_hwc, boolean_mask)
-                            print("Out of channel_func():", img_mask_hw.dtype, np.max(img_mask_hw))
                             sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
                             with gzip.GzipFile(sample['img_mask'], 'w') as zf:
                                 np.save( zf, img_mask_hw ) 
@@ -926,7 +924,6 @@ class AddChannel():
         to have the same type.
         """
         transformed_sample = sample.copy()
-        print("AddChannel:", sample['img_mask'], sample['img_mask'].dtype)
         del transformed_sample['img_mask']
         transformed_sample['img']=torch.cat( [sample['img'], sample['img_mask'][None,:,:]] )
 

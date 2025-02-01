@@ -33,11 +33,10 @@ def bbox_blurry_mask(img_hwc: np.ndarray, mask_hw: np.ndarray, kernel_size=10) -
         img_hwc (np.ndarray): array (H,W,C)-uint8, as created from a PIL image.
         mask_hw (np.ndarray): ignored here, but required by the interface.
     Output:
-        np.ndarray: (H,W) channel, with float values in the range 0-1.
+        np.ndarray: (H,W) channel, with int values in the range 0-255.
     """
     # note: skimage functions typically return 0-1 floats, no matter the input
-    out = ski.util.img_as_ubyte( ski.filters.rank.mean( ski.color.rgb2gray(img_hwc), np.full((kernel_size,kernel_size),1)))
-    return out
+    return ski.util.img_as_ubyte( ski.filters.rank.mean( ski.color.rgb2gray(img_hwc), np.full((kernel_size,kernel_size),1)))
 
 def bbox_gray_mask(img_hwc: np.ndarray, mask_hw: np.ndarray) -> np.ndarray:
     """ Create a gray version of the entire BB.
@@ -47,12 +46,9 @@ def bbox_gray_mask(img_hwc: np.ndarray, mask_hw: np.ndarray) -> np.ndarray:
         img_hwc (np.ndarray): array (H,W,C)-uint8, as created from a PIL image.
         mask_hw (np.ndarray): ignored here, but required by the interface.
     Output:
-        np.ndarray: (H,W) channel, with float values in the range 0-1.
+        np.ndarray: (H,W) channel, with int values in the range 0-255.
     """
-    print("Into gray_mask_func()", img_hwc.dtype)
-    out = ski.util.img_as_ubyte( ski.color.rgb2gray(img_hwc))
-    print("gray_mask()", out.dtype, np.max(out))
-    return out
+    return ski.util.img_as_ubyte( ski.color.rgb2gray(img_hwc))
 
 def show_img_three_plus_one(img_chw):
     """ Combine first 3 channels with the 4th one 
