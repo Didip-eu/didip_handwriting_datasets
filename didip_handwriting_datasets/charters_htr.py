@@ -93,6 +93,7 @@ class ChartersDataset(VisionDataset):
                 expansion_masks = False,
                 shape: str = 'polygon',
                 channel_func: Callable[[np.ndarray, np.ndarray],np.ndarray]= None,
+                save_binary_mask: bool = False,
                 count: int = 0,
                 line_padding_style: str = 'median',
                 resume_task: bool = False
@@ -122,6 +123,7 @@ class ChartersDataset(VisionDataset):
                 'polygon', i.e. line polygon against a background of choice.
             channel_func (Callable): function that takes image and binary polygon mask as inputs,
                 and generates an additional channel in the sample. Default: None.
+            save_binary_mask (bool): save the polygon mask on-disk. Default: False.
             build_items (bool): if True (default), extract and store images for the task
                 from the pages; otherwise, just extract the original data from the archive.
             from_line_tsv_file (str): if set, the data are to be loaded from the given file
@@ -207,6 +209,7 @@ class ChartersDataset(VisionDataset):
                 'subset': subset,
                 'subset_ratios': subset_ratios,
                 'expansion_masks': expansion_masks,
+                'save_binary_mask': save_binary_mask,
         }
 
 
@@ -237,6 +240,7 @@ class ChartersDataset(VisionDataset):
                       'line_padding_style': line_padding_style,
                       'shape': shape,
                       'channel_func': channel_function_def,
+                      'save_binary_mask': save_binary_mask,
                      } )
 
 
@@ -578,6 +582,9 @@ class ChartersDataset(VisionDataset):
                         leftx, topy = textline_bbox[:2]
                         transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
                         boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
+                        if config['save_binary_mask']:
+                            with gzip.GzipFile( img_path_prefix.with_suffix('.bool.npy.gz'), 'w') as zf:
+                                np.save( zf, boolean_mask ) 
                     
                         # plain line image: save the bounding box
                         if config['shape'] == 'bbox':
@@ -589,9 +596,11 @@ class ChartersDataset(VisionDataset):
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
                             img_mask_hw = config['channel_func']( img_hwc, boolean_mask)
-                            sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
-                            with gzip.GzipFile(sample['img_mask'], 'w') as zf:
-                                np.save( zf, img_mask_hw ) 
+                            #sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
+                            sample['img_mask']=img_path_prefix.with_suffix('.mask.npy')
+                            #with gzip.GzipFile(sample['img_mask'], 'w') as zf:
+                            #    np.save( zf, img_mask_hw ) 
+                            np.save( sample['img_mask'], img_mask_hw)
 
                     with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
                         gt_file.write( sample['transcription'])
@@ -760,9 +769,13 @@ class ChartersDataset(VisionDataset):
         # only converts the Image sample['img'], the other members being pass-through
         # see https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_getting_started.html
         if 'img_mask' in self.data[index]:
-            with gzip.GzipFile(self.data[index]['img_mask'], 'r') as mask_in:
-                mask_t = torch.tensor( np.load( mask_in )/255 )
-                sample['img_mask'] = mask_t
+            mask_t = None
+            if self.data[index]['img_mask'].suffix == '.gz':
+                with gzip.GzipFile(self.data[index]['img_mask'], 'r') as mask_in:
+                    mask_t = torch.tensor( np.load( mask_in )/255 )
+            else:
+                mask_t = torch.tensor( np.load( self.data[index]['img_mask'] )/255 )
+            sample['img_mask'] = mask_t
 
         sample = self.transform( sample )
         sample['id'] = Path(img_path).name
