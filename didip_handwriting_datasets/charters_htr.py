@@ -150,7 +150,7 @@ class ChartersDataset(VisionDataset):
                                     "\n\t + a valid resource dictionary (cf. 'dataset_resource' class attribute)" +
                                     "\n\t + one of the following options: -from_page_xml_dir, -from_work_folder, -from_line_tsv_file")
 
-        trf = v2.Compose( [v2.PILToTensor(), v2.ToDtype(torch.float32, scale=True) ]) 
+        trf = v2.Compose( [v2.PILToTensor()]) #, v2.ToDtype(torch.float32, scale=True) ]) 
         if channel_func is not None:
             trf =  v2.Compose( [trf, AddChannel()] )
         if transform:
@@ -222,11 +222,13 @@ class ChartersDataset(VisionDataset):
         if self.data and not from_line_tsv_file:
             # Generate a TSV file with one entry per img/transcription pair
             self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
-            channel_function_def = None
-            if type(channel_func) is functools.partial:
-                channel_function_def = inspect.getsource(channel_func.func) + str( channel_func.keywords)
-            else:
-                channel_function_def = inspect.getsource( channel_func )
+
+            channel_function_def = ''
+            if channel_func is not None:
+                if type(channel_func) is functools.partial:
+                    channel_function_def = inspect.getsource(channel_func.func) + str( channel_func.keywords)
+                else:
+                    channel_function_def = inspect.getsource( channel_func )
 
             self._generate_readme("README.md", 
                     { 'subset': subset,
@@ -366,7 +368,7 @@ class ChartersDataset(VisionDataset):
 
         Args:
             work_folder_path (Union[Path,str]): a folder containing images (`*.png`),
-            transcription files (`*.gt.txt`) and optional binary polygon masks ('*.mask.npy.gz')
+            transcription files (`*.gt.txt`) and optional extra channel ('*.channel.npy.gz')
 
         Returns:
             List[dict]: a list of samples.
@@ -394,8 +396,8 @@ class ChartersDataset(VisionDataset):
 
             # optional mask
             channel_file_path = img_file_path.with_suffix('.channel.npy.gz')
-            if mask_file_path.exists():
-                sample['img_channel']=mask_file_path
+            if channel_file_path.exists():
+                sample['img_channel']=channel_file_path
 
             samples.append( sample )
 
@@ -435,7 +437,7 @@ class ChartersDataset(VisionDataset):
             img_path, file_or_text, height, width = first_line.split('\t')[:4]
             inline_transcription = False if Path(file_or_text).exists() else True
             # - Is there a mask field?
-            has_mask = len(first_line.split('\t')) > 4
+            has_channel = len(first_line.split('\t')) > 4
             infile.seek(0)
 
             # Note: polygons are not read
@@ -453,7 +455,7 @@ class ChartersDataset(VisionDataset):
 
                 spl = { 'img': work_folder_path.joinpath( img_file ), 'transcription': gt_field,
                         'height': int(height), 'width': int(width) }
-                if has_mask:
+                if has_channel:
                     spl['img_channel']=work_folder_path.joinpath(fields[4])
                 if expansion_masks and expansion_masks_match is not None:
                     spl['expansion_masks']=eval( expansion_masks_match.group(2))
@@ -764,7 +766,7 @@ class ChartersDataset(VisionDataset):
         sample['transcription']=self.target_transform( sample['transcription'] )
         sample['img'] = Image.open( img_path, 'r')
 
-        # optional mask is concatenated to the image tensor by the transform
+        # optional channel is concatenated to the image tensor by the transform
         # in an ulterior step - it needs to be made into a Tensor here, because the v2.transform
         # only converts the Image sample['img'], the other members being pass-through
         # see https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_getting_started.html
@@ -775,7 +777,7 @@ class ChartersDataset(VisionDataset):
                     channel_t = torch.tensor( np.load( channel_in )/255 )
             else:
                 channel_t = torch.tensor( np.load( self.data[index]['img_channel'] )/255 )
-            channel['img_channel'] = channel_t
+            sample['img_channel'] = channel_t
 
         sample = self.transform( sample )
         sample['id'] = Path(img_path).name
