@@ -1,6 +1,8 @@
 import skimage as ski
 import numpy as np
+from pathlib import Path
 import matplotlib.pyplot as plt
+import gzip
 
 
 # 2D-channel functions, to be used in combination with either the BB image or the polygon/background image,
@@ -25,7 +27,7 @@ def bbox_alpha_mask(img_hwc: np.ndarray, mask_hw: np.ndarray, transparency=.4) -
     mask = (np.full( mask_hw.shape, transparency ) * np.logical_not( mask_hw) + mask_hw)
     return (mask*255).astype('uint8')
 
-def bbox_blurry_mask(img_hwc: np.ndarray, mask_hw: np.ndarray, kernel_size=10) -> np.ndarray:
+def bbox_blurry_channel(img_hwc: np.ndarray, mask_hw: np.ndarray=None, kernel_size=10) -> np.ndarray:
     """ Create a mean-filtered version of the entire BB.
     Meant to be added to a tensor representing polygon+background image.
 
@@ -36,7 +38,20 @@ def bbox_blurry_mask(img_hwc: np.ndarray, mask_hw: np.ndarray, kernel_size=10) -
         np.ndarray: (H,W) channel, with int values in the range 0-255.
     """
     # note: skimage functions typically return 0-1 floats, no matter the input
-    return ski.util.img_as_ubyte( ski.filters.rank.mean( ski.color.rgb2gray(img_hwc), np.full((kernel_size,kernel_size),1)))
+    return ski.filters.rank.mean( ski.util.img_as_ubyte(ski.color.rgb2gray(img_hwc)), np.full((kernel_size,kernel_size),1))
+
+
+def bbox_blurry_channel_file_from_img(img_file_path:str, kernel_size=10, suffix=".mask.npy", compress=True) -> None:
+    img_file_path = Path( img_file_path)
+    img_hwc = ski.io.imread( img_file_path )
+    channel_hw = bbox_blurry_channel( img_hwc, kernel_size=kernel_size)
+    if compress:
+        suffix += '.gz'
+        with gzip.GzipFile( img_file_path.with_suffix('').with_suffix(suffix), 'w') as zf:
+            np.save( zf, channel_hw)
+    else:
+        np.save( img_file_path.with_suffix('').with_suffix(suffix), channel_hw)
+
 
 def bbox_gray_mask(img_hwc: np.ndarray, mask_hw: np.ndarray) -> np.ndarray:
     """ Create a gray version of the entire BB.
