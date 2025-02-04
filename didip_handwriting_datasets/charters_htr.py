@@ -596,11 +596,11 @@ class ChartersDataset(VisionDataset):
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
                             img_mask_hw = config['channel_func']( img_hwc, boolean_mask)
-                            #sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
-                            sample['img_mask']=img_path_prefix.with_suffix('.mask.npy')
-                            #with gzip.GzipFile(sample['img_mask'], 'w') as zf:
-                            #    np.save( zf, img_mask_hw ) 
-                            np.save( sample['img_mask'], img_mask_hw)
+                            sample['img_mask']=img_path_prefix.with_suffix('.mask.npy.gz')
+                            #sample['img_mask']=img_path_prefix.with_suffix('.mask.npy')
+                            with gzip.GzipFile(sample['img_mask'], 'w') as zf:
+                                np.save( zf, img_mask_hw ) 
+                            #np.save( sample['img_mask'], img_mask_hw)
 
                     with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
                         gt_file.write( sample['transcription'])
