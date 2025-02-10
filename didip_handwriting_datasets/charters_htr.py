@@ -134,9 +134,8 @@ class ChartersDataset(VisionDataset):
             count (int): Stops after extracting {count} image items (for testing 
                 purpose only).
             line_padding_style (str): When extracting line bounding boxes, padding to be 
-                used around the polygon: 'median' pads with the median value of
-                the polygon; 'noise' pads with random noise; with either choice, the
-                olygon boolean mask is automatically saved on/retrieved from the disk.
+                used around the polygon: 'median'=median value of the polygon; 'noise'=random;
+                'zero'=0s. The polygon boolean mask is automatically saved on/retrieved from the disk;
                 Default is None.
             resume_task (bool): If True, the work folder is not purged. Only those page
                 items (lines, regions) that not already in the work folder are extracted.
@@ -591,10 +590,8 @@ class ChartersDataset(VisionDataset):
                         if config['channel_func'] is not None:
                             img_channel_hw = config['channel_func']( img_hwc, boolean_mask)
                             sample['img_channel']=img_path_prefix.with_suffix( config['channel_suffix'] )
-                            #sample['img_channel']=img_path_prefix.with_suffix('.channel.npy')
                             with gzip.GzipFile(sample['img_channel'], 'w') as zf:
                                 np.save( zf, img_channel_hw ) 
-                            #np.save( sample['img_channel'], img_channel_hw)
 
                     with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
                         gt_file.write( sample['transcription'])
@@ -760,7 +757,7 @@ class ChartersDataset(VisionDataset):
         sample['transcription']=self.target_transform( sample['transcription'] )
         img_array_hwc = ski.io.imread( img_path )
 
-        if self.config['line_padding_style'] is not None
+        if self.config['line_padding_style'] is not None:
             assert 'binary_mask' in sample and sample['binary_mask'].exists()
             with gzip.GzipFile(sample['binary_mask'], 'r') as mask_in:
                 binary_mask_hw = np.load( mask_in )
