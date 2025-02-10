@@ -134,7 +134,7 @@ class ChartersDataset(VisionDataset):
             count (int): Stops after extracting {count} image items (for testing 
                 purpose only).
             line_padding_style (str): When extracting line bounding boxes, padding to be 
-                used around the polygon: edian' pads with the median value of
+                used around the polygon: 'median' pads with the median value of
                 the polygon; 'noise' pads with random noise; with either choice, the
                 olygon boolean mask is automatically saved on/retrieved from the disk.
                 Default is None.
