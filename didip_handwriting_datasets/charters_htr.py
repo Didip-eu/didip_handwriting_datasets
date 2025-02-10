@@ -581,17 +581,16 @@ class ChartersDataset(VisionDataset):
                         transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in coordinates ], dtype='int')[:,::-1]
                         boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
                         
-                        if config['line_padding_style'] is not None:
-                            sample['binary_mask']=img_path_prefix.with_suffix('.bool.npy.gz')
-                            with gzip.GzipFile( sample['binary_mask'], 'w') as zf:
-                                np.save( zf, boolean_mask ) 
+                        sample['binary_mask']=img_path_prefix.with_suffix('.bool.npy.gz')
+                        with gzip.GzipFile( sample['binary_mask'], 'w') as zf:
+                            np.save( zf, boolean_mask ) 
                     
                         bbox_img.save( sample['img'] )
                          
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
                             img_channel_hw = config['channel_func']( img_hwc, boolean_mask)
-                            sample['img_channel']=img_path_prefix.with_suffix('.channel.npy.gz')
+                            sample['img_channel']=img_path_prefix.with_suffix( config['channel_suffix'] )
                             #sample['img_channel']=img_path_prefix.with_suffix('.channel.npy')
                             with gzip.GzipFile(sample['img_channel'], 'w') as zf:
                                 np.save( zf, img_channel_hw ) 
