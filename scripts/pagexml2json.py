@@ -59,7 +59,7 @@ def pagexml_to_segmentation_dict(page: str) -> dict:
             if transcription_elt is not None:
                 transcription_text = ''.join( transcription_elt.itertext())
 
-            lines_object.append( {'line_id': line_id, 'baseline': baseline_points, 'boundary': polygon_points, 'text': transcription_text} )
+            lines_object.append( {'id': line_id, 'baseline': baseline_points, 'boundary': polygon_points, 'text': transcription_text} )
 
         page_dict['lines'] = lines_object
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         if args.out == 'json':
             outfile_name = page.with_suffix('.json')
             with open(page, 'r') as infile, open( outfile_name, 'w') as outfile:
-                print( json.dumps( xu.pagexml_to_segmentation_dict( page ) ), file=outfile)
+                print( json.dumps( pagexml_to_segmentation_dict( page ) ), file=outfile)
                 print(f'{page} → {outfile_name}')
         elif args.out == 'stdout':
             print(json.dumps( pagexml_to_segmentation_dict( page ) ))
