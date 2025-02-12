@@ -530,8 +530,10 @@ class ChartersDataset(VisionDataset):
 
         samples = []
         line_tuples = []
-        #page_id = Path( page ).stem
-        page_id = Path(re.sub( r'\..+$', '', str(page.name)))
+
+        # replace extra dots in some names (everything that is not in the suffix)
+        page_id = re.match(r'(.+).{}'.format(config['gt_suffix']), page.name).group(1)
+        page_id = page_id.replace('.', '_')
 
         ###################### Case #1: PageXML ###################
         with open(page, 'r') as page_file:
