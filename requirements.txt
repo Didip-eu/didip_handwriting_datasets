@@ -1,10 +1,12 @@
 defusedxml
 gdown
+matplotlib
 numpy
 Pillow
 pytest
 setuptools
+skimage
 torch
 torchvision
 tqdm
-
+scikit-image
