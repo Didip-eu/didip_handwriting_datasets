@@ -48,7 +48,7 @@ Depending on the dataset stage, a few use cases, from the easiest to the more co
 Assumption: the TSV file is in the same location as the pre-compiled line images and transcription files, which is thus the work folder.
 
 ```bash
-myDataSet=charters_htr.ChartersDataset(from_line_tsv_file='/home/nicolas/vre/ddpa_htr/data/fsdb_aligned_matrix/charter_ds_train.tsv')
+myDataSet=charters_htr.ChartersDataset(from_line_tsv_file='./data/fsdb_aligned_matrix/charter_ds_train.tsv')
 ```
 
 This command does not create the work folder nor changes the sample files.
@@ -77,7 +77,7 @@ charters_htr.ChartersDataset(from_page_dir=f'{os.environ["HOME"]}/tmp/data/Monas
 For non-PageXML metadata, just pass the `gt_suffix` keyword parameter:
 
 ```bash
-charters_htr.ChartersDataset(from_page_dir=f'{os.environ["HOME"]}/tmp/data/fsdb_work/fsdb_full_text_sample_1000/htr_gt', work_folder='/home/nicolas/vre/ddpa_htr/data/fsdb_aligned_matrix', suffix='htr.gt .json')
+charters_htr.ChartersDataset(from_page_dir=f'{os.environ["HOME"]}/tmp/data/fsdb_work/fsdb_full_text_sample_1000/htr_gt', work_folder='./data/fsdb_aligned_matrix', suffix='htr.gt .json')
 ```
 
 In both cases, the work folder is created if it does not exist; if it exists, its content is deleted before the compilation.
