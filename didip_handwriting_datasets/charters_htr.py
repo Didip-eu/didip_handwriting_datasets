@@ -164,6 +164,8 @@ class ChartersDataset(VisionDataset):
         self.raw_data_folder_path = None
         self.work_folder_path = None # task-dependent
 
+        if line_padding_style and line_padding_style not in ['noise', 'zero', 'median', 'none']:
+            raise ValueError(f"Incorrect padding style: '{line_padding_style}'. Valid styles: 'noise', 'zero', or 'median'.")
         self.from_line_tsv_file = ''
         if from_line_tsv_file == '':
             # Local file system with data samples, no archive
@@ -591,7 +593,7 @@ class ChartersDataset(VisionDataset):
                     polygon_coordinates = [ tuple(pair) for pair in tl['boundary'] ]
                     line_tuples.append( (sample, textline_id, polygon_coordinates, transcription) )
 
-            for (sample, textline_id, polyg_coordinates, transcription) in line_tuples:
+            for (sample, textline_id, polygon_coordinates, transcription) in line_tuples:
                 
                 transcription = transcription.replace("\t",' ')
                 if len(transcription) == 0:
@@ -625,7 +627,7 @@ class ChartersDataset(VisionDataset):
                         # construct an additional, flat channel
                         if config['channel_func'] is not None:
                             img_channel_hw = config['channel_func']( img_hwc, boolean_mask)
-                            sample['img_channel']=img_path_prefix.with_suffix( config['channel_suffix'] )
+                            sample['img_channel']=img_path_prefix.with_suffix( '.channel.npy.gz' )
                             with gzip.GzipFile(sample['img_channel'], 'w') as zf:
                                 np.save( zf, img_channel_hw ) 
 
@@ -803,9 +805,10 @@ class ChartersDataset(VisionDataset):
                 elif self.config['line_padding_style']=='median':
                     padding_func = self.bbox_median_pad
                 img_array_hwc = padding_func( img_array_hwc, binary_mask_hw, channel_dim=2 )
+                if len(img_array_hwc.shape) == 2: # for ToImage() transf. to work in older torchvision
+                    img_array_hwc=img_array_hwc[:,:,None]
         del sample['binary_mask']
 
-        # np.ndarrays are not picked up by v2.transforms when in dict: hence the conversion
         sample['img']=v2.Compose( [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])(img_array_hwc)
         logger.debug("Before transform: sample['img'].dtype={}".format( sample['img'].dtype))
 
@@ -924,34 +927,39 @@ class ChartersDataset(VisionDataset):
         Returns:
             np.ndarray: the padded image, with same shape as input.
         """
-        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
+        img = img_chw.transpose(2,0,1) if (channel_dim == 2 and len(img_chw.shape) > 2) else img_chw
+        
+        if len(img.shape)==2:
+            img = img[None]
         padding_bg = np.zeros( img.shape, dtype=img.dtype)
 
         for ch in range( img.shape[0] ):
             med = np.median( img[ch][mask_hw] ).astype( img.dtype )
             padding_bg[ch] += np.logical_not(mask_hw) * med
             padding_bg[ch] += img[ch] * mask_hw
-        return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
+        return padding_bg.transpose(1,2,0) if (channel_dim==2 and len(img_chw.shape)>2) else padding_bg[0]
 
     @staticmethod
     def bbox_noise_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
         """Pad a polygon BBox with noise. Used by the line extraction method.
 
         Args:
-            img_chw (np.ndarray): an array (C,H,W). Optionally: (H,W,C)
+            img_chw (np.ndarray): an array (C,H,W). Optionally: (H,W,C) or (H,W)
             mask_hw (np.ndarray): a 2D Boolean mask (H,W).
             channel_dim (int): the channel dimension: 2 for (H,W,C) images. Default is 0.
 
         Returns:
             np.ndarray: the padded image, with same shape as input.
         """
-        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
+        img = img_chw.transpose(2,0,1) if (channel_dim == 2 and len(img_chw.shape) > 2) else img_chw
         padding_bg = np.random.randint(0, 255, img.shape, dtype=img_chw.dtype)
         
         padding_bg *= np.logical_not(mask_hw) 
-        mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
-        padding_bg += img * mask_chw
-        return padding_bg.transpose(1,2,0) if channel_dim==2 else padding_bg
+        if len(img.shape)>2:
+            mask_hw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
+
+        padding_bg += img * mask_hw
+        return padding_bg.transpose(1,2,0) if (channel_dim==2 and len(img.shape) > 2) else padding_bg
 
     @staticmethod
     def bbox_zero_pad(img_chw: np.ndarray, mask_hw: np.ndarray, channel_dim: int=0 ) -> np.ndarray:
@@ -965,10 +973,11 @@ class ChartersDataset(VisionDataset):
         Returns:
             np.ndarray: the padded image, with same shape as input.
         """
-        img = img_chw.transpose(2,0,1) if channel_dim == 2 else img_chw
-        mask_chw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
-        img_out = img * mask_chw
-        return img_out.transpose(1,2,0) if channel_dim == 2 else img_out
+        img = img_chw.transpose(2,0,1) if (channel_dim == 2 and len(img_chw.shape) > 2) else img_chw
+        if len(img.shape)>2:
+            mask_hw = np.stack( [ mask_hw, mask_hw, mask_hw ] )
+        img_out = img * mask_hw
+        return img_out.transpose(1,2,0) if (channel_dim==2 and len(img.shape) > 2) else img_out
 
 
 class PadToWidth():
