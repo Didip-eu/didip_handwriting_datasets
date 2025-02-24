@@ -784,14 +784,10 @@ class ChartersDataset(VisionDataset):
         
         assert isinstance(img_path, Path) or isinstance(img_path, str)
 
-        # In the sample, image filename replaced with 
-        # - file id ('id')
-        # - tensor ('img')
-        # - dimensions of transformed image ('height' and 'width')
-        # 
         sample = self.data[index].copy()
         sample['transcription']=self.target_transform( sample['transcription'] )
-        img_array_hwc = ski.io.imread( img_path )
+
+        img_array_hwc = ski.io.imread( img_path ) # img path --> img ndarray
 
         if self.config['line_padding_style'] is not None:
             assert 'binary_mask' in sample and sample['binary_mask'].exists()
@@ -809,6 +805,7 @@ class ChartersDataset(VisionDataset):
                     img_array_hwc=img_array_hwc[:,:,None]
         del sample['binary_mask']
 
+        # img ndarray --> tensor
         sample['img']=v2.Compose( [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])(img_array_hwc)
         logger.debug("Before transform: sample['img'].dtype={}".format( sample['img'].dtype))
 
