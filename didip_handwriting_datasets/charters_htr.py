@@ -355,9 +355,8 @@ class ChartersDataset(VisionDataset):
 
             # samples: all of them! (Splitting into subsets happens in an ulterior step.)
             if build_items:
-                samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, on_disk=build_items, )
-                                                
-                                                
+                print("Building samples")
+                samples = self._extract_lines( self.raw_data_folder_path, self.work_folder_path, )
             else:
                 logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
                 samples = self.load_line_items_from_dir( self.work_folder_path, self.config['channel_suffix'] )
@@ -366,7 +365,6 @@ class ChartersDataset(VisionDataset):
             logger.info(f"Subset '{subset}' contains {len(data)} samples.")
 
         return data
-
 
 
     @staticmethod
@@ -474,19 +472,13 @@ class ChartersDataset(VisionDataset):
                                
         return samples
 
-    def _extract_lines(self, raw_data_folder_path: Path,
-                        work_folder_path: Path, 
-                        on_disk=False,) -> List[Dict[str, Union[Tensor,str,int]]]:
+    def _extract_lines(self, raw_data_folder_path: Path, work_folder_path: Path,) -> List[Dict[str, Union[Tensor,str,int]]]:
         """Generate line images from the PageXML files and save them in a local subdirectory
         of the consumer's program.
 
         Args:
             raw_data_folder_path (Path): root of the (read-only) expanded archive.
-            work_folder_path (Path): Line images are extracted in this subfolder (relative to the
-                caller's pwd).
-            on_disk (bool): If False (default), samples are only built in memory; otherwise line images 
-                and transcriptions are written into the work folder.
-                around the polygon.
+            work_folder_path (Path): Line images are extracted in this subfolder
 
         Returns:
             List[Dict[str,Union[Tensor,str,int]]]: An array of dictionaries of the form:: 
@@ -496,7 +488,8 @@ class ChartersDataset(VisionDataset):
                  'height': <original height>,
                  'width': <original width>}
         """
-        logger.debug("_extract_lines()")
+        logger.info("_extract_lines()")
+        print(self.pages)
 
         # filtering out Godzilla-sized images (a couple of them)
         warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -510,9 +503,7 @@ class ChartersDataset(VisionDataset):
         samples = [] 
 
         for page in tqdm(self.pages):
-            line_samples = self.extract_lines_from_page( page, 
-                        on_disk_folder=work_folder_path if on_disk else None, config=self.config)
-                        
+            line_samples = self.extract_lines_from_page( page, work_folder_path, config=self.config)
             if line_samples:
                 samples.extend( line_samples )
                 cnt += 1
@@ -521,7 +512,7 @@ class ChartersDataset(VisionDataset):
         return samples
 
     @classmethod
-    def extract_lines_from_page(cls, page: Union[str,Path], on_disk_folder: Union[Path,str]=None, config:dict={}):
+    def extract_lines_from_page(cls, page: Union[str,Path], work_folder_path: Union[Path,str], config:dict={}):
 
         assert all([ k in config for k in ('line_padding_style', 'channel_func', 'resume_task', 'expansion_masks')])
 
@@ -535,7 +526,7 @@ class ChartersDataset(VisionDataset):
         ###################### Case #1: PageXML ###################
         with open(page, 'r') as page_file:
 
-            if (config['gt_suffix']=='xml'):
+            if config['gt_suffix']=='xml':
                 page_tree = ET.parse( page_file )
                 ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
                 page_root = page_tree.getroot()
@@ -546,12 +537,11 @@ class ChartersDataset(VisionDataset):
 
                 page_image = None
 
-                if on_disk_folder:
-                    try:
-                        page_image = Image.open( img_path, 'r')
-                    except Image.DecompressionBombWarning as dcb:
-                        logger.debug( f'{dcb}: ignoring page' )
-                        return None
+                try:
+                    page_image = Image.open( img_path, 'r')
+                except Image.DecompressionBombWarning as dcb:
+                    logger.debug( f'{dcb}: ignoring page' )
+                    return None
                 
                 for textline_elt in page_root.findall( './/pc:TextLine', ns ):
 
@@ -580,12 +570,11 @@ class ChartersDataset(VisionDataset):
                 img_path = Path(page).parent.joinpath( page_dict['imagename'] )
                 page_image = None
 
-                if on_disk_folder:
-                    try:
-                        page_image = Image.open( img_path, 'r')
-                    except Image.DecompressionBombWarning as dcb:
-                        logger.debug( f'{dcb}: ignoring page' )
-                        return None
+                try:
+                    page_image = Image.open( img_path, 'r')
+                except Image.DecompressionBombWarning as dcb:
+                    logger.debug( f'{dcb}: ignoring page' )
+                    return None
 
                 for tl in page_dict['lines']:
                     sample = dict()
@@ -604,39 +593,34 @@ class ChartersDataset(VisionDataset):
                 x_left, y_up, x_right, y_low = textline_bbox
                 sample['width'], sample['height'] = x_right-x_left, y_low-y_up
                 
-                img_path_prefix = on_disk_folder.joinpath( f"{page_id}-{textline_id}" ) if on_disk_folder is not None else f"{page_id}-{textline_id}"
+                img_path_prefix = work_folder_path.joinpath( f"{page_id}-{textline_id}" ) 
                 sample['img'] = Path(img_path_prefix).with_suffix('.png')
 
-                if on_disk_folder is not None:
-                    if not Path(on_disk_folder).is_dir():
-                        raise FileNotFoundError("Abort. Check that directory {} exists.")
-
+                if not (config['resume_task'] and sample['img'].exists()):
                     bbox_img = page_image.crop( textline_bbox)
-                    if not (config['resume_task'] and sample['img'].exists()):
-                        img_hwc = np.array( bbox_img )
-                        leftx, topy = textline_bbox[:2]
-                        transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in polygon_coordinates ], dtype='int')[:,::-1]
+                    img_hwc = np.array( bbox_img )
+                    leftx, topy = textline_bbox[:2]
+                    transposed_coordinates = np.array([ (x-leftx, y-topy) for x,y in polygon_coordinates ], dtype='int')[:,::-1]
 
-                        boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
-                        sample['binary_mask']=img_path_prefix.with_suffix('.bool.npy.gz')
-                        with gzip.GzipFile( sample['binary_mask'], 'w') as zf:
-                            np.save( zf, boolean_mask )
+                    boolean_mask = ski.draw.polygon2mask( img_hwc.shape[:2], transposed_coordinates )
+                    sample['binary_mask']=img_path_prefix.with_suffix('.bool.npy.gz')
+                    with gzip.GzipFile( sample['binary_mask'], 'w') as zf:
+                        np.save( zf, boolean_mask )
+                    bbox_img.save( sample['img'] )
 
-                        bbox_img.save( sample['img'] )
+                    # construct an additional, flat channel
+                    if config['channel_func'] is not None:
+                        img_channel_hw = config['channel_func']( img_hwc, boolean_mask)
+                        sample['img_channel']=img_path_prefix.with_suffix( '.channel.npy.gz' )
+                        with gzip.GzipFile(sample['img_channel'], 'w') as zf:
+                            np.save( zf, img_channel_hw ) 
 
-                        # construct an additional, flat channel
-                        if config['channel_func'] is not None:
-                            img_channel_hw = config['channel_func']( img_hwc, boolean_mask)
-                            sample['img_channel']=img_path_prefix.with_suffix( '.channel.npy.gz' )
-                            with gzip.GzipFile(sample['img_channel'], 'w') as zf:
-                                np.save( zf, img_channel_hw ) 
+                with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
+                    gt_file.write( sample['transcription'])
+                    if 'expansion_masks' in sample:
+                        gt_file.write( '<{}>'.format( sample['expansion_masks']))
 
-                    with open( img_path_prefix.with_suffix('.gt.txt'), 'w') as gt_file:
-                        gt_file.write( sample['transcription'])
-                        if 'expansion_masks' in sample:
-                            gt_file.write( '<{}>'.format( sample['expansion_masks']))
-
-                    samples.append( sample )
+                samples.append( sample )
         return samples
 
     @staticmethod

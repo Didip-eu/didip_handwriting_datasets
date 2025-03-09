@@ -23,8 +23,12 @@ import torch
 from torch import Tensor
 import torchvision
 from torchvision.datasets import VisionDataset
+import torchvision.transforms as transforms
+torchvision.disable_beta_transforms_warning()
+from torchvision.transforms import v2
 
 from . import download_utils as du
+from . import seglib
 
 
 class DataException( Exception ):
@@ -74,15 +78,15 @@ class ChartersDataset(VisionDataset):
                 work_folder: str = '', # here further files are created, for any particular task
                 subset: str = 'train',
                 subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
+                transform: Optional[Callable] = None,
                 extract_pages: bool = False,
-                from_line_tsv_file: str = '',
-                from_page_xml_dir: str = '',
+                from_page_tsv_file: str = '',
+                from_page_dir: str = '',
                 from_work_folder: str = '',
                 build_items: bool = True,
-                shape: str = 'polygon',
                 count: int = 0,
-                line_padding_style: str = 'median',
-                resume_task: bool = False
+                resume_task: bool = False,
+                gt_suffix:str = 'lines.gt.json',
                 ) -> None:
         """Initialize a dataset instance.
 
@@ -97,8 +101,7 @@ class ChartersDataset(VisionDataset):
             subset (str): 'train' (default), 'validate' or 'test'.
             subset_ratios (Tuple[float, float, float]): ratios for respective ('train', 
                 'validate', ...) subsets
-            target_transform (Callable): Function to apply to the transcription ground
-                truth at loading time.
+            transform (Callable): Function to apply to the PIL image at loading time.
             extract_pages (bool): if True, extract the archive's content into the base
                 folder no matter what; otherwise (default), check first for a file tree 
                 with matching name and checksum.
@@ -106,10 +109,10 @@ class ChartersDataset(VisionDataset):
                 bbox+mask (2 files, 'mask'), or as padded polygons ('polygon')
             build_items (bool): if True (default), extract and store images for the task
                 from the pages; otherwise, just extract the original data from the archive.
-            from_tsv_file (str): if set, the data are to be loaded from the given file
+            from_page_tsv_file (str): if set, the data are to be loaded from the given file
                 (containing folder is assumed to be the work folder, superceding the
                 work_folder option).
-            from_page_xml_dir (str): if set, the samples have to be extracted from the 
+            from_page_dir (str): if set, the samples have to be extracted from the 
                 raw page data contained in the given directory.
             from_work_folder (str): if set, the samples are to be loaded from the 
                 given directory, without prior processing.
@@ -118,20 +121,21 @@ class ChartersDataset(VisionDataset):
             resume_task (bool): If True, the work folder is not purged. Only those page
                 items (lines, regions) that not already in the work folder are extracted.
                 (Partially implemented: works only for lines.)
+            gt_suffix (str): 'xml' for PageXML (default) or valid, unique suffix of JSON file.
+                Ex. 'htr.gt.json'
 
         """
 
         # A dataset resource dictionary needed, unless we build from existing files
-        if self.dataset_resource is None and not (from_page_xml_dir or from_tsv_file or from_work_folder):
+        if self.dataset_resource is None and not (from_page_dir or from_page_tsv_file or from_work_folder):
             raise FileNotFoundError("In order to create a dataset instance, you need either:" +
                                     "\n\t + a valid resource dictionary (cf. 'dataset_resource' class attribute)" +
-                                    "\n\t + one of the following options: -from_page_xml_dir, -from_work_folder, -from_tsv_file")
+                                    "\n\t + one of the following options: -from_page_dir, -from_work_folder, -from_page_tsv_file")
         
-        trf = v2.PILToTensor()
-        if transform:
-            trf = v2.Compose( [ v2.PILToTensor(), transform ] )
-
-        super().__init__(root, transform=trf, target_transform=target_transform ) # if target_transform else self.filter_transcription)
+        trf = v2.Compose( [ v2.ToDtype(torch.float32, scale=True) ])
+        if transform is not None:
+            trf = v2.Compose( [ trf, transform ] )
+        super().__init__(root, transform=trf ) 
 
         self.root = Path(root) if root else Path(__file__).parents[1].joinpath('data', self.root_folder_basename)
 
@@ -141,10 +145,10 @@ class ChartersDataset(VisionDataset):
             logger.debug("Create root path: {}".format(self.root))
 
         self.raw_data_folder_path = None
-        self.work_folder_path = None # task-dependent
+        self.work_folder_path = None 
 
-        self.from_line_tsv_file = ''
-        if from_tsv_file == '':
+        self.from_page_tsv_file = ''
+        if from_page_tsv_file == '':
             # Local file system with data samples, no archive
             if from_work_folder != '':
                 work_folder = from_work_folder
@@ -153,11 +157,11 @@ class ChartersDataset(VisionDataset):
                     raise FileNotFoundError(f"Work folder {self.work_folder_path} does not exist. Abort.")
                 
             # Local file system with raw page data, no archive 
-            elif from_page_xml_dir != '':
-                self.raw_data_folder_path = Path( from_page_xml_dir )
+            elif from_page_dir != '':
+                self.raw_data_folder_path = Path( from_page_dir )
                 if not self.raw_data_folder_path.exists():
                     raise FileNotFoundError(f"Directory {self.raw_data_folder_path} does not exist. Abort.")
-                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
+                self.pages = sorted( self.raw_data_folder_path.glob('*.{}'.format(gt_suffix)))
 
             # Online archive
             elif self.dataset_resource is not None:
@@ -166,40 +170,49 @@ class ChartersDataset(VisionDataset):
                 self.download_and_extract( self.root, self.root, self.dataset_resource, extract_pages )
                 # input PageXML files are at the root of the resulting tree
                 #        (sorting is necessary for deterministic output)
-                self.pagexmls = sorted( self.raw_data_folder_path.glob('*.xml'))
+                self.pages = sorted( self.raw_data_folder_path.glob('*.{}'.format(gt_suffix)))
             else:
                 raise FileNotFoundError("Could not find a dataset source!")
         else:
             # used only by __str__ method
-            self.from_tsv_file = from_tsv_file
+            self.from_page_tsv_file = from_page_tsv_file
 
-        # bbox or polygons
-        self.shape = shape
+        self.config = {
+                'count': count,
+                'resume_task': resume_task,
+                'from_page_tsv_file': from_page_tsv_file,
+                'subset': subset,
+                'subset_ratios': subset_ratios,
+                'gt_suffix': gt_suffix,
+        }
 
         self.data = []
-        self.resume_task = resume_task
-        build_ok = False if (from_tsv_file!='' or from_work_folder!='' ) else build_items
-            
-        self._build_task(build_items=build_ok, from_tsv_file=from_tsv_file, 
-                         subset=subset, subset_ratios=subset_ratios, 
-                         work_folder=work_folder, count=count, 
-                         line_padding_style=line_padding_style,
-                         expansion_masks=expansion_masks)
 
-        if self.data and not from_tsv_file:
+        if (from_page_tsv_file != '' or from_work_folder!=''):
+            build_items = False
+        logger.info(f"build_items={build_items}")
+
+        if from_work_folder and not from_page_tsv_file:
+            for ss in ('train', 'validate', 'test'):
+                if ss==subset:
+                    continue
+                data = self._build_task(build_items=False, work_folder=work_folder, subset=ss )
+                self.dump_data_to_tsv(data, Path(self.work_folder_path.joinpath(f"charters_ds_{ss}.tsv")) )
+        
+        self.data = self._build_task(build_items=build_items, work_folder=work_folder, subset=subset )
+        if self.data and not from_page_tsv_file:
             # Generate a TSV file with one entry per img/transcription pair
             self.dump_data_to_tsv(self.data, Path(self.work_folder_path.joinpath(f"charters_ds_{subset}.tsv")) )
-            self._generate_readme("README.md", 
+        
+        self._generate_readme("README.md", 
                     { 'subset': subset,
                       'subset_ratios': subset_ratios, 
                       'build_items': build_items, 
                       'count': count, 
-                      'from_tsv_file': from_tsv_file,
-                      'from_page_xml_dir': from_page_xml_dir,
+                      'from_page_tsv_file': from_page_tsv_file,
+                      'from_page_dir': from_page_dir,
                       'from_work_folder': from_work_folder,
                       'work_folder': work_folder, 
-                      'line_padding_style': line_padding_style,
-                      'shape': shape,
                      } )
 
     def download_and_extract(
@@ -256,13 +269,9 @@ class ChartersDataset(VisionDataset):
 
     def _build_task( self, 
                    build_items: bool=True, 
-                   from_tsv_file: str='',
-                   subset: str='train', 
-                   subset_ratios: Tuple[float,float,float]=(.7, 0.1, 0.2),
-                   count: int=0, 
                    work_folder: str='', 
-                   crop=False,
-                   )->None:
+                   subset: str='train', 
+                   )->List[dict]:
         """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
 
         + only creates the files needed for a particular task (train, validate, or test): if more than one subset
@@ -270,85 +279,82 @@ class ChartersDataset(VisionDataset):
         + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
         + set samples are randomly picked, but two subsets are guaranteed to be complementary.
 
-        TODO: implement 'from_tsv_file' option.
-
         Args:
             build_items (bool): if True (default), extract and store
                 images for the task from the pages;
-            from_tsv_file (str): TSV file from which the data are
-                to be loaded (containing folder is assumed to be the work folder, superceding
-                the work_folder option). (Default value = '')
             subset (str): 'train', 'validate' or 'test'. (Default value
                 = 'train')
-            subset_ratios (Tuple[float,float,float]): ratios for
-                respective ('train', 'validate', ...) subsets (Default
-                value = (.7, 0.1, 0.2))
-            count (int): Stops after extracting {count} image items (for
-                testing purpose only). (Default value = 0)
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                 are to be created; default: './MonasteriumHandwritingDatasetSegment'.
-            crop (bool): (for segmentation set only) crop text regions from both image and 
-                PageXML file. (Default value = False)
 
         Returns:
-            None
+            List[dict]: a list of dictionaries.
 
         Raises:
-            FileNotFoundError: the TSV file passed to the `from_tsv_file` option does not exist.
+            FileNotFoundError: the TSV file passed to the `from_page_tsv_file` option does not exist.
         """
-        self.work_folder_path = Path('.', self.work_folder_name+'Segment') if work_folder=='' else Path( work_folder )
-        if not self.work_folder_path.is_dir():
-            self.work_folder_path.mkdir(parents=True) 
-
-        if from_tsv_file != '':
-            tsv_path = Path( from_tsv_file )
+        if self.config['from_page_tsv_file'] != '':
+            tsv_path = Path( self.config['from_page_tsv_file'] )
             if tsv_path.exists():
                 self.work_folder_path = tsv_path.parent
                 # paths are assumed to be absolute
-                self.data = self.load_from_tsv( tsv_path, expansion_masks )
+                self.data = self.load_from_tsv( tsv_path )
                 logger.debug("data={}".format( self.data[:6]))
-                logger.debug("height: {} type={}".format( self.data[0]['height'], type(self.data[0]['height'])))
-                #logger.debug(self.data[0]['polygon_mask'])
             else:
                 raise FileNotFoundError(f'File {tsv_path} does not exist!')
-
         else:
             if work_folder=='':
-                self.work_folder_path = Path(self.root, self.work_folder_name+'Segment') 
+                self.work_folder_path = Path('data', self.work_folder_name+'Segment') 
                 logger.debug("Setting default location for work folder: {}".format( self.work_folder_path ))
             else:
                 # if work folder is an absolute path, it overrides the root
-                self.work_folder_path = self.root.joinpath( work_folder )
+                self.work_folder_path = Path( work_folder )
                 logger.debug("Work folder: {}".format( self.work_folder_path ))
 
             if not self.work_folder_path.is_dir():
                 self.work_folder_path.mkdir(parents=True)
                 logger.debug("Creating work folder = {}".format( self.work_folder_path ))
 
-
         if build_items:
-            if crop:
-                self.data = self._extract_text_regions( self.raw_data_folder_path, self.work_folder_path, count=count )
-            else:
-                self.data = self._build_page_img_pairs( self.raw_data_folder_path, self.work_folder_path, count=count )
+                samples = self._build_line_seg_samples( self.raw_data_folder_path, self.work_folder_path)
         else:
-            logger.info("Building samples from existing images and transcription files in {}".format(self.work_folder_path))
+            logger.info("Building samples from existing images and masks in {}".format(self.work_folder_path))
             samples = self.load_items_from_dir( self.work_folder_path )
+
+        data = self._split_set( samples, ratios=self.config['subset_ratios'], subset=subset)
+        logger.info(f"Subset '{subset}' contains {len(data)} samples.")
+
+        return data
 
     @staticmethod
     def load_items_from_dir( work_folder_path: Union[Path,str] ) -> List[dict]:
         """ TODO """
-        logger.info("NOT IMPLEMENTED.")
-        return []
+        samples = []
+        for mask_path in work_folder_path.glob('*.masks.npy.gz'):
+            sample_dict = {}
+            page_prefix = re.sub(r'\..+', '', str(mask_path))
+            with gzip.GzipFile( mask_path, 'r') as zf:
+                sample_dict['masks']=np.load( zf )
+            with gzip.GzipFile( Path(page_prefix).with_suffix('.boxes.npy.gz'), 'r') as zf:
+                sample_dict['boxes']=np.load( zf )
+            samples.append( ( Path(page_prefix).with_suffix('.img.jpg'), sample_dict))
+        return samples
 
 
     @staticmethod
     def load_items_from_tsv( file_path: Union[Path,str] ) -> List[dict]:
         """ TODO """
-        logger.info("NOT IMPLEMENTED.")
-        return []
-
-
+        samples = []
+        with open( file_path, 'r') as infile:
+            for line in infile:
+                sample_dict = {}
+                img_filename, box_filename, mask_filename = line[:-1].split('\t')
+                with gzip.GzipFile( mask_filename, 'r') as zf:
+                    sample_dict['masks']=np.load( zf )
+                with gzip.GzipFile( box_filename, 'r') as zf:
+                    sample_dict['boxes']=np.load( zf )
+                samples.append( (Path(img_filename), sample_dict ))
+        return samples
 
 
     def _generate_readme( self, filename: str, params: dict )->None:
@@ -370,240 +376,109 @@ class ChartersDataset(VisionDataset):
             print( repr(self), file=of)
 
 
-
-    def _build_page_img_pairs(self, raw_data_folder_path:Path,
-                                work_folder_path: Path, 
-                                text_only:bool=False, 
-                                count:int=0, 
-                                metadata_format:str='xml') -> List[Tuple[str, str]]:
+    def _build_line_seg_samples(self, raw_data_folder_path:Path,
+                                work_folder_path: Path, ) -> List[Tuple[Path, Dict[str,Tensor]]]:
         """Create a new dataset for segmentation that associate each page image with its metadata.
 
         Args:
             raw_data_folder_path (Path): root of the (read-only) expanded archive.
             work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            text_only (bool): If True, only generate the transcription files; default is False.
-            count (int): Stops after extracting {count} images (for testing purpose). (Default value = 0)
-            metadata_format (str): 'xml' (default) or 'json'
-
-        )
+            on_disk (bool): If False (default), samples are only built in memory; otherwise line images 
+                and metadata are written into the work folder.
 
         Returns:
-            List[Tuple[str,str]]: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
+            Tuple[Path, List[dict]]: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
         """
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
 
-        if not self.resume_task:
+        if not self.config['resume_task']:
             self._purge( work_folder_path ) 
 
-        items = []
+        cnt = 0
+        samples = []
 
-        for page in self.pagexmls:
-            xml_id = Path( page ).stem
-            img_path = Path(self.raw_data_folder_path, f'{xml_id}.jpg')
+        print(self.pages[0])
 
-            img_path_dest = work_folder_path.joinpath( img_path.name )
-            xml_path_dest = work_folder_path.joinpath( page.name )
-
-            # copy both image and xml file into work directory
-            shutil.copy( img_path, img_path_dest )
-            shutil.copy( page, xml_path_dest )
-            items.append( img_path_dest, xml_path_dest )
-
-        return items
-
-
-    def _extract_text_regions(self, 
-                              raw_data_folder_path: Path, 
-                              work_folder_path: Path,
-                              text_only=False, 
-                              count=0, 
-                              metadata_format:str='xml') -> List[Tuple[str, str]]:
-        """Crop text regions from original files, and create a new dataset for segmentation where the text
-
-        Args:
-            raw_data_folder_path (Path): root of the (read-only) expanded archive.
-            work_folder_path (Path): Line images are extracted in this subfolder (relative to the caller's pwd).
-            text_only (bool): if True, only generate the GT text files.  Default: False.
-            count (int): Stops after extracting {count} images (for testing purpose). (Default value = 0)
-            metadata_format (str): `'xml'` (default) or `'json'`
-
-        Returns:
-            List[Tuple[str,str]]: a list of pairs `(img_file_path, transcription)`
-        """
-        # filtering out Godzilla-sized images (a couple of them)
-        warnings.simplefilter("error", Image.DecompressionBombWarning)
-
-        Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
-
-        if not self.resume_task:
-            self._purge( work_folder_path ) # ensure there are no pre-existing line items in the target directory
-
-        cnt = 0 # for testing purpose
-
-        items = []
-
-        for page in self.pagexmls:
-
-            xml_id = Path( page ).stem
-            img_path = Path(self.raw_data_folder_path, f'{xml_id}.jpg')
+        for page in tqdm(self.pages):
 
             with open(page, 'r') as page_file:
 
-                page_tree = ET.parse( page_file )
+                print(page)
+                page_id = re.match(r'(.+).{}'.format(self.config['gt_suffix']), page.name).group(1)
+                print(page_id)
 
-                ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15",
-                        'xsi': "http://www.w3.org/2001/XMLSchema-instance" }
+                # handling image: find and copy
+                img_path=''
+                for img_suffix in ('.jpg', '.png', '.img.jpg'):
+                    img_path = Path(self.raw_data_folder_path, f'{page_id}{img_suffix}' )
+                    print(img_path)
+                    if img_path.exists():
+                        print("found")
+                        page_id = page_id.replace('.', '_')
+                        #img_path.hardlink_to( work_folder_path.joinpath( f'{page_id}{img_suffix}' ))
+                        os.link(img_path, work_folder_path.joinpath( f'{page_id}{img_suffix}' ))
+                        break
+                if not img_path.exists():
+                    raise FileNotFoundError(f"Could not find a valid image file with prefix {page_id}")
 
-                page_root = page_tree.getroot()
+                # extract metadata
+                boxes, masks = None, None
+                if self.config['gt_suffix'] == 'xml':
+                    boxes, masks = seglib.line_masks_from_img_xml_files( img_path, page )
+                elif 'json' in self.config['gt_suffix']:
+                    boxes, masks = seglib.line_masks_from_img_json_files( img_path, page )
 
-                if not text_only:
+                sample = (img_path.name, { 'boxes': boxes, 'masks': masks })
+                # - on-disk: 1 image + 1 tensor of boxes + 1 tensor of masks
+                try:
+                    page_image = Image.open( img_path, 'r')
+                except Image.DecompressionBombWarning as dcb:
+                    logger.debug( f'{dcb}: ignoring page' )
+                    return None
+                msk_filename = f'{page_id}.masks.npy.gz'
+                with gzip.GzipFile( work_folder_path.joinpath(msk_filename), 'w') as zf:
+                    np.save( zf, masks )
+                box_filename = f'{page_id}.boxes.npy.gz'
+                with gzip.GzipFile( work_folder_path.joinpath(box_filename), 'w') as zf:
+                    np.save( zf, boxes )
 
-                    try:
-                        page_image = Image.open( img_path, 'r')
-                    except Image.DecompressionBombWarning as dcb:
-                        logger.debug( f'{dcb}: ignoring page' )
-                        continue
-
-                for textregion_elt in page_root.findall( './/pc:TextRegion', ns ):
-                    if cnt and cnt == count:
-                        return items
-
-                    textregion = dict()
-                    textregion['id']=textregion_elt.get("id")
-
-                    # Do not use: nominal boundaries of the text regions do not contain
-                    # all baseline points
-                    #
-                    #polygon_string=textregion_elt.find('pc:Coords', ns).get('points')
-                    #coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-                    #textregion['bbox'] = ImagePath.Path( coordinates ).getbbox()
-
-                    # fix bbox for given region, according to the line points it contains
-                    textregion['bbox'] = self._compute_bbox( page, textregion['id'] )
-                    if textregion['bbox'] == (0,0,0,0):
-                        continue
-                    img_path_prefix = work_folder_path.joinpath( f"{xml_id}-{textregion['id']}" )
-                    textregion['img_path'] = img_path_prefix.with_suffix('.png')
-                    logger.debug('textregion["img_path"] ={} type={}'.format( textregion['img_path'], type(textregion['img_path'])))
-                    textregion['size'] = [ textregion['bbox'][i+2]-textregion['bbox'][i]+1 for i in (0,1) ]
-
-                    if not text_only:
-                        bbox_img = page_image.crop( textregion['bbox'] )
-                        bbox_img.save( textregion['img_path'] )
-
-                    # create a new descriptor file whose a single text region that covers the whole image, 
-                    # where line coordinates have been shifted accordingly
-                    self._write_region_to_xml( page, ns, textregion )
-
-                    cnt += 1
-
-        return items
+                samples.append( sample )
+        return samples
 
 
-    def _compute_bbox(self, page: str, region_id: str ) -> Tuple[int, int, int, int]:
-        """In the raw Monasterium/Teklia PageXMl file, baseline and/or textline polygon points
-        may be outside the nominal boundaries of their text region. This method computes a
-        new bounding box for the given text region, based on the baseline points its contains.
+    @staticmethod
+    def dump_data_to_tsv(samples: List[dict], file_path: str='', all_path_style=False) -> None:
+        """Create a CSV file with all tuples (`<line image absolute path>`, `<boxes_tensor_file>`, `<masks_tensor_file>`)
 
         Args:
-            page (str): path to the PageXML file.
-            region_id (str): id attribute of the region element in the PageXML file
-
-        Returns:
-            Tuple[int,int,int,int]: region's new coordinates, as $(x1, y1, x2, y2)$
-        """
-
-        def within(pt, bbox):
-            """
-            Args:
-                pt
-                bbox
-            """
-            return pt[0] >= bbox[0] and pt[0] <= bbox[2] and pt[1] >= bbox[1] and pt[1] <= bbox[3]
-
-        with open(page, 'r') as page_file:
-
-            page_tree = ET.parse( page_file )
-            ns = { 'pc': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"}
-            page_root = page_tree.getroot()
-
-            region_elt = page_root.find( ".//pc:TextRegion[@id='{}']".format( region_id), ns )
-            polygon_string=region_elt.find('pc:Coords', ns).get('points')
-            coordinates = [ tuple(map(int, pt.split(','))) for pt in polygon_string.split(' ') ]
-            original_bbox = ImagePath.Path( coordinates ).getbbox()
-
-            all_points = []
-            valid_lines = 0
-            for line_elt in region_elt.findall('pc:TextLine', ns):
-                for elt_name in ['pc:Baseline', 'pc:Coords']:
-                    elt = line_elt.find( elt_name, ns )
-                    if elt_name == 'pc:Baseline' and elt is None:
-                        logger.warning('Page {}, region {}: could not find element {} for line {}'.format(
-                            page, region_elt.get('id'), elt_name, line_elt.get('id')))
-                        continue
-                    valid_lines += 1
-                    #logger.debug( elt.get('points').split(','))
-                    all_points.extend( [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ])
-            if not valid_lines:
-                return (0,0,0,0)
-            not_ok = [ p for p in all_points if not within( p, original_bbox) ]
-            if not_ok:
-                logger.warning("File {}: invalid points for textregion {}: {} -> extending bbox accordingly".format(page, region_id, not_ok))
-            bbox = ImagePath.Path( all_points ).getbbox()
-            logger.debug("region {}, bbox={}".format( region_id, bbox))
-            return bbox
-
-
-    def _write_region_to_xml( self, page: str, ns: str, textregion: dict )->None:
-        """From the given text region data, generates a new PageXML file.
-
-        TODO: fix bug in ImageFilename attribute E.g. NA-RM_14240728_2469_r-r1..jpg
-
-        Args:
-            page (str): path of the pageXML file to generate.
-            ns (str): namespace.
-            textregion (dict): a dictionary of text region attributes.
+            samples (List[dict]): dataset samples.
+            file_path (str): A TSV (absolute) file path (Default value = '')
 
         Returns:
             None
         """
-
-        ET.register_namespace('', ns['pc'])
-        ET.register_namespace('xsi', ns['xsi'])
-
-        with open( page, 'r') as page_file:
-
-            page_tree = ET.parse( page_file )
-            page_root = page_tree.getroot()
-            page_elt = page_root.find('pc:Page', ns)
-
-            # updating imageFilename attribute with region id
-            page_elt.set( 'imageFilename', str(textregion['img_path'].name) )
-
-            for region_elt in page_elt.findall('pc:TextRegion', ns):
-                if region_elt.get('id') != textregion['id']:
-                    page_elt.remove( region_elt )
-                else:
-                    # Shift text region's new coordinates (they now cover the whole image)
-                    coord_elt = region_elt.find('pc:Coords', ns)
-                    rg_bbox_str = '0,0 {:.0f},{:.0f}'.format( textregion['size'][0], textregion['size'][1] )
-                    coord_elt.set( 'points', rg_bbox_str )
-                    # substract region's coordinates from lines coordinates
-                    for line_elt in region_elt.findall('pc:TextLine', ns):
-                        for elt_name in ['pc:Coords', 'pc:Baseline']:
-                            elt = line_elt.find( elt_name, ns)
-                            if elt is None:
-                                continue
-                            points =  [ tuple(map(int, pt.split(','))) for pt in elt.get('points').split(' ') ]
-                            x_off, y_off = textregion['bbox'][:2]
-                            points = [ (
-                                        pt[0]-x_off if pt[0]>x_off else 0, 
-                                        pt[1]-y_off if pt[1]>y_off else 0) for pt in points ]
-                            transposed_point_str = ' '.join([ ','.join(['{:.0f}'.format(p) for p in pt]) for pt in points ] )
-                            elt.set('points', transposed_point_str)
-
-            with open( textregion['img_path'].with_suffix('.xml'), 'bw') as f:
-                page_tree.write( f, method='xml', xml_declaration=True, encoding="utf-8" )
+        if file_path == '':
+            for sample in samples:
+                img_filename = sample[0].name
+                file_prefix = re.sub(r'\..+', '', img_filename )
+                box_filename = Path(file_prefix).with_suffix('.boxes.npy.gz')
+                mask_filename = Path(file_prefix).with_suffix('.masks.npy.gz')
+                if not box_filename.exists()
+                    raise FileNotFoundError("Could not find {}. Abort.".format( box_filename ))
+                if not mask_filename.exists():
+                    raise FileNotFoundError("Could not find {}. Abort.".format( mask_filename ))
+                logger.debug("{}\t{}\t{}".format( img_path, box_filename, mask_filename )
+                return
+        with open( file_path, 'w') as of:
+            for sample in sample:
+                img_filename = sample[0].name
+                file_prefix = re.sub(r'\..+', '', img_filename )
+                box_filename = Path(file_prefix).with_suffix('.boxes.npy.gz')
+                mask_filename = Path(file_prefix).with_suffix('.masks.npy.gz')
+                if not box_filename.exists()
+                    raise FileNotFoundError("Could not find {}. Abort.".format( box_filename ))
+                if not mask_filename.exists():
+                    raise FileNotFoundError("Could not find {}. Abort.".format( mask_filename ))
 
 
     @staticmethod
@@ -720,7 +595,6 @@ class ChartersDataset(VisionDataset):
         summary = '\n'.join([
                     f"Root folder:\t{self.root}",
                     f"Files extracted in:\t{self.raw_data_folder_path}",
-                    f"Line shape: {self.shape}",
                     f"Work folder:\t{self.work_folder_path}",
                     f"Data points:\t{len(self.data)}",
                     "Stats:",
