@@ -88,6 +88,7 @@ class ChartersDataset(VisionDataset):
                 count: int = 0,
                 resume_task: bool = False,
                 gt_suffix:str = 'lines.gt.json',
+                polygon_key:str = 'boundary',
                 ) -> None:
         """Initialize a dataset instance.
 
@@ -124,6 +125,8 @@ class ChartersDataset(VisionDataset):
                 (Partially implemented: works only for lines.)
             gt_suffix (str): 'xml' for PageXML (default) or valid, unique suffix of JSON file.
                 Ex. 'htr.gt.json'
+            polygon_key (str): in the input segmentation dictionary, key for the polygon boundaries:
+                'boundary' (default)
 
         """
 
@@ -185,6 +188,7 @@ class ChartersDataset(VisionDataset):
                 'subset': subset,
                 'subset_ratios': subset_ratios,
                 'gt_suffix': gt_suffix,
+                'polygon_key': polygon_key,
         }
 
         self.data = []
@@ -468,7 +472,7 @@ class ChartersDataset(VisionDataset):
                 if self.config['gt_suffix'] == 'xml':
                     boxes, masks = seglib.line_masks_from_img_xml_files( img_path, page )
                 elif 'json' in self.config['gt_suffix']:
-                    boxes, masks = seglib.line_masks_from_img_json_files( img_path, page )
+                    boxes, masks = seglib.line_masks_from_img_json_files( img_path, page, key=self.config['polygon_key'] )
 
                 sample = (sample_img_path, { 'boxes': boxes, 'masks': masks })
                 # - on-disk: 1 image + 1 tensor of boxes + 1 tensor of masks
@@ -587,13 +591,16 @@ class ChartersDataset(VisionDataset):
         # - dimensions of transformed image ('height' and 'width')
         # 
         sample = self.data[index]
+        img_array_hwc = ski.io.imread( img_path )
         
-        return [
-            ski.io.imread( img_path ),
+        return (
+            v2.Compose( [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])(img_array_hwc),
             { 
                 'id': Path(img_path).name,
-                'boxes': sample[1]['boxes'],
-                'masks': sample[1]['masks'], }]
+                'boxes': torch.tensor(sample[1]['boxes']),
+                'labels': torch.ones( (len(sample[1]['boxes'])), dtype=torch.int64),
+                'masks': torch.tensor( sample[1]['masks']), 
+             })
 
 
     def __getitems__(self, indexes: list ) -> List[dict]:

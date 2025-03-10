@@ -273,7 +273,7 @@ def line_masks_from_img_xml_files(img: str, page_xml: str ) -> List[Tuple[np.nda
         return line_masks_from_img_segmentation_dict( img_wh, segmentation_dict )
 
 
-def line_masks_from_img_json_files( img: str, segmentation_json: str ) -> List[Tuple[np.ndarray, np.ndarray]]:
+def line_masks_from_img_json_files( img: str, segmentation_json: str, key='boundary' ) -> List[Tuple[np.ndarray, np.ndarray]]:
     """From an image file path and a segmentation JSON file describing polygons, return
     the bounding box coordinates and the boolean masks.
 
@@ -286,9 +286,9 @@ def line_masks_from_img_json_files( img: str, segmentation_json: str ) -> List[T
             and a tensor (N,H,W) of page-wide line masks.
     """
     with Image.open(img, 'r') as img_wh, open( segmentation_json, 'r' ) as json_file:
-        return line_masks_from_img_segmentation_dict( img_wh, json.load( json_file ))
+        return line_masks_from_img_segmentation_dict( img_wh, json.load( json_file ), key=key)
 
-def line_masks_from_img_segmentation_dict(img_whc: Image.Image, segmentation_dict: dict ) -> List[Tuple[np.ndarray, np.ndarray]]:
+def line_masks_from_img_segmentation_dict(img_whc: Image.Image, segmentation_dict: dict, key='boundary' ) -> List[Tuple[np.ndarray, np.ndarray]]:
     """From a segmentation dictionary describing polygons, return 
     the bounding box coordinates and the boolean masks.
 
@@ -300,7 +300,7 @@ def line_masks_from_img_segmentation_dict(img_whc: Image.Image, segmentation_dic
         Tuple[np.ndarray,np.ndarray]: a pair of tensors: a tensor (N,4) of BB coordinates tuples,
             and a tensor (N,H,W) of page-wide line masks.
     """
-    polygon_boundaries = [ line['boundary'] for line in segmentation_dict['lines'] ]
+    polygon_boundaries = [ line[key] for line in segmentation_dict['lines'] ]
     img_hwc = np.asarray( img_whc )
 
     bbs = []
