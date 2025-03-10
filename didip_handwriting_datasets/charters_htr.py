@@ -589,7 +589,7 @@ class ChartersDataset(VisionDataset):
                 sample['width'], sample['height'] = x_right-x_left, y_low-y_up
                 
                 img_path_prefix = work_folder_path.joinpath( f"{page_id}-{textline_id}" ) 
-                sample['img'] = Path(img_path_prefix).with_suffix('.png')
+                sample['img'] = Path(img_path_prefix).with_suffix('.png').absolute()
 
                 if not (config['resume_task'] and sample['img'].exists()):
                     bbox_img = page_image.crop( textline_bbox)

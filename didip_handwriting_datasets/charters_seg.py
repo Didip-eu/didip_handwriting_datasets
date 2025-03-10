@@ -457,7 +457,7 @@ class ChartersDataset(VisionDataset):
                     if img_path.exists():
                         page_id = page_id.replace('.', '_')
                         #img_path.hardlink_to( work_folder_path.joinpath( f'{page_id}{img_suffix}' ))
-                        sample_img_path = work_folder_path.joinpath( f'{page_id}{img_suffix}' )
+                        sample_img_path = work_folder_path.joinpath( f'{page_id}{img_suffix}' ).absolute()
                         os.link(img_path, sample_img_path)
                         break
                 if not img_path.exists():
