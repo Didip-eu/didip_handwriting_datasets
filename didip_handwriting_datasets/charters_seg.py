@@ -14,6 +14,7 @@ from typing import *
 # 3rd-party
 from tqdm import tqdm
 import defusedxml.ElementTree as ET
+import skimage as ski
 #import xml.etree.ElementTree as ET
 from PIL import Image, ImagePath
 import gzip
@@ -357,6 +358,36 @@ class ChartersDataset(VisionDataset):
         return samples
 
 
+    @staticmethod
+    def dataset_stats( samples: List[dict] ) -> str:
+        """Compute basic stats about sample sets.
+
+        + avg, median, min, max on image heights and widths
+        + avg, median, min, max on number of boxes
+
+        Args:
+            samples (List[dict]): a list of samples.
+
+        Returns:
+            str: a string.
+        """
+        heights = [ np.mean(s[1]["boxes"][:,3]-s[1]["boxes"][:,1]) for s in samples ]
+        widths = [ np.mean(s[1]["boxes"][:,2]-s[1]["boxes"][:,0]) for s in samples ]
+        line_counts = [ len(s[1]['boxes']) for s in samples ]
+
+        height_stats = [ int(s) for s in(np.mean( heights ), np.median(heights), np.min(heights), np.max(heights))]
+        width_stats = [int(s) for s in (np.mean( widths ), np.median(widths), np.min(widths), np.max(widths))]
+        line_count_stats = [int(s) for s in (np.mean( line_counts ), np.median(line_counts), np.min(line_counts), np.max(line_counts))]
+
+        stat_list = ('Mean', 'Median', 'Min', 'Max')
+        row_format = "{:>15}" * (len(stat_list) + 1)
+        return '\n'.join([
+            row_format.format("", *stat_list),
+            row_format.format("Line height", *height_stats),
+            row_format.format("Line width", *width_stats),
+            row_format.format("Line count/page", *line_count_stats),
+        ])
+
     def _generate_readme( self, filename: str, params: dict )->None:
         """Create a metadata file in the work directory.
 
@@ -390,33 +421,23 @@ class ChartersDataset(VisionDataset):
             Tuple[Path, List[dict]]: a list of pairs `(<absolute img filepath>, <absolute transcription filepath>)`
         """
         Path( work_folder_path ).mkdir(exist_ok=True, parents=True) # always create the subfolder if not already there
-
         if not self.config['resume_task']:
             self._purge( work_folder_path ) 
 
         cnt = 0
         samples = []
 
-        print(self.pages[0])
-
         for page in tqdm(self.pages):
-
             with open(page, 'r') as page_file:
-
-                print(page)
                 page_id = re.match(r'(.+).{}'.format(self.config['gt_suffix']), page.name).group(1)
-                print(page_id)
-
-                # handling image: find and copy
-                img_path=''
+                img_path, sample_img_path=None, None
                 for img_suffix in ('.jpg', '.png', '.img.jpg'):
                     img_path = Path(self.raw_data_folder_path, f'{page_id}{img_suffix}' )
-                    print(img_path)
                     if img_path.exists():
-                        print("found")
                         page_id = page_id.replace('.', '_')
                         #img_path.hardlink_to( work_folder_path.joinpath( f'{page_id}{img_suffix}' ))
-                        os.link(img_path, work_folder_path.joinpath( f'{page_id}{img_suffix}' ))
+                        sample_img_path = work_folder_path.joinpath( f'{page_id}{img_suffix}' )
+                        os.link(img_path, sample_img_path)
                         break
                 if not img_path.exists():
                     raise FileNotFoundError(f"Could not find a valid image file with prefix {page_id}")
@@ -428,7 +449,7 @@ class ChartersDataset(VisionDataset):
                 elif 'json' in self.config['gt_suffix']:
                     boxes, masks = seglib.line_masks_from_img_json_files( img_path, page )
 
-                sample = (img_path.name, { 'boxes': boxes, 'masks': masks })
+                sample = (sample_img_path, { 'boxes': boxes, 'masks': masks })
                 # - on-disk: 1 image + 1 tensor of boxes + 1 tensor of masks
                 try:
                     page_image = Image.open( img_path, 'r')
@@ -443,6 +464,9 @@ class ChartersDataset(VisionDataset):
                     np.save( zf, boxes )
 
                 samples.append( sample )
+                cnt += 1
+                if self.config['count'] and cnt == self.config['count']:
+                    break
         return samples
 
 
@@ -457,28 +481,23 @@ class ChartersDataset(VisionDataset):
         Returns:
             None
         """
-        if file_path == '':
+        if not file_path:
+            return
+        with open( file_path, 'w') as of:
             for sample in samples:
                 img_filename = sample[0].name
+                work_folder_path = sample[0].parent
+                print(work_folder_path)
                 file_prefix = re.sub(r'\..+', '', img_filename )
-                box_filename = Path(file_prefix).with_suffix('.boxes.npy.gz')
-                mask_filename = Path(file_prefix).with_suffix('.masks.npy.gz')
-                if not box_filename.exists()
-                    raise FileNotFoundError("Could not find {}. Abort.".format( box_filename ))
-                if not mask_filename.exists():
-                    raise FileNotFoundError("Could not find {}. Abort.".format( mask_filename ))
-                logger.debug("{}\t{}\t{}".format( img_path, box_filename, mask_filename )
-                return
-        with open( file_path, 'w') as of:
-            for sample in sample:
-                img_filename = sample[0].name
-                file_prefix = re.sub(r'\..+', '', img_filename )
-                box_filename = Path(file_prefix).with_suffix('.boxes.npy.gz')
-                mask_filename = Path(file_prefix).with_suffix('.masks.npy.gz')
-                if not box_filename.exists()
-                    raise FileNotFoundError("Could not find {}. Abort.".format( box_filename ))
-                if not mask_filename.exists():
-                    raise FileNotFoundError("Could not find {}. Abort.".format( mask_filename ))
+                boxes_filename = Path(file_prefix).with_suffix('.boxes.npy.gz')
+                masks_filename = Path(file_prefix).with_suffix('.masks.npy.gz')
+                print(work_folder_path.joinpath(masks_filename))
+                print(work_folder_path.joinpath(boxes_filename))
+                if not work_folder_path.joinpath(boxes_filename).exists():
+                    raise FileNotFoundError("Could not find {}. Abort.".format( boxes_filename ))
+                if not work_folder_path.joinpath(masks_filename).exists():
+                    raise FileNotFoundError("Could not find {}. Abort.".format( masks_filename ))
+                of.write("{}\t{}\t{}".format( img_filename, boxes_filename, masks_filename ))
 
 
     @staticmethod
@@ -528,7 +547,6 @@ class ChartersDataset(VisionDataset):
 
     def __getitem__(self, index) -> Dict[str, Union[Tensor, int, str]]:
         """Callback function for the iterator.
-        TODO: complete for segmentation tasks.
 
         Args:
             index (int): item index.
@@ -536,8 +554,7 @@ class ChartersDataset(VisionDataset):
         Returns:
             dict[str,Union[Tensor,int,str]]: a sample dictionary
         """
-        img_path = self.data[index]['img']
-        
+        img_path = self.data[index][0]
         assert isinstance(img_path, Path) or isinstance(img_path, str)
 
         # In the sample, image filename replaced with 
@@ -545,13 +562,15 @@ class ChartersDataset(VisionDataset):
         # - tensor ('img')
         # - dimensions of transformed image ('height' and 'width')
         # 
-        sample = self.data[index].copy()
+        sample = self.data[index]
         
-        sample['img'] = Image.open( img_path, 'r')
+        return [
+            ski.io.imread( img_path ),
+            { 
+                'id': Path(img_path).name,
+                'boxes': sample[1]['boxes'],
+                'masks': sample[1]['masks'], }]
 
-        sample['id'] = Path(img_path).name
-        logger.debug('sample='.format(index), sample)
-        return sample
 
     def __getitems__(self, indexes: list ) -> List[dict]:
         """To help with batching.

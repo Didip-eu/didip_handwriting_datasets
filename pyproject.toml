@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-dependencies = [ "defusedxml", "torch", "torchvision", "gdown", "scikit-image", "PIL" ]
+dependencies = [ "defusedxml", "torch", "torchvision", "gdown", "scikit-image" ]
 
 [project.urls]
 Homepage = "https://github.com/Didip-eu/didip_handwriting_datasets"
