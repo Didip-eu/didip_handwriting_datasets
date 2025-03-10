@@ -307,19 +307,14 @@ class ChartersDataset(VisionDataset):
                    work_folder: str='', 
                    subset: str='train',
                    )->List[dict]:
-        """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
-
-        + only creates the files needed for a particular task (train, validate, or test): if more than one subset
-          is needed, just initialize a new dataset with desired parameters (work directory, subset)
-        + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
-        + set samples are randomly picked, but two subsets are guaranteed to be complementary.
+        """Build the image/GT samples required for an HTR task, either from the raw files (extracted from archive)
+        or a work folder that already contains compiled files.
 
         Args:
-            build_items (bool): if True (default), extract and store
-                images for the task from the pages;
+            build_items (bool): if True (default), go through the compilation step; otherwise, work from the existing work folder's content.
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
                 are to be created; default: './MonasteriumHandwritingDatasetHTR'.
-            subset (str): 'train' (default), 'validate' or 'test'.
+            subset (str): sample subset to be returned - 'train' (default), 'validate' or 'test'; 
 
         Returns:
             List[dict]: a list of dictionaries.
@@ -373,8 +368,8 @@ class ChartersDataset(VisionDataset):
         line images and line transcriptions
 
         Args:
-            work_folder_path (Union[Path,str]): a folder containing images (`*.png`),
-            transcription files (`*.gt.txt`) and optional extra channel 
+            work_folder_path (Union[Path,str]): a folder containing images (`*.png`), transcription 
+            files (`*.gt.txt`) and optional extra channel.
             channel_suffix (str): default suffix for the extra channel ('*.channel.npy.gz')
 
         Returns:
@@ -419,7 +414,7 @@ class ChartersDataset(VisionDataset):
             <img file path> <transcription text> <height> <width> [<polygon points>]
 
         Args:
-            file_path (Path): A file path (relative to the caller's pwd).
+            file_path (Path): A file path.
             expansion_masks (bool): Load expansion mask field.
 
         Returns:
@@ -878,21 +873,6 @@ class ChartersDataset(VisionDataset):
         return ("\n________________________________\n"
                 f"\n{summary}"
                 "\n________________________________\n")
-
-
-    def count_line_items(self, folder) -> Tuple[int, int]:
-        """Count dataset items in the given folder.
-
-        Args:
-            folder (str): a directory path.
-
-        Returns:
-            Tuple[int,int]: a pair `(<number of GT files>, <number of image files>)`
-        """
-        return (
-                len( [ i for i in Path(folder).glob('*.gt.txt') ] ),
-                len( [ i for i in Path(folder).glob('*.png') ] )
-                )
 
 
     @staticmethod

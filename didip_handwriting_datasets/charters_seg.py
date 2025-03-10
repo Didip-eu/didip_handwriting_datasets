@@ -273,26 +273,20 @@ class ChartersDataset(VisionDataset):
                    work_folder: str='', 
                    subset: str='train', 
                    )->List[dict]:
-        """From the read-only, uncompressed archive files, build the image/GT files required for the task at hand:
-
-        + only creates the files needed for a particular task (train, validate, or test): if more than one subset
-          is needed, just initialize a new dataset with desired parameters (work directory, subset)
-        + by default, 'train' subset contains 70% of the samples, 'validate', 10%, and 'test', 20%.
-        + set samples are randomly picked, but two subsets are guaranteed to be complementary.
+        """Build the image/GT samples required for an HTR task, either from the raw files (extracted from archive)
+        or a work folder that already contains compiled files.
 
         Args:
-            build_items (bool): if True (default), extract and store
-                images for the task from the pages;
-            subset (str): 'train', 'validate' or 'test'. (Default value
-                = 'train')
+            build_items (bool): if True (default), go through the compilation step; otherwise, work from the existing work folder's content.
             work_folder (str): Where line images and ground truth transcriptions fitting a particular task
-                are to be created; default: './MonasteriumHandwritingDatasetSegment'.
+                are to be created; default: './MonasteriumHandwritingDatasetHTR'.
+            subset (str): sample subset to be returned - 'train' (default), 'validate' or 'test'; 
 
         Returns:
             List[dict]: a list of dictionaries.
 
         Raises:
-            FileNotFoundError: the TSV file passed to the `from_page_tsv_file` option does not exist.
+            FileNotFoundError: the TSV file passed to the `from_line_tsv_file` option does not exist.
         """
         if self.config['from_page_tsv_file'] != '':
             tsv_path = Path( self.config['from_page_tsv_file'] )
@@ -329,7 +323,18 @@ class ChartersDataset(VisionDataset):
 
     @staticmethod
     def load_items_from_dir( work_folder_path: Union[Path,str] ) -> List[dict]:
-        """ TODO """
+        """ 
+        Construct a list of samples from a directory that has been populated with page images
+        and tensors of metadata (boxes and masks). 
+
+        Args:
+            work_folder_path (Union[Path,str]): a folder containing images (`*.png`, `*.img.jpg`, or
+                `*.jpg`), tensors of masks (`*.masks.npy.gz`), and tensors of bboxes coordinates
+                (`*.boxes.npy.gz`).
+        Returns:
+            List[Tuple[Path,Dict[str,np.ndarray]]]: a list of sample pairs, with the input image
+            path as the first element and a dictionary of metadata tensors as the second element.
+        """
         samples = []
         for mask_path in work_folder_path.glob('*.masks.npy.gz'):
             sample_dict = {}
@@ -338,13 +343,29 @@ class ChartersDataset(VisionDataset):
                 sample_dict['masks']=np.load( zf )
             with gzip.GzipFile( Path(page_prefix).with_suffix('.boxes.npy.gz'), 'r') as zf:
                 sample_dict['boxes']=np.load( zf )
-            samples.append( ( Path(page_prefix).with_suffix('.img.jpg'), sample_dict))
+
+            img_suffix = ''
+            for img_suffix in ('.img.jpg', '.jpg', '.png'):
+                if Path(page_prefix).with_suffix( img_suffix ).exists():
+                    break
+            if not img_suffix:
+                raise FileNotFoundError("Could not find an image file.")
+            samples.append( ( Path(page_prefix).with_suffix(suffix), sample_dict))
         return samples
 
 
     @staticmethod
     def load_items_from_tsv( file_path: Union[Path,str] ) -> List[dict]:
-        """ TODO """
+        """ Load samples from an existing TSV file. Each input is a tuple::
+
+            <page img filename> <name of the tensor of box coordinates> <name of the tensor of masks>
+
+        Args:
+            file_path (Path): A file path.
+        Returns:
+            List[Tuple[Path,Dict[str,np.ndarray]]]: a list of sample pairs, with the input image
+                path as the first element and a dictionary of metadata tensors as the second element.
+        """
         samples = []
         with open( file_path, 'r') as infile:
             for line in infile:
@@ -552,7 +573,10 @@ class ChartersDataset(VisionDataset):
             index (int): item index.
 
         Returns:
-            dict[str,Union[Tensor,int,str]]: a sample dictionary
+            dict[str,Union[Tensor,int,str]]: a tuple with
+                + the input image tensor (C,H,W)
+                + the segmentation metadata dictionary with tensor 
+                  of boxes (N,4) and tensor of masks (N,H,W)
         """
         img_path = self.data[index][0]
         assert isinstance(img_path, Path) or isinstance(img_path, str)
@@ -622,21 +646,6 @@ class ChartersDataset(VisionDataset):
         return ("\n________________________________\n"
                 f"\n{summary}"
                 "\n________________________________\n")
-
-
-    def count_items(self, folder) -> Tuple[int, int]:
-        """Count dataset items in the given folder.
-
-        Args:
-            folder (str): a directory path.
-
-        Returns:
-            Tuple[int,int]: a pair `(<number of GT files>, <number of image files>)`
-        """
-        return (
-                len( [ i for i in Path(folder).glob('*.xml') ] ),
-                len( [ i for i in Path(folder).glob('*.img.*') ] )
-                )
 
 
 
